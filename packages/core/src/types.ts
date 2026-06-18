@@ -69,7 +69,7 @@ export interface ConductorContext {
 export type FloorDecision =
   | { kind: "grant"; participantId: string; reason: string }
   | { kind: "wait"; reason: string }
-  | { kind: "ask-moderator" };
+  | { kind: "ask-moderator"; reason: string };
 
 export interface ConductorPolicy {
   readonly name: ConductorPolicyConfig["name"];

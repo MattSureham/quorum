@@ -26,7 +26,8 @@ export class ClaudeCodeAdapter extends BaseAgentAdapter {
   }
 
   async *takeTurn(input: TurnInput): AsyncIterable<PartialRoomEvent> {
-    const sdk = await import("@anthropic-ai/claude-agent-sdk").catch(() => {
+    const sdkModule = "@anthropic-ai/claude-agent-sdk";
+    const sdk = await import(sdkModule).catch(() => {
       throw new Error("install @anthropic-ai/claude-agent-sdk to use ClaudeCodeAdapter");
     });
     const ac = new AbortController();

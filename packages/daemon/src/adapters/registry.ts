@@ -21,4 +21,4 @@ export function createParticipant(d: ParticipantDescriptor): Participant {
 // built-in real adapters
 registerAdapter("claude-code", (d) => new ClaudeCodeAdapter(d, (d.adapterConfig as ClaudeOptions) ?? {}));
 registerAdapter("codex", (d) => new CodexAdapter(d, (d.adapterConfig as CodexOptions) ?? {}));
-registerAdapter("api-model", (d) => new ApiModelAdapter(d, (d.adapterConfig as ApiModelOptions) ?? { model: "gpt-4o-mini" }));
+registerAdapter("api-model", (d) => new ApiModelAdapter(d, (d.adapterConfig as unknown as ApiModelOptions) ?? { model: "gpt-4o-mini" }));

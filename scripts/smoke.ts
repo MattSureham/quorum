@@ -1,7 +1,7 @@
 // Dependency-free validation of the M0 core (EventLog), runnable with `tsx` and
 // no external packages installed. Run: npx tsx scripts/smoke.ts
-import { EventLog, InMemoryStore } from "../packages/core/src/index.js";
-import type { AppendInput } from "../packages/core/src/index.js";
+import { EventLog, InMemoryStore } from "@quorum/core";
+import type { AppendInput } from "@quorum/core";
 
 const msg = (text: string): AppendInput => ({
   author: { kind: "human", id: "matt", display: "Matt" },

@@ -8,6 +8,15 @@ importers:
 
   .:
     devDependencies:
+      '@quorum/core':
+        specifier: workspace:*
+        version: link:packages/core
+      '@quorum/daemon':
+        specifier: workspace:*
+        version: link:packages/daemon
+      '@quorum/protocol':
+        specifier: workspace:*
+        version: link:packages/protocol
       '@types/node':
         specifier: ^22.7.0
         version: 22.19.21

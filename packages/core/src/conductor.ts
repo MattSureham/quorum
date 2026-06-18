@@ -241,7 +241,7 @@ export class Conductor {
       }
       if (ac.signal.aborted && outcome === "done") outcome = "interrupted";
     } catch {
-      outcome = ac.signal.aborted ? (outcome === "timeout" ? "timeout" : "interrupted") : "error";
+      outcome = ac.signal.aborted ? "interrupted" : "error";
     } finally {
       clearTimeout(deadline);
       if (caps.canEditFiles && this.opts.workspace && lastEventId) {

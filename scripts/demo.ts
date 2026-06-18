@@ -3,13 +3,13 @@
 //
 // Shows: free-for-all floor control, raise-hand rebuttals, no-consecutive,
 // per-topic budget, addressed routing, and live human mid-turn preemption.
-import { Conductor, EventLog, InMemoryStore, freeForAll } from "../packages/core/src/index.js";
-import type { AppendInput } from "../packages/core/src/index.js";
+import { Conductor, EventLog, InMemoryStore, freeForAll } from "@quorum/core";
+import type { AppendInput } from "@quorum/core";
 import type {
   ConductorPolicyConfig, ParticipantDescriptor, RoomEvent,
   MessageBody, ThinkingBody, FloorGrantBody, FloorReleaseBody, FloorRequestBody, SystemBody,
-} from "../packages/protocol/src/index.js";
-import { EchoAdapter, type EchoLine } from "../packages/daemon/src/adapters/echo.js";
+} from "@quorum/protocol";
+import { EchoAdapter, type EchoLine } from "@quorum/daemon/adapters/echo";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
