@@ -1,0 +1,8 @@
+{
+  "name": "@quorum/core",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": "./src/index.ts",
+  "main": "./src/index.ts",
+  "dependencies": { "@quorum/protocol": "workspace:*" }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "@quorum/cli",
+  "version": "0.0.1",
+  "type": "module",
+  "bin": { "quorum": "./src/index.ts" },
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@quorum/daemon": "workspace:*",
+    "@quorum/protocol": "workspace:*"
+  }
+}

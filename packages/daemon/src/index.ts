@@ -1,0 +1,9 @@
+export { startRoom, type RoomHost } from "./room-host.js";
+export { registerAdapter, createParticipant, type AdapterFactory } from "./adapters/registry.js";
+export { EchoAdapter, type EchoScript, type EchoLine } from "./adapters/echo.js";
+export { ClaudeCodeAdapter, type ClaudeOptions } from "./adapters/claude-code.js";
+export { CodexAdapter, type CodexOptions } from "./adapters/codex.js";
+export { ApiModelAdapter, type ApiModelOptions } from "./adapters/api-model.js";
+export { GitWorkspace } from "./workspace/git-workspace.js";
+export { Gateway, type GatewayDeps } from "./gateway/ws-server.js";
+export { SqliteStore } from "./persistence/sqlite-store.js";
