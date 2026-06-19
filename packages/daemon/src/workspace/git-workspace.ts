@@ -13,6 +13,8 @@ const exec = promisify(execFile);
  */
 export class GitWorkspace implements WorkspaceManager {
   private chain: Promise<unknown> = Promise.resolve();
+  private activeLock: "write" | "checkpoint" | undefined;
+  private outOfBandScheduled = false;
 
   constructor(private readonly dir: string, private readonly branch = "main") {}
 
@@ -35,7 +37,18 @@ export class GitWorkspace implements WorkspaceManager {
     const gate = new Promise<void>((r) => { release = r; });
     const prev = this.chain;
     this.chain = prev.then(() => gate);
-    return prev.then(() => ({ release }));
+    return prev.then(() => {
+      this.activeLock = "write";
+      let released = false;
+      return {
+        release: () => {
+          if (released) return;
+          released = true;
+          this.activeLock = undefined;
+          release();
+        },
+      };
+    });
   }
 
   async snapshotPre(): Promise<string> {
@@ -43,13 +56,17 @@ export class GitWorkspace implements WorkspaceManager {
   }
 
   async checkpoint(_turnId: string, who: string, eventId: string): Promise<CheckpointResult | null> {
+    return this.checkpointDirty(who, eventId);
+  }
+
+  private async checkpointDirty(who: string, eventId: string, summary?: string): Promise<CheckpointResult | null> {
     const preHead = (await this.git(["rev-parse", "HEAD"])).stdout.trim();
     await this.git(["add", "-A"]);
     const dirty = await this.git(["diff", "--cached", "--quiet"]).then(() => false, () => true);
     if (!dirty) return null;
     await this.git(["commit", "-q", "-m", `chore(room): turn by ${who} [${eventId}]`]);
     const postHead = (await this.git(["rev-parse", "HEAD"])).stdout.trim();
-    return { preHead, postHead, stat: await this.diff(preHead, postHead) };
+    return { preHead, postHead, stat: await this.diff(preHead, postHead), summary };
   }
 
   async diff(fromHead: string, toHead = "HEAD"): Promise<DiffStat> {
@@ -69,11 +86,49 @@ export class GitWorkspace implements WorkspaceManager {
   }
 
   /** Surface human edits made while no write floor is held. */
-  watchOutOfBand(onChange: (stat: DiffStat) => void): () => void {
-    const w = watch(this.dir, { recursive: true }, (_e, file) => {
-      if (file && String(file).startsWith(".git")) return;
-      this.diff("HEAD").then(onChange).catch(() => {});
+  watchOutOfBand(onCheckpoint: (checkpoint: CheckpointResult) => void): () => void {
+    let closed = false;
+    const listener = (_e: string, file: string | Buffer | null) => {
+      const name = file ? String(file).replaceAll("\\", "/") : "";
+      if (name === ".git" || name.startsWith(".git/")) return;
+      if (this.activeLock || this.outOfBandScheduled || closed) return;
+      this.queueOutOfBandCheckpoint(() => closed, onCheckpoint);
+    };
+    const w = (() => {
+      try {
+        return watch(this.dir, { recursive: true }, listener);
+      } catch {
+        return watch(this.dir, listener);
+      }
+    })();
+    return () => {
+      closed = true;
+      w.close();
+    };
+  }
+
+  private queueOutOfBandCheckpoint(
+    isClosed: () => boolean,
+    onCheckpoint: (checkpoint: CheckpointResult) => void,
+  ): void {
+    this.outOfBandScheduled = true;
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const prev = this.chain;
+    this.chain = prev.then(() => gate);
+    void prev.then(async () => {
+      if (isClosed()) return;
+      this.activeLock = "checkpoint";
+      await new Promise((r) => setTimeout(r, 50));
+      if (isClosed()) return;
+      const checkpoint = await this.checkpointDirty("human", "out-of-band", "out-of-band edit");
+      if (checkpoint) onCheckpoint(checkpoint);
+    }).catch(() => {
+      /* a failed human checkpoint should not break future write-floor grants */
+    }).finally(() => {
+      this.activeLock = undefined;
+      this.outOfBandScheduled = false;
+      release();
     });
-    return () => w.close();
   }
 }

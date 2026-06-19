@@ -37,4 +37,8 @@ export class SqliteStore implements EventStore {
     const r = this.db.prepare("SELECT MAX(seq) AS m FROM events WHERE room_id=?").get(roomId) as any;
     return r?.m ?? 0;
   }
+
+  close(): void {
+    this.db.close();
+  }
 }

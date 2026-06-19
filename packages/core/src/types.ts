@@ -90,4 +90,5 @@ export interface WorkspaceManager {
   snapshotPre(): Promise<string>;
   checkpoint(turnId: string, who: string, eventId: string): Promise<CheckpointResult | null>;
   rollbackTo(head: string): Promise<void>;
+  watchOutOfBand?(onCheckpoint: (checkpoint: CheckpointResult) => void): () => void;
 }

@@ -49,20 +49,19 @@ export async function startRoom(room: Room, opts: { dbPath?: string; port?: numb
   });
   conductor.start();
 
-  const unwatch = workspace?.watchOutOfBand((stat) => {
-    if (stat.files > 0) {
-      void log.append({
-        author: { kind: "human", id: humanId ?? "human", display: "Human" },
-        type: "checkpoint",
-        body: { preHead: "", postHead: "", stat, summary: "out-of-band edit" },
-      });
-    }
+  const unwatch = workspace?.watchOutOfBand((checkpoint) => {
+    void log.append({
+      author: { kind: "human", id: humanId ?? "human", display: "Human" },
+      type: "checkpoint",
+      body: checkpoint,
+    });
   });
 
   const gateway = new Gateway(
     { log, room, humanId, setPolicy: (cfg) => conductor.setPolicy(policyFor(cfg), cfg) },
     opts.port,
   );
+  await gateway.ready;
 
   return {
     log,
@@ -71,7 +70,8 @@ export async function startRoom(room: Room, opts: { dbPath?: string; port?: numb
     async stop() {
       unwatch?.();
       await conductor.stop();
-      gateway.close();
+      await gateway.close();
+      store.close();
     },
   };
 }

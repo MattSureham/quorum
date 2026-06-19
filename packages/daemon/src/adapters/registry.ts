@@ -3,6 +3,7 @@ import type { ParticipantDescriptor } from "@quorum/protocol";
 import { CodexAdapter, type CodexOptions } from "./codex.js";
 import { ClaudeCodeAdapter, type ClaudeOptions } from "./claude-code.js";
 import { ApiModelAdapter, type ApiModelOptions } from "./api-model.js";
+import { EchoAdapter, type EchoLine } from "./echo.js";
 
 export type AdapterFactory = (d: ParticipantDescriptor) => Participant;
 
@@ -18,7 +19,17 @@ export function createParticipant(d: ParticipantDescriptor): Participant {
   return f(d);
 }
 
-// built-in real adapters
+interface EchoOptions {
+  script?: EchoLine[];
+  text?: string;
+}
+
+// built-in adapters
+registerAdapter("echo", (d) => {
+  const cfg = (d.adapterConfig as EchoOptions | undefined) ?? {};
+  const script = cfg.script ?? [{ type: "message" as const, text: cfg.text ?? "echo" }];
+  return new EchoAdapter(d, () => script);
+});
 registerAdapter("claude-code", (d) => new ClaudeCodeAdapter(d, (d.adapterConfig as ClaudeOptions) ?? {}));
 registerAdapter("codex", (d) => new CodexAdapter(d, (d.adapterConfig as CodexOptions) ?? {}));
 registerAdapter("api-model", (d) => new ApiModelAdapter(d, (d.adapterConfig as unknown as ApiModelOptions) ?? { model: "gpt-4o-mini" }));

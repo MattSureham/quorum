@@ -1,4 +1,5 @@
 import { WebSocketServer, type WebSocket } from "ws";
+import type { AddressInfo } from "node:net";
 import { ClientMessageSchema } from "@quorum/protocol/schema";
 import type { Room, ConductorPolicyConfig } from "@quorum/protocol";
 import type { EventLog } from "@quorum/core";
@@ -18,11 +19,29 @@ export interface GatewayDeps {
 export class Gateway {
   private readonly wss: WebSocketServer;
   private readonly clients = new Set<WebSocket>();
+  private readonly unsubscribeLog: () => void;
+  readonly ready: Promise<void>;
 
   constructor(private readonly deps: GatewayDeps, port = 8787) {
     this.wss = new WebSocketServer({ host: "127.0.0.1", port });
+    this.ready = new Promise((resolve, reject) => {
+      this.wss.once("listening", resolve);
+      this.wss.once("error", reject);
+    });
     this.wss.on("connection", (ws) => this.onConnection(ws));
-    this.deps.log.on((e) => this.broadcast({ t: "event", event: e }));
+    this.unsubscribeLog = this.deps.log.on((e) => this.broadcast({ t: "event", event: e }));
+  }
+
+  address(): AddressInfo {
+    const address = this.wss.address();
+    if (!address || typeof address === "string") throw new Error("gateway is not listening on a TCP port");
+    return address;
+  }
+
+  url(): string {
+    const { address, port } = this.address();
+    const host = address === "::" ? "127.0.0.1" : address;
+    return `ws://${host}:${port}`;
   }
 
   private human() {
@@ -71,7 +90,15 @@ export class Gateway {
     }
   }
 
-  close(): void {
-    this.wss.close();
+  close(): Promise<void> {
+    this.unsubscribeLog();
+    for (const ws of this.clients) ws.terminate();
+    this.clients.clear();
+    return new Promise((resolve, reject) => {
+      this.wss.close((err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
   }
 }
