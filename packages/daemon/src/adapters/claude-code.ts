@@ -1,5 +1,5 @@
 import { BaseAgentAdapter } from "./base.js";
-import { ROOM_TOOLS, runRoomTool, type RoomToolSpec, type TurnInput, type PartialRoomEvent } from "@quorum/core";
+import { ROOM_TOOLS, runRoomTool, ulid, type RoomToolSpec, type TurnInput, type PartialRoomEvent } from "@quorum/core";
 import type { ParticipantDescriptor, Capabilities } from "@quorum/protocol";
 
 export interface ClaudeOptions {
@@ -71,6 +71,19 @@ export class ClaudeCodeAdapter extends BaseAgentAdapter {
       roomServer = undefined; // no zod / SDK without MCP helpers: degrade to no room tools
     }
 
+    // In "default" permission mode, route each gated tool through the room's
+    // human approval (approve_tool); other modes keep their auto behavior.
+    const interactive = (this.opts.permissionMode ?? "acceptEdits") === "default";
+    const canUseTool =
+      interactive && input.requestToolApproval
+        ? async (toolName: string, toolInput: Record<string, unknown>) => {
+            const allow = await input.requestToolApproval!({ callId: ulid(), tool: toolName, input: toolInput });
+            return allow
+              ? { behavior: "allow", updatedInput: toolInput }
+              : { behavior: "deny", message: "denied by human" };
+          }
+        : undefined;
+
     const stream = (sdk as any).query({
       prompt: this.prompt(input),
       options: {
@@ -81,6 +94,7 @@ export class ClaudeCodeAdapter extends BaseAgentAdapter {
         // preserve Claude Code defaults, append room persona/protocol on top
         systemPrompt: { type: "preset", preset: "claude_code", append: input.self.persona ?? input.protocol },
         ...(roomServer ? { mcpServers: { room: roomServer } } : {}),
+        ...(canUseTool ? { canUseTool } : {}),
         abortController: ac,
       },
     });

@@ -9,6 +9,12 @@ export interface GatewayDeps {
   room: Room;
   setPolicy: (cfg: ConductorPolicyConfig) => void;
   humanId?: string;
+  /** Resolve a pending tool-approval request (approve_tool). */
+  approveTool?: (callId: string, allow: boolean) => void;
+  /** Let the human take the write floor to edit files directly (take_write_floor). */
+  takeWriteFloor?: () => Promise<void> | void;
+  /** Roll the workspace back to a prior head (rollback); destructive git reset. */
+  rollback?: (toHead: string) => Promise<void>;
 }
 
 /**
@@ -77,7 +83,17 @@ export class Gateway {
       case "set_policy":
         this.deps.setPolicy(m.policy);
         break;
-      // approve_tool / take_write_floor / rollback: wire to conductor + workspace (M3/M4)
+      case "approve_tool":
+        this.deps.approveTool?.(m.callId, !!m.allow);
+        break;
+      case "take_write_floor":
+        void Promise.resolve(this.deps.takeWriteFloor?.()).catch(() => {});
+        break;
+      case "rollback":
+        void this.deps.rollback?.(m.toHead).catch((err) =>
+          ws.send(JSON.stringify({ t: "error", text: `rollback failed: ${err instanceof Error ? err.message : String(err)}` })),
+        );
+        break;
       default:
         break;
     }

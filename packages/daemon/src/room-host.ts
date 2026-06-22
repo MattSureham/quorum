@@ -57,8 +57,32 @@ export async function startRoom(room: Room, opts: { dbPath?: string; port?: numb
     });
   });
 
+  const ws = workspace;
   const gateway = new Gateway(
-    { log, room, humanId, setPolicy: (cfg) => conductor.setPolicy(policyFor(cfg), cfg) },
+    {
+      log,
+      room,
+      humanId,
+      setPolicy: (cfg) => conductor.setPolicy(policyFor(cfg), cfg),
+      approveTool: (callId, allow) => conductor.resolveToolApproval(callId, allow),
+      takeWriteFloor: () => conductor.takeWriteFloor(),
+      rollback: ws
+        ? async (toHead) => {
+            // Serialize behind any active edit, then reset, then announce (SPEC §7.4).
+            const lease = await ws.acquireWriteFloor("rollback", "human");
+            try {
+              await ws.rollbackTo(toHead);
+            } finally {
+              lease.release();
+            }
+            await log.append({
+              author: { kind: "system", id: "workspace", display: "Workspace" },
+              type: "system",
+              body: { level: "warn", text: `rolled back to ${toHead}` },
+            });
+          }
+        : undefined,
+    },
     opts.port,
   );
   await gateway.ready;

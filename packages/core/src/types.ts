@@ -44,6 +44,8 @@ export interface TurnInput {
   workspacePath?: string;
   signal: AbortSignal;       // aborts on interrupt / deadline
   readRoom?: (sinceSeq: number) => RoomEvent[]; // backs the `read_room` room tool
+  /** Interactive permission gate: ask the human to approve a tool call. Resolves allow/deny. */
+  requestToolApproval?: (req: { callId: string; tool: string; input: unknown }) => Promise<boolean>;
 }
 
 // Humans and agents implement the SAME contract — this is where "the human is a

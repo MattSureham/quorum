@@ -57,6 +57,9 @@ export class Conductor {
   private readonly byId = new Map<string, Participant>();
   private policy: ConductorPolicy;
   private cfg: ConductorPolicyConfig;
+  private humanHoldsWriteFloor = false;
+  private humanWriteLease?: WriteLease;
+  private readonly pendingApprovals = new Map<string, (allow: boolean) => void>();
 
   constructor(private readonly opts: ConductorOptions) {
     for (const p of opts.participants) this.byId.set(p.id, p);
@@ -67,6 +70,48 @@ export class Conductor {
   setPolicy(policy: ConductorPolicy, config: ConductorPolicyConfig): void {
     this.policy = policy;
     this.cfg = config;
+  }
+
+  /**
+   * Let the human take the write floor to edit files directly: acquire the
+   * workspace mutex (queues behind any active edit) and pause agent turns until
+   * the human's next message/interrupt hands it back.
+   */
+  async takeWriteFloor(): Promise<void> {
+    if (this.humanHoldsWriteFloor) return;
+    this.humanHoldsWriteFloor = true;
+    if (this.opts.workspace) {
+      // May queue behind an in-flight agent edit; if the human resumes the room
+      // before it's granted, drop the lease instead of orphaning the mutex.
+      const lease = await this.opts.workspace.acquireWriteFloor("human-write", "human");
+      if (!this.humanHoldsWriteFloor) { lease.release(); return; }
+      this.humanWriteLease = lease;
+    }
+    await this.opts.log.append({
+      author: { kind: "system", id: "conductor", display: "Conductor" },
+      type: "system",
+      body: { level: "info", text: "human holds the write floor — agent turns paused" },
+    });
+  }
+
+  private releaseHumanWriteFloor(reason: string): void {
+    if (!this.humanHoldsWriteFloor) return;
+    this.humanHoldsWriteFloor = false;
+    this.humanWriteLease?.release();
+    this.humanWriteLease = undefined;
+    void this.opts.log.append({
+      author: { kind: "system", id: "conductor", display: "Conductor" },
+      type: "system",
+      body: { level: "info", text: `write floor released — ${reason}` },
+    });
+  }
+
+  /** Resolve a pending tool-approval request (driven by the gateway's approve_tool). */
+  resolveToolApproval(callId: string, allow: boolean): void {
+    const resolve = this.pendingApprovals.get(callId);
+    if (!resolve) return;
+    this.pendingApprovals.delete(callId);
+    resolve(allow);
   }
 
   start(): void {
@@ -108,6 +153,7 @@ export class Conductor {
   private async handle(e: RoomEvent): Promise<void> {
     // Human preemption — highest priority.
     if (e.author.kind === "human" && (e.type === "message" || e.type === "interrupt")) {
+      this.releaseHumanWriteFloor("human resumed the room");
       this.topicTurns = 0;
       this.yieldedAnnounced = false;
       this.pendingFloor = []; // raised hands are per-topic; a new human turn clears stale ones
@@ -142,6 +188,7 @@ export class Conductor {
 
   private async maybeGrant(): Promise<void> {
     if (!this.running || this.state === "active") return;
+    if (this.humanHoldsWriteFloor) { this.state = "idle"; return; }
     const window = this.opts.recentWindow ?? 40;
     const recent = this.opts.log.replay(Math.max(0, this.opts.log.headSeq - window));
     const decision = await this.policy.decide({
@@ -206,6 +253,13 @@ export class Conductor {
       ac.abort();
       void participant.interrupt("turn deadline");
     }, this.cfg.turnDeadlineMs);
+    // If the turn aborts while an agent is blocked awaiting tool approval, deny
+    // the pending requests so its takeTurn() can unwind instead of hanging.
+    const drainApprovals = () => {
+      for (const [, resolve] of this.pendingApprovals) resolve(false);
+      this.pendingApprovals.clear();
+    };
+    ac.signal.addEventListener("abort", drainApprovals, { once: true });
 
     try {
       const input: TurnInput = {
@@ -218,6 +272,17 @@ export class Conductor {
         workspacePath: this.opts.workspacePath,
         signal: ac.signal,
         readRoom: (sinceSeq: number) => this.opts.log.replay(sinceSeq),
+        requestToolApproval: (req) =>
+          new Promise<boolean>((resolve) => {
+            if (ac.signal.aborted) { resolve(false); return; }
+            this.pendingApprovals.set(req.callId, resolve);
+            void this.opts.log.append({
+              author: { kind: "system", id: "conductor", display: "Conductor" },
+              type: "system",
+              body: { level: "warn", text: `approval needed: ${req.tool} [${req.callId}] — send approve_tool{callId, allow}` },
+              turnId,
+            });
+          }),
       };
       for await (const partial of participant.takeTurn(input)) {
         if (ac.signal.aborted) {
@@ -245,6 +310,8 @@ export class Conductor {
       outcome = ac.signal.aborted ? "interrupted" : "error";
     } finally {
       clearTimeout(deadline);
+      ac.signal.removeEventListener("abort", drainApprovals);
+      drainApprovals();
       if (caps.canEditFiles && this.opts.workspace && lastEventId) {
         const cp = await this.opts.workspace.checkpoint(turnId, pid, lastEventId).catch(() => null);
         if (cp) {

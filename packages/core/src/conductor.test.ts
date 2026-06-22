@@ -130,4 +130,63 @@ describe("Conductor", () => {
       await conductor.stop();
     }
   });
+
+  it("pauses agent grants while the human holds the write floor, then resumes", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const events: RoomEvent[] = [];
+    log.on((event) => events.push(event));
+
+    const agent = new ScriptedAgent("alpha", async function* () {
+      yield { type: "message", body: { text: "resumed" } };
+    });
+    const conductor = new Conductor({
+      roomId: "room", roomTitle: "Test", log,
+      participants: [agent], policy: freeForAll, config, primary: "alpha",
+    });
+
+    conductor.start();
+    try {
+      await conductor.takeWriteFloor();
+      await waitFor(() => events.some((e) => e.type === "system" && String((e.body as any).text).includes("human holds the write floor")));
+
+      // A raised hand while the human holds the floor must not be granted.
+      await log.append({ author: { kind: "agent", id: "alpha", display: "alpha" }, type: "floor_request", body: { reason: "go", intent: "act" } });
+      await sleep(100);
+      expect(events.some((e) => e.type === "floor_grant")).toBe(false);
+
+      // The human's next message hands the floor back and lets agents run again.
+      await log.append(human("your turn"));
+      await waitFor(() => events.some((e) => e.type === "system" && String((e.body as any).text).includes("write floor released")));
+      await waitFor(() => events.some((e) => e.author.id === "alpha" && (e.body as any).text === "resumed"));
+    } finally {
+      await conductor.stop();
+    }
+  });
+
+  it("gates a tool call on human approval (approve_tool)", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const events: RoomEvent[] = [];
+    log.on((event) => events.push(event));
+
+    const agent = new ScriptedAgent("alpha", async function* (input) {
+      const allow = await input.requestToolApproval!({ callId: "call-1", tool: "Bash", input: { cmd: "ls" } });
+      yield { type: "message", body: { text: allow ? "approved" : "denied" } };
+    });
+    const conductor = new Conductor({
+      roomId: "room", roomTitle: "Test", log,
+      participants: [agent], policy: freeForAll,
+      config: { ...config, turnDeadlineMs: 5_000 }, primary: "alpha",
+    });
+
+    conductor.start();
+    try {
+      await log.append(human("do it"));
+      await waitFor(() => events.some((e) => e.type === "system" && String((e.body as any).text).includes("approval needed: Bash [call-1]")));
+
+      conductor.resolveToolApproval("call-1", true);
+      await waitFor(() => events.some((e) => e.author.id === "alpha" && (e.body as any).text === "approved"));
+    } finally {
+      await conductor.stop();
+    }
+  });
 });
