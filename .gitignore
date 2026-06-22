@@ -5,3 +5,7 @@ dist/
 *.tsbuildinfo
 *.sqlite
 .quorum/
+
+# debug artifacts (browser/playwright captures left at repo root)
+.playwright-mcp/
+/*.png
