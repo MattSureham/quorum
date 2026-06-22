@@ -7,3 +7,4 @@ export { ApiModelAdapter, type ApiModelOptions } from "./adapters/api-model.js";
 export { GitWorkspace } from "./workspace/git-workspace.js";
 export { Gateway, type GatewayDeps } from "./gateway/ws-server.js";
 export { SqliteStore } from "./persistence/sqlite-store.js";
+export { makeModelModerator, type ModeratorOptions, type ModeratorFetch } from "./moderator.js";

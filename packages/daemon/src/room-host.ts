@@ -5,10 +5,14 @@ import { SqliteStore } from "./persistence/sqlite-store.js";
 import { GitWorkspace } from "./workspace/git-workspace.js";
 import { Gateway } from "./gateway/ws-server.js";
 import { createParticipant } from "./adapters/registry.js";
+import { makeModelModerator } from "./moderator.js";
 
 function policyFor(cfg: ConductorPolicyConfig): ConductorPolicy {
   if (cfg.name === "directed") return directed;
-  if (cfg.name === "moderated") return makeModerated(async () => ({ next: "human", reason: "no moderator wired yet" }));
+  if (cfg.name === "moderated") {
+    const model = cfg.moderatorModel ?? process.env.QUORUM_MODERATOR_MODEL ?? "gpt-4o-mini";
+    return makeModerated(makeModelModerator({ model, baseUrl: process.env.QUORUM_MODERATOR_BASE_URL }));
+  }
   return freeForAll;
 }
 
