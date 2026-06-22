@@ -1,10 +1,26 @@
 import { BaseAgentAdapter } from "./base.js";
-import type { TurnInput, PartialRoomEvent } from "@quorum/core";
+import { ROOM_TOOLS, runRoomTool, type RoomToolSpec, type TurnInput, type PartialRoomEvent } from "@quorum/core";
 import type { ParticipantDescriptor, Capabilities } from "@quorum/protocol";
 
 export interface ClaudeOptions {
   model?: string;
   permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan";
+}
+
+/** Build a zod shape for a room tool using a dynamically-loaded zod (`z`). */
+function zodShape(z: any, spec: RoomToolSpec): Record<string, unknown> {
+  const shape: Record<string, unknown> = {};
+  for (const [key, f] of Object.entries(spec.fields)) {
+    let t: any =
+      f.type === "number" ? z.number()
+      : f.type === "string[]" ? z.array(z.string())
+      : f.type === "enum" ? z.enum(f.values as [string, ...string[]])
+      : z.string();
+    if (f.description) t = t.describe(f.description);
+    if (!f.required) t = t.optional();
+    shape[key] = t;
+  }
+  return shape;
 }
 
 /**
@@ -35,6 +51,26 @@ export class ClaudeCodeAdapter extends BaseAgentAdapter {
     const onAbort = () => ac.abort();
     input.signal.addEventListener("abort", onAbort, { once: true });
 
+    // Room tools (§9): an in-process MCP server whose handlers translate a tool
+    // call into room events. Handlers push onto `emitted`; the loop below drains
+    // it into the turn stream. Identity is stamped by the Conductor, not here.
+    const emitted: PartialRoomEvent[] = [];
+    let roomServer: unknown;
+    try {
+      const zodMod: string = "zod";
+      const { z } = (await import(zodMod)) as any;
+      const tools = ROOM_TOOLS.map((spec) =>
+        (sdk as any).tool(spec.name, spec.description, zodShape(z, spec), async (args: Record<string, unknown>) => {
+          const out = runRoomTool(spec.name, args, { readRoom: input.readRoom });
+          emitted.push(...out.events);
+          return { content: [{ type: "text", text: out.reply }] };
+        }),
+      );
+      roomServer = (sdk as any).createSdkMcpServer({ name: "room", version: "0.1.0", tools });
+    } catch {
+      roomServer = undefined; // no zod / SDK without MCP helpers: degrade to no room tools
+    }
+
     const stream = (sdk as any).query({
       prompt: this.prompt(input),
       options: {
@@ -44,6 +80,7 @@ export class ClaudeCodeAdapter extends BaseAgentAdapter {
         permissionMode: this.opts.permissionMode ?? "acceptEdits",
         // preserve Claude Code defaults, append room persona/protocol on top
         systemPrompt: { type: "preset", preset: "claude_code", append: input.self.persona ?? input.protocol },
+        ...(roomServer ? { mcpServers: { room: roomServer } } : {}),
         abortController: ac,
       },
     });
@@ -52,6 +89,7 @@ export class ClaudeCodeAdapter extends BaseAgentAdapter {
     try {
       for await (const m of stream as AsyncIterable<any>) {
         if (ac.signal.aborted) break;
+        while (emitted.length) yield emitted.shift()!;
         if (m.type === "system" && m.session_id) this.sessionId = m.session_id;
         if (m.type === "assistant") {
           for (const block of m.message?.content ?? []) {
@@ -81,6 +119,7 @@ export class ClaudeCodeAdapter extends BaseAgentAdapter {
       }
     } finally {
       input.signal.removeEventListener("abort", onAbort);
+      while (emitted.length) yield emitted.shift()!;
       if (buffer.trim()) yield this.msg(buffer.trim());
     }
   }

@@ -217,6 +217,7 @@ export class Conductor {
         protocol: buildProtocol(participant.descriptor, this.descriptors()),
         workspacePath: this.opts.workspacePath,
         signal: ac.signal,
+        readRoom: (sinceSeq: number) => this.opts.log.replay(sinceSeq),
       };
       for await (const partial of participant.takeTurn(input)) {
         if (ac.signal.aborted) {

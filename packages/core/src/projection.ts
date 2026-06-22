@@ -11,6 +11,7 @@ export function buildProtocol(self: ParticipantDescriptor, participants: Partici
     `- This is NOT a blocking prompt; nobody answers mid-turn questions. Act, or state your assumptions and proceed. Never end with "let me know if...".`,
     `- To address or rebut someone, begin your message with @their-id.`,
     `- To continue or rebut after others respond, call the room tool raise_hand with a one-line reason. Do not monologue across turns.`,
+    `- Room tools: raise_hand (take the floor), hand_off (pass to another participant), request_review, read_room, post_note.`,
     `- Keep file edits minimal and explain them. Other participants and the human see your edits.`,
     `- End your turn when you've made your point or completed the step.`,
     self.persona ? `\nYour role: ${self.persona}` : "",

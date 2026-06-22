@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
 import { BaseAgentAdapter } from "./base.js";
-import type { TurnInput, PartialRoomEvent } from "@quorum/core";
+import { isRoomTool, normalizeToolName, runRoomTool, type TurnInput, type PartialRoomEvent } from "@quorum/core";
 import type { ParticipantDescriptor, Capabilities } from "@quorum/protocol";
 
 export interface CodexOptions {
@@ -64,7 +64,14 @@ export class CodexAdapter extends BaseAgentAdapter {
             push({ type: "tool_call", body: { tool: "bash", args: { command: it.command }, callId: String(it.id ?? "") } });
             push({ type: "tool_result", body: { callId: String(it.id ?? ""), ok: (it.exit_code ?? 0) === 0, stdout: it.aggregated_output, exitCode: it.exit_code } });
           } else if (it.item_type === "mcp_tool_call") {
-            push({ type: "tool_call", body: { tool: `mcp:${it.name ?? "tool"}`, args: it.arguments ?? {}, callId: String(it.id ?? "") } });
+            const rawName = String(it.name ?? it.tool ?? "tool");
+            push({ type: "tool_call", body: { tool: `mcp:${rawName}`, args: it.arguments ?? {}, callId: String(it.id ?? "") } });
+            // Room tools (§9): a `raise_hand` / `hand_off` call from Codex becomes
+            // the corresponding room event, just as it does in-process for Claude.
+            if (isRoomTool(rawName)) {
+              const out = runRoomTool(normalizeToolName(rawName), (it.arguments as Record<string, unknown>) ?? {}, { readRoom: input.readRoom });
+              for (const ev of out.events) push(ev);
+            }
           } else if (it.item_type === "assistant_message" && it.text) {
             push({ type: "message", body: { text: it.text } });
           }

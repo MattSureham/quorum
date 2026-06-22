@@ -43,6 +43,7 @@ export interface TurnInput {
   protocol: string;          // room speaking-protocol text
   workspacePath?: string;
   signal: AbortSignal;       // aborts on interrupt / deadline
+  readRoom?: (sinceSeq: number) => RoomEvent[]; // backs the `read_room` room tool
 }
 
 // Humans and agents implement the SAME contract — this is where "the human is a
