@@ -12,7 +12,10 @@
     "smoke": "tsx scripts/smoke.ts",
     "test": "vitest run",
     "typecheck": "tsc -b",
-    "build": "tsc -b"
+    "build": "tsc -b",
+    "web:dev": "pnpm --filter @quorum/client-web dev",
+    "web:build": "pnpm --filter @quorum/client-web build",
+    "web:preview": "pnpm --filter @quorum/client-web preview"
   },
   "devDependencies": {
     "@quorum/core": "workspace:*",

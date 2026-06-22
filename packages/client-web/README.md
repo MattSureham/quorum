@@ -1,17 +1,29 @@
-# @quorum/client-web (M5 — placeholder)
+# @quorum/client-web
 
 A thin client that renders the room event stream and sends commands over WebSocket.
-Nothing here is required for the daemon, the CLI, the demo, or the tests.
 
-Planned stack: React + Vite + Tailwind. It connects to the daemon, sends
-`subscribe`, and renders `event` / `snapshot` messages (see SPEC §10):
+## Run
 
-- group-chat transcript with @mentions and reply threading
-- collapsible tool-call / tool-result activity
-- per-turn diff view from `checkpoint` events, with rollback
-- floor controls: switch policy (free-for-all / directed / moderated), interrupt
-- per-call tool approval for agents that support it (Claude); Codex shown as policy-gated
+```bash
+pnpm web:dev
+```
 
-To scaffold later:
+Open `http://127.0.0.1:5173`. The client defaults to `ws://127.0.0.1:8787`
+and room `main`. If the daemon is offline, it shows preview data so layout and
+controls can still be reviewed.
 
-    pnpm create vite@latest packages/client-web -- --template react-ts
+## Current Surface
+
+- live room stream from `snapshot` and `event` WebSocket messages
+- connection settings for local daemon URL and room id
+- participant and active floor indicators
+- policy switching for `free-for-all`, `directed`, and `moderated`
+- human message composer with agent target chips
+- interrupt button
+- checkpoint and tool activity panels
+
+## Build
+
+```bash
+pnpm web:build
+```
