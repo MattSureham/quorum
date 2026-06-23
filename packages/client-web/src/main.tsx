@@ -172,6 +172,8 @@ function App() {
   const attemptRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const teardownRef = useRef(false);
+  const feedRef = useRef<HTMLDivElement>(null);
+  const stickRef = useRef(true); // keep pinned to newest unless the user scrolls up
 
   const displayRoom = room ?? previewRoom;
   const displayEvents = events.length ? events : previewEvents;
@@ -200,6 +202,17 @@ function App() {
   useEffect(() => {
     saveSettings(settings);
   }, [settings]);
+
+  // Keep the transcript pinned to the newest event unless the user scrolled up.
+  useEffect(() => {
+    const el = feedRef.current;
+    if (el && stickRef.current) el.scrollTop = el.scrollHeight;
+  }, [displayEvents.length]);
+
+  function onFeedScroll() {
+    const el = feedRef.current;
+    if (el) stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  }
 
   function ingest(merged: RoomEvent[]) {
     lastSeqRef.current = merged.length ? merged[merged.length - 1].seq : lastSeqRef.current;
@@ -405,7 +418,7 @@ function App() {
               <span>Room Stream</span>
               <small>{groupedTurns.size} groups</small>
             </div>
-            <div className="event-feed">
+            <div className="event-feed" ref={feedRef} onScroll={onFeedScroll}>
               {displayEvents.map((item) => (
                 <EventRow key={item.id} event={item} />
               ))}
