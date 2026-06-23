@@ -231,6 +231,7 @@ function App() {
       socket.addEventListener("open", () => {
         attemptRef.current = 0;
         setStatus("connected");
+        setError(""); // clear any stale failure from a prior attempt
         socket.send(JSON.stringify({ t: "subscribe", roomId: next.roomId, sinceSeq: lastSeqRef.current }));
       });
       socket.addEventListener("message", (raw) => {
@@ -250,6 +251,7 @@ function App() {
         scheduleReconnect(next);
       });
       socket.addEventListener("error", () => {
+        if (wsRef.current !== socket || teardownRef.current) return; // ignore a replaced/torn-down socket
         setError("Connection failed"); // a close event follows and drives the retry
       });
     } catch (err) {
