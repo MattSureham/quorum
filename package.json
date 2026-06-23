@@ -8,6 +8,7 @@
   "packageManager": "pnpm@9.12.0",
   "workspaces": ["packages/*"],
   "scripts": {
+    "dev": "tsx scripts/dev.ts",
     "demo": "tsx scripts/demo.ts",
     "smoke": "tsx scripts/smoke.ts",
     "test": "vitest run",
