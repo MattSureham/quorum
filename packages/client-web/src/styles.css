@@ -145,6 +145,22 @@ button {
   background: #f4c3bd;
 }
 
+.status-pill.offline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #5a4a6e;
+  background: #e0d6ef;
+}
+
+.status-pill .spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 label {
   display: flex;
   flex-direction: column;
@@ -305,7 +321,30 @@ textarea:focus {
 }
 
 .checkpoint-row {
-  grid-template-columns: 18px 1fr;
+  grid-template-columns: 18px 1fr auto;
+}
+
+.rollback-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #e0c9a0;
+  border-radius: 7px;
+  color: #8a5a1a;
+  background: #fbf3e4;
+  cursor: pointer;
+}
+
+.rollback-btn:hover:not(:disabled) {
+  color: #6e4413;
+  background: #f5e6cd;
+}
+
+.rollback-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
 }
 
 .workspace {
@@ -572,6 +611,116 @@ h1 {
   width: 100%;
   color: #ffffff;
   background: #2f6f5b;
+}
+
+.approval-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.approval-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #e6c98f;
+  border-left: 4px solid #c48a36;
+  border-radius: 8px;
+  background: #fdf6e8;
+}
+
+.approval-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.approval-head svg {
+  color: #b07420;
+}
+
+.approval-head strong {
+  color: #5f4410;
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.approval-head span {
+  margin-left: auto;
+  overflow: hidden;
+  max-width: 40%;
+  color: #9a7a3e;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.approval-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.approval-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.approval-actions .approve {
+  color: #ffffff;
+  background: #2f6f5b;
+}
+
+.approval-actions .approve:hover:not(:disabled) {
+  background: #255c4b;
+}
+
+.approval-actions .deny {
+  color: #842d2d;
+  background: #f3d0ca;
+}
+
+.approval-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.write-floor-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid #c8d3d0;
+  border-radius: 7px;
+  color: #3e4b47;
+  background: #f3f6f5;
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.write-floor-action:hover:not(:disabled) {
+  background: #e9efed;
+}
+
+.write-floor-action.holding {
+  border-color: #8bc6b2;
+  color: #0f5d44;
+  background: #dff2ea;
+}
+
+.write-floor-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
 }
 
 .tool-list {

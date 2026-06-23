@@ -59,7 +59,7 @@ export class Conductor {
   private cfg: ConductorPolicyConfig;
   private humanHoldsWriteFloor = false;
   private humanWriteLease?: WriteLease;
-  private readonly pendingApprovals = new Map<string, (allow: boolean) => void>();
+  private readonly pendingApprovals = new Map<string, { resolve: (allow: boolean) => void; tool: string }>();
 
   constructor(private readonly opts: ConductorOptions) {
     for (const p of opts.participants) this.byId.set(p.id, p);
@@ -108,10 +108,19 @@ export class Conductor {
 
   /** Resolve a pending tool-approval request (driven by the gateway's approve_tool). */
   resolveToolApproval(callId: string, allow: boolean): void {
-    const resolve = this.pendingApprovals.get(callId);
-    if (!resolve) return;
+    const pending = this.pendingApprovals.get(callId);
+    if (!pending) return;
     this.pendingApprovals.delete(callId);
-    resolve(allow);
+    pending.resolve(allow);
+    void this.opts.log.append({
+      author: { kind: "system", id: "conductor", display: "Conductor" },
+      type: "system",
+      body: {
+        level: "info",
+        text: `tool ${allow ? "approved" : "denied"}: ${pending.tool} [${callId}]`,
+        approval: { callId, tool: pending.tool, state: allow ? "granted" : "denied" },
+      },
+    });
   }
 
   start(): void {
@@ -256,7 +265,18 @@ export class Conductor {
     // If the turn aborts while an agent is blocked awaiting tool approval, deny
     // the pending requests so its takeTurn() can unwind instead of hanging.
     const drainApprovals = () => {
-      for (const [, resolve] of this.pendingApprovals) resolve(false);
+      for (const [callId, pending] of this.pendingApprovals) {
+        pending.resolve(false);
+        void this.opts.log.append({
+          author: { kind: "system", id: "conductor", display: "Conductor" },
+          type: "system",
+          body: {
+            level: "info",
+            text: `tool denied (turn ended): ${pending.tool} [${callId}]`,
+            approval: { callId, tool: pending.tool, state: "denied" },
+          },
+        });
+      }
       this.pendingApprovals.clear();
     };
     ac.signal.addEventListener("abort", drainApprovals, { once: true });
@@ -275,11 +295,15 @@ export class Conductor {
         requestToolApproval: (req) =>
           new Promise<boolean>((resolve) => {
             if (ac.signal.aborted) { resolve(false); return; }
-            this.pendingApprovals.set(req.callId, resolve);
+            this.pendingApprovals.set(req.callId, { resolve, tool: req.tool });
             void this.opts.log.append({
               author: { kind: "system", id: "conductor", display: "Conductor" },
               type: "system",
-              body: { level: "warn", text: `approval needed: ${req.tool} [${req.callId}] — send approve_tool{callId, allow}` },
+              body: {
+                level: "warn",
+                text: `approval needed: ${req.tool} [${req.callId}] — approve or deny`,
+                approval: { callId: req.callId, tool: req.tool, state: "requested" },
+              },
               turnId,
             });
           }),

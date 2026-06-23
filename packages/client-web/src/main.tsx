@@ -4,6 +4,7 @@ import {
   Activity,
   AlertTriangle,
   Bot,
+  Check,
   CheckCircle2,
   ChevronDown,
   CircleDot,
@@ -11,18 +12,22 @@ import {
   Hand,
   MessageSquare,
   PauseCircle,
+  PenLine,
   Plug,
   Radio,
   RefreshCcw,
   Send,
   Settings2,
+  ShieldQuestion,
   SquareTerminal,
+  Undo2,
   UserRound,
   Wrench,
   XCircle,
   Zap,
 } from "lucide-react";
 import type {
+  ApprovalSignal,
   CheckpointBody,
   ConductorPolicyConfig,
   FloorGrantBody,
@@ -109,6 +114,36 @@ function event(
   };
 }
 
+function mergeEvents(current: RoomEvent[], incoming: RoomEvent[]): RoomEvent[] {
+  if (!incoming.length) return current;
+  const byId = new Map(current.map((item) => [item.id, item]));
+  for (const item of incoming) byId.set(item.id, item);
+  return [...byId.values()].sort((a, b) => a.seq - b.seq);
+}
+
+// Latest approval state per callId; the UI shows a prompt for any still "requested".
+function pendingApprovals(events: RoomEvent[]): ApprovalSignal[] {
+  const latest = new Map<string, ApprovalSignal>();
+  for (const item of events) {
+    if (item.type !== "system") continue;
+    const signal = (item.body as SystemBody).approval;
+    if (signal) latest.set(signal.callId, signal);
+  }
+  return [...latest.values()].filter((signal) => signal.state === "requested");
+}
+
+// Reconstruct whether the human currently holds the write floor from system events.
+function humanHoldsWriteFloor(events: RoomEvent[]): boolean {
+  let held = false;
+  for (const item of events) {
+    if (item.type !== "system") continue;
+    const text = (item.body as SystemBody).text ?? "";
+    if (text.includes("human holds the write floor")) held = true;
+    else if (text.includes("write floor released")) held = false;
+  }
+  return held;
+}
+
 function loadSettings(): ClientSettings {
   try {
     const raw = localStorage.getItem("quorum.client.settings");
@@ -133,6 +168,10 @@ function App() {
   const [selectedTargets, setSelectedTargets] = useState<string[]>([]);
   const [composer, setComposer] = useState("");
   const wsRef = useRef<WebSocket | null>(null);
+  const lastSeqRef = useRef(0);
+  const attemptRef = useRef(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const teardownRef = useRef(false);
 
   const displayRoom = room ?? previewRoom;
   const displayEvents = events.length ? events : previewEvents;
@@ -143,6 +182,9 @@ function App() {
   const activeTurn = [...displayEvents].reverse().find((item) => item.type === "floor_grant")?.body as FloorGrantBody | undefined;
   const latestRelease = [...displayEvents].reverse().find((item) => item.type === "floor_release")?.body as FloorReleaseBody | undefined;
   const policy = displayRoom.policy;
+  const connected = status === "connected";
+  const approvals = isPreview ? [] : pendingApprovals(events);
+  const holdsWriteFloor = isPreview ? false : humanHoldsWriteFloor(events);
 
   const groupedTurns = useMemo(() => {
     const turns = new Map<string, RoomEvent[]>();
@@ -159,8 +201,27 @@ function App() {
     saveSettings(settings);
   }, [settings]);
 
-  function connect(next = settings) {
+  function ingest(merged: RoomEvent[]) {
+    lastSeqRef.current = merged.length ? merged[merged.length - 1].seq : lastSeqRef.current;
+    return merged;
+  }
+
+  function scheduleReconnect(next: ClientSettings) {
+    if (teardownRef.current) return;
+    const attempt = attemptRef.current++;
+    const delay = Math.min(15_000, 500 * 2 ** attempt);
+    reconnectTimerRef.current = setTimeout(() => connect(next, true), delay);
+  }
+
+  function connect(next = settings, resume = false) {
+    if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+    teardownRef.current = false;
     wsRef.current?.close();
+    if (!resume) {
+      lastSeqRef.current = 0;
+      setEvents([]);
+      setSelectedTargets([]);
+    }
     setStatus("connecting");
     setError("");
 
@@ -168,66 +229,86 @@ function App() {
       const socket = new WebSocket(next.url);
       wsRef.current = socket;
       socket.addEventListener("open", () => {
+        attemptRef.current = 0;
         setStatus("connected");
-        socket.send(JSON.stringify({ t: "subscribe", roomId: next.roomId, sinceSeq: 0 }));
+        socket.send(JSON.stringify({ t: "subscribe", roomId: next.roomId, sinceSeq: lastSeqRef.current }));
       });
       socket.addEventListener("message", (raw) => {
         const message = JSON.parse(String(raw.data)) as ServerMessage;
         if (message.t === "snapshot") {
           setRoom(message.room);
-          setEvents(message.events);
-          setSelectedTargets([]);
+          setEvents((current) => ingest(mergeEvents(current, message.events)));
         } else if (message.t === "event") {
-          setEvents((current) => {
-            if (current.some((item) => item.id === message.event.id)) return current;
-            return [...current, message.event].sort((a, b) => a.seq - b.seq);
-          });
+          setEvents((current) => ingest(mergeEvents(current, [message.event])));
         } else if (message.t === "error") {
           setError(message.text);
         }
       });
       socket.addEventListener("close", () => {
-        if (wsRef.current === socket) setStatus((current) => current === "connected" ? "offline" : current);
+        if (wsRef.current !== socket || teardownRef.current) return; // replaced or intentional
+        setStatus("offline");
+        scheduleReconnect(next);
       });
       socket.addEventListener("error", () => {
-        setStatus("error");
-        setError("Connection failed");
+        setError("Connection failed"); // a close event follows and drives the retry
       });
     } catch (err) {
       setStatus("error");
       setError(err instanceof Error ? err.message : "Connection failed");
+      scheduleReconnect(next);
     }
   }
 
+  // Connect on load and tear the socket down cleanly on unmount.
+  useEffect(() => {
+    connect(settings, false);
+    return () => {
+      teardownRef.current = true;
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      wsRef.current?.close();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function applyConnection() {
     setSettings(draftSettings);
-    connect(draftSettings);
+    attemptRef.current = 0;
+    connect(draftSettings, false);
+  }
+
+  function send(payload: Record<string, unknown>): boolean {
+    if (status !== "connected" || !wsRef.current) return false;
+    wsRef.current.send(JSON.stringify({ roomId: settings.roomId, ...payload }));
+    return true;
   }
 
   function sendMessage() {
     const text = composer.trim();
-    if (!text || status !== "connected" || !wsRef.current) return;
-    wsRef.current.send(JSON.stringify({
-      t: "post_message",
-      roomId: settings.roomId,
-      text,
-      addressedTo: selectedTargets.length ? selectedTargets : undefined,
-    }));
-    setComposer("");
+    if (!text) return;
+    if (send({ t: "post_message", text, addressedTo: selectedTargets.length ? selectedTargets : undefined })) {
+      setComposer("");
+    }
   }
 
   function sendInterrupt() {
-    if (status !== "connected" || !wsRef.current) return;
-    wsRef.current.send(JSON.stringify({ t: "interrupt", roomId: settings.roomId, hard: true }));
+    send({ t: "interrupt", hard: true });
   }
 
   function setPolicy(name: ConductorPolicyConfig["name"]) {
-    if (status !== "connected" || !wsRef.current) return;
-    wsRef.current.send(JSON.stringify({
-      t: "set_policy",
-      roomId: settings.roomId,
-      policy: { ...policy, name },
-    }));
+    send({ t: "set_policy", policy: { ...policy, name } });
+  }
+
+  function approveTool(callId: string, allow: boolean) {
+    send({ t: "approve_tool", callId, allow });
+  }
+
+  function takeWriteFloor() {
+    send({ t: "take_write_floor" });
+  }
+
+  function rollback(toHead: string) {
+    if (!window.confirm(`Roll the workspace back to ${toHead.slice(0, 7)}?\nThis is a hard git reset — commits after it are discarded.`)) return;
+    send({ t: "rollback", toHead });
   }
 
   function toggleTarget(id: string) {
@@ -287,7 +368,7 @@ function App() {
           <div className="panel-title"><GitCommitHorizontal size={16} /><span>Checkpoints</span></div>
           <div className="checkpoint-list">
             {checkpoints.slice(-4).reverse().map((item) => (
-              <CheckpointRow key={item.id} event={item} />
+              <CheckpointRow key={item.id} event={item} canRollback={connected} onRollback={rollback} />
             ))}
           </div>
         </section>
@@ -334,6 +415,27 @@ function App() {
               <SquareTerminal size={17} />
               <span>Operations</span>
             </div>
+            {approvals.length ? (
+              <div className="approval-list">
+                {approvals.map((signal) => (
+                  <div key={signal.callId} className="approval-card">
+                    <div className="approval-head">
+                      <ShieldQuestion size={15} />
+                      <strong>{signal.tool}</strong>
+                      <span>{signal.callId}</span>
+                    </div>
+                    <div className="approval-actions">
+                      <button type="button" className="approve" disabled={!connected} onClick={() => approveTool(signal.callId, true)}>
+                        <Check size={14} /> Approve
+                      </button>
+                      <button type="button" className="deny" disabled={!connected} onClick={() => approveTool(signal.callId, false)}>
+                        <XCircle size={14} /> Deny
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
             <div className="agent-targets">
               {agents.map((agent) => (
                 <button
@@ -355,9 +457,19 @@ function App() {
               }}
               placeholder="Message the room"
             />
-            <button className="send-action" type="button" disabled={status !== "connected" || !composer.trim()} onClick={sendMessage}>
+            <button className="send-action" type="button" disabled={!connected || !composer.trim()} onClick={sendMessage}>
               <Send size={16} />
               <span>Send</span>
+            </button>
+            <button
+              className={holdsWriteFloor ? "write-floor-action holding" : "write-floor-action"}
+              type="button"
+              disabled={!connected || holdsWriteFloor}
+              onClick={takeWriteFloor}
+              title="Pause agents and edit files directly. Sending a message hands the floor back."
+            >
+              <PenLine size={16} />
+              <span>{holdsWriteFloor ? "You hold the write floor" : "Take write floor"}</span>
             </button>
 
             <div className="section-heading compact">
@@ -378,8 +490,14 @@ function App() {
 }
 
 function StatusPill({ status, preview }: { status: ConnectionState; preview: boolean }) {
-  const label = preview ? "preview" : status;
-  return <span className={`status-pill ${status}`}>{label}</span>;
+  const reconnecting = status === "offline";
+  const label = reconnecting ? "reconnecting" : preview ? "preview" : status;
+  return (
+    <span className={`status-pill ${status}`}>
+      {reconnecting ? <RefreshCcw size={11} className="spin" /> : null}
+      {label}
+    </span>
+  );
 }
 
 function ParticipantRow({ participant, active }: { participant: ParticipantDescriptor; active: boolean }) {
@@ -396,7 +514,15 @@ function ParticipantRow({ participant, active }: { participant: ParticipantDescr
   );
 }
 
-function CheckpointRow({ event }: { event: RoomEvent }) {
+function CheckpointRow({
+  event,
+  canRollback,
+  onRollback,
+}: {
+  event: RoomEvent;
+  canRollback: boolean;
+  onRollback: (toHead: string) => void;
+}) {
   const body = event.body as CheckpointBody;
   return (
     <div className="checkpoint-row">
@@ -405,6 +531,15 @@ function CheckpointRow({ event }: { event: RoomEvent }) {
         <strong>{body.summary ?? event.author.display}</strong>
         <span>{body.stat.files} files · +{body.stat.insertions} -{body.stat.deletions}</span>
       </div>
+      <button
+        type="button"
+        className="rollback-btn"
+        disabled={!canRollback || !body.preHead}
+        title={`Roll back to ${body.preHead?.slice(0, 7) ?? "?"} (undo this checkpoint)`}
+        onClick={() => onRollback(body.preHead)}
+      >
+        <Undo2 size={14} />
+      </button>
     </div>
   );
 }

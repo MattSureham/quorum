@@ -182,9 +182,13 @@ describe("Conductor", () => {
     try {
       await log.append(human("do it"));
       await waitFor(() => events.some((e) => e.type === "system" && String((e.body as any).text).includes("approval needed: Bash [call-1]")));
+      // The request carries a structured approval signal the UI can act on.
+      expect(events.some((e) => (e.body as any).approval?.callId === "call-1" && (e.body as any).approval?.state === "requested")).toBe(true);
 
       conductor.resolveToolApproval("call-1", true);
       await waitFor(() => events.some((e) => e.author.id === "alpha" && (e.body as any).text === "approved"));
+      // Resolving emits a structured "granted" signal so all clients clear the prompt.
+      expect(events.some((e) => (e.body as any).approval?.callId === "call-1" && (e.body as any).approval?.state === "granted")).toBe(true);
     } finally {
       await conductor.stop();
     }

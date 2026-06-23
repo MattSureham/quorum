@@ -3,10 +3,11 @@ import type { ParticipantDescriptor, Capabilities, FloorIntent } from "@quorum/p
 
 export interface EchoLine {
   delayMs?: number;
-  type?: "message" | "thinking" | "floor_request";
+  type?: "message" | "thinking" | "floor_request" | "tool";
   text?: string;
   addressedTo?: string[];
   intent?: FloorIntent;
+  tool?: string; // for type: "tool" — name shown in the approval prompt
 }
 export type EchoScript = (args: { input: TurnInput; turnIndex: number }) => EchoLine[] | Promise<EchoLine[]>;
 
@@ -44,7 +45,17 @@ export class EchoAdapter implements Participant {
       if (input.signal.aborted || this.aborted) return;
       if (ln.delayMs) await abortableDelay(ln.delayMs, input.signal);
       if (input.signal.aborted || this.aborted) return;
-      if (ln.type === "floor_request") {
+      if (ln.type === "tool") {
+        const tool = ln.tool ?? "Bash";
+        const callId = `echo-${this.descriptor.id}-${Date.now()}`;
+        yield { type: "tool_call", body: { tool, args: { note: ln.text ?? "" }, callId } };
+        const allow = input.requestToolApproval
+          ? await input.requestToolApproval({ callId, tool, input: { note: ln.text ?? "" } })
+          : true;
+        if (input.signal.aborted || this.aborted) return;
+        yield { type: "tool_result", body: { callId, ok: allow, stdout: allow ? (ln.text ?? "done") : "denied by human" } };
+        yield { type: "message", body: { text: allow ? `ran ${tool}` : `skipped ${tool} (denied)` } };
+      } else if (ln.type === "floor_request") {
         yield { type: "floor_request", body: { reason: ln.text ?? "continue", intent: ln.intent ?? "reply" } };
       } else if (ln.type === "thinking") {
         yield { type: "thinking", body: { text: ln.text ?? "" } };
