@@ -1,6 +1,6 @@
 # HANDOFF
 
-Working handoff for an agent picking up **Quorum**. Current as of **2026-06-23**, `main` at commit `e8172c1`.
+Working handoff for an agent picking up **Quorum**. Current as of **2026-06-23**, `main` at commit `384c311`. 中文版见 [`HANDOFF.zh.md`](./HANDOFF.zh.md)。
 
 ## TL;DR
 Quorum is a TypeScript/pnpm monorepo: a human + multiple heterogeneous coding agents (Claude Code, Codex, plain API models) collaborate in **one shared group chat on one git branch**. A **Conductor** decides who holds the speaking floor; an append-only **EventLog** is the source of truth; everyone edits **one shared working dir** serialized by a write-floor lock with per-turn checkpoint commits. Milestones **M0–M4 are in place and M5 (web client) is wired**; **M6 (remote access) is not started**. See `SPEC.md` for the full design and `README.md` for the pitch.
@@ -50,7 +50,7 @@ SPEC.md       full design (Chinese): data model, Conductor state machine, adapte
 - **M2** Conductor free-for-all + 2nd agent + `raise_hand` + human interrupt — done.
 - **M3** GitWorkspace write-floor + per-turn checkpoint + out-of-band detection + diff/rollback (gateway `rollback`/`approve_tool`/`take_write_floor`) — done.
 - **M4** `directed` + `moderated` policies + runtime `set_policy`; model-backed moderator — done.
-- **M5** React web client — **in place and connects**; verify the richer affordances (inline diff view, tool-approval UI, rollback UI, multi-client consistency, reconnect) against SPEC §12 before calling it complete.
+- **M5** React web client — **in place and connects**; recent commits (`2cc772e`/`28fccf9`/`384c311`) wired the tool-approval / rollback / take-write-floor / reconnect interactions (verify them end-to-end, plus inline diff view + multi-client consistency, against SPEC §12 before calling it complete).
 - **M6** remote (relay/E2E/pairing QR, more providers) — **not started**.
 
 ## Suggested next steps
@@ -61,12 +61,16 @@ SPEC.md       full design (Chinese): data model, Conductor state machine, adapte
 
 ## Conventions / gotchas
 - `@quorum/core` stays **dependency-free**; anything needing network/env/SDKs lives in `@quorum/daemon`.
-- Verify before claiming: `pnpm typecheck` is clean and `pnpm test` is 30/30 green at `e8172c1`.
+- Verify before claiming: `pnpm typecheck` is clean and `pnpm test` is 30/30 green at `384c311`.
 - Debug artifacts (root `*.png`, `.playwright-mcp/`) are gitignored — keep them out of commits.
 - **Git worktrees:** `main` is checked out at `/Users/matthew/Projects/quorum`; a second worktree (`test-framework-debug`) also exists. A branch can only be checked out in one worktree at a time, so don't try to `git checkout main` in the second one.
 
-## Recent history (last session)
+## Recent history
 ```
+384c311 feat: auto-scroll transcript + run Claude with bypassPermissions
+28fccf9 fix: clear stale "Connection failed" banner once the socket connects
+2cc772e feat: wire M5 web interactions (approve/rollback/write-floor + reconnect)
+d5ac91c docs: add HANDOFF.md for agents picking up the project
 e8172c1 feat: add `pnpm dev` to launch daemon + web client together
 56b75bd chore: ignore browser/playwright debug artifacts
 824830e feat: wire model-backed moderator for the moderated policy (M4)
