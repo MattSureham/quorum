@@ -64,7 +64,8 @@ pnpm typecheck      # tsc -b (needs deps installed)
 
 ## Wire real agents
 
-Edit the room in `packages/cli/src/index.ts` (or build a `quorum.config.json`).
+Edit the room in `quorum.config.json` (or point `QUORUM_CONFIG` at another path;
+`packages/cli/src/index.ts` falls back to built-in defaults if the file is missing).
 Each agent is a `ParticipantDescriptor` with an `adapter`:
 
 - `claude-code` → needs `@anthropic-ai/claude-agent-sdk` + Claude Code auth
