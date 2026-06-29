@@ -54,10 +54,9 @@ SPEC.md       full design (Chinese): data model, Conductor state machine, adapte
 - **M6** remote (relay/E2E/pairing QR, more providers) — **not started**.
 
 ## Suggested next steps
-1. Replace the hardcoded room in `cli/src/index.ts` with a `quorum.config.json` loader.
-2. Audit/finish M5 web-client features (diff view, approve-tool + rollback UI, reconnect).
-3. Start M6 (remote transport + pairing).
-4. Refresh `README.md` — its "Status" section is stale (still calls the web client a placeholder and references a `pnpm --filter @quorum/cli start` script that doesn't exist; start the daemon with `npx tsx packages/cli/src/index.ts`).
+1. Audit/finish M5 web-client features (diff view, approve-tool + rollback UI, reconnect).
+2. Start M6 (remote transport + pairing).
+3. Refresh `README.md` — its "Status" section is stale (still calls the web client a placeholder and references a `pnpm --filter @quorum/cli start` script that doesn't exist; start the daemon with `npx tsx packages/cli/src/index.ts`).
 
 ## Conventions / gotchas
 - `@quorum/core` stays **dependency-free**; anything needing network/env/SDKs lives in `@quorum/daemon`.
