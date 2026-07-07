@@ -66,7 +66,13 @@ pnpm smoke:sidecar
 One-click install and desktop double-click launch are not implemented yet. The
 remaining packaging spike is Bun compile or a documented Node bundle fallback;
 this machine currently does not have `bun` installed, so compiled sidecar
-compatibility is still unverified.
+compatibility is still unverified. A Node-runtime fallback artifact can be built
+and smoke-tested with:
+
+```bash
+pnpm sidecar:node:build
+pnpm sidecar:node:smoke
+```
 
 ## Status
 

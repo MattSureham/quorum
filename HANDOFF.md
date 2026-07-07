@@ -11,6 +11,7 @@ Latest migration commits:
 - `7d303b8 feat: add shared session architecture kernel`
 - The follow-up handoff/UI commit adds shared-session Web UI projection and `pnpm smoke:shared`.
 - The sidecar spike commit adds `packages/daemon/src/sidecar.ts` and `pnpm smoke:sidecar`.
+- The Node fallback spike adds `pnpm sidecar:node:build` and `pnpm sidecar:node:smoke`.
 
 What is already implemented:
 
@@ -31,7 +32,9 @@ What is already implemented:
 - `pnpm smoke:shared` starts a shared-session host, posts over WebSocket, and verifies bid/phase/echo response events.
 - `packages/daemon/src/sidecar.ts` starts a shared-session sidecar on `127.0.0.1:0`, prints `{ port, token, bootId }`, and requires the token for WebSocket connections.
 - `pnpm smoke:sidecar` starts the sidecar entry, validates the handshake, performs a token-authenticated WebSocket round trip, and exercises a subprocess check.
-- Verification: `pnpm typecheck`, `pnpm test`, `pnpm --filter @quorum/client-web build`, `pnpm smoke:shared`, and `pnpm smoke:sidecar` pass.
+- `pnpm sidecar:node:build` creates a Node-runtime fallback artifact in `dist-sidecar/node`.
+- `pnpm sidecar:node:smoke` builds that artifact, starts it, validates the same sidecar handshake and WebSocket round trip.
+- Verification: `pnpm typecheck`, `pnpm test`, `pnpm --filter @quorum/client-web build`, `pnpm smoke:shared`, `pnpm smoke:sidecar`, and `pnpm sidecar:node:smoke` pass.
 
 What is not implemented yet:
 
@@ -39,6 +42,7 @@ What is not implemented yet:
 - **End-user one-click launch is not done.** The app cannot yet be installed and launched by double-clicking a desktop application.
 - **Developer one-command launch exists.** Use `pnpm dev` for the legacy kernel or `QUORUM_SESSION_KERNEL=shared pnpm dev` for the new shared-session kernel.
 - **Local sidecar entry exists but is not packaged.** The sidecar can be run through tsx and validated with `pnpm smoke:sidecar`; Bun compile compatibility is not verified because this machine does not currently have `bun` installed.
+- **Node-runtime fallback exists.** It is not a single binary, but `pnpm sidecar:node:build` creates a smoke-tested fallback artifact. This is the fallback route if Bun compile fails.
 - The Web UI now exposes the new shared-session phase and bid queue, but it is still a minimal projection. It does not yet provide full replay controls, policy tuning, rich arbitration score inspection, or memory inspection.
 - The new tool runtime, memory compaction, replay UI, desktop sidecar lifecycle, and package build pipeline remain follow-up work.
 
@@ -59,6 +63,7 @@ pnpm install
 QUORUM_SESSION_KERNEL=shared pnpm dev
 pnpm smoke:shared
 pnpm smoke:sidecar
+pnpm sidecar:node:smoke
 pnpm typecheck
 pnpm test
 ```
@@ -66,7 +71,7 @@ pnpm test
 5. Start the packaging P0 spike from [`AGENT_FRAMEWORK_HANDOFF.md`](./AGENT_FRAMEWORK_HANDOFF.md):
    - Bun compile compatibility with SQLite. This is still open because `bun` is absent locally.
    - Playwright/browser-agent compatibility. This is still open.
-   - fallback decision: Bun single binary vs Node runtime + JS bundle/resources.
+   - fallback decision: Bun single binary vs Node runtime + JS bundle/resources. The Node fallback route is now implemented enough to smoke-test.
 6. After the compile/bundle decision, implement Tauri 2, sidecar lifecycle management around the existing handshake, macOS/Windows installers, signing/notarization, and updater.
 
 ## TL;DR

@@ -18,7 +18,9 @@
     "build": "tsc -b",
     "web:dev": "pnpm --filter @quorum/client-web dev",
     "web:build": "pnpm --filter @quorum/client-web build",
-    "web:preview": "pnpm --filter @quorum/client-web preview"
+    "web:preview": "pnpm --filter @quorum/client-web preview",
+    "sidecar:node:build": "tsx scripts/build-sidecar-node.ts",
+    "sidecar:node:smoke": "tsx scripts/node-sidecar-smoke.ts"
   },
   "devDependencies": {
     "@quorum/core": "workspace:*",
