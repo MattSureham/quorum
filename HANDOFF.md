@@ -12,6 +12,7 @@ Latest migration commits:
 - The follow-up handoff/UI commit adds shared-session Web UI projection and `pnpm smoke:shared`.
 - The sidecar spike commit adds `packages/daemon/src/sidecar.ts` and `pnpm smoke:sidecar`.
 - The Node fallback spike adds `pnpm sidecar:node:build` and `pnpm sidecar:node:smoke`.
+- The packaging env commit adds project-local Bun/Rust setup under `.tools/` and validates Bun single-file sidecar compile with `pnpm sidecar:bun:smoke`.
 
 What is already implemented:
 
@@ -34,15 +35,19 @@ What is already implemented:
 - `pnpm smoke:sidecar` starts the sidecar entry, validates the handshake, performs a token-authenticated WebSocket round trip, and exercises a subprocess check.
 - `pnpm sidecar:node:build` creates a Node-runtime fallback artifact in `dist-sidecar/node`.
 - `pnpm sidecar:node:smoke` builds that artifact, starts it, validates the same sidecar handshake and WebSocket round trip.
-- Verification: `pnpm typecheck`, `pnpm test`, `pnpm --filter @quorum/client-web build`, `pnpm smoke:shared`, `pnpm smoke:sidecar`, and `pnpm sidecar:node:smoke` pass.
+- `pnpm packaging:env` installs Bun and Rust/Cargo into `.tools/` without modifying global shell startup files.
+- `pnpm sidecar:bun:build` compiles `packages/daemon/src/sidecar.ts` into `dist-sidecar/bun/quorum-sidecar`.
+- `pnpm sidecar:bun:smoke` validates the compiled Bun sidecar with SQLite, token-authenticated WebSocket, and a shared-session echo turn.
+- Verification: `pnpm typecheck`, `pnpm test`, `pnpm --filter @quorum/client-web build`, `pnpm smoke:shared`, `pnpm smoke:sidecar`, `pnpm sidecar:node:smoke`, and `pnpm sidecar:bun:smoke` pass.
 
 What is not implemented yet:
 
 - **One-click install is not done.** There is no Tauri desktop shell yet, no macOS `.dmg`, no Windows installer, no signing/notarization, no auto-update, and no packaged sidecar.
 - **End-user one-click launch is not done.** The app cannot yet be installed and launched by double-clicking a desktop application.
 - **Developer one-command launch exists.** Use `pnpm dev` for the legacy kernel or `QUORUM_SESSION_KERNEL=shared pnpm dev` for the new shared-session kernel.
-- **Local sidecar entry exists but is not packaged.** The sidecar can be run through tsx and validated with `pnpm smoke:sidecar`; Bun compile compatibility is not verified because this machine does not currently have `bun` installed.
-- **Node-runtime fallback exists.** It is not a single binary, but `pnpm sidecar:node:build` creates a smoke-tested fallback artifact. This is the fallback route if Bun compile fails.
+- **Local sidecar entry exists and Bun compile is verified.** The sidecar can be run through tsx with `pnpm smoke:sidecar`, compiled with Bun using `pnpm sidecar:bun:build`, and verified with `pnpm sidecar:bun:smoke`.
+- **Node-runtime fallback exists.** It is not a single binary, but `pnpm sidecar:node:build` creates a smoke-tested fallback artifact. Keep it as the fallback route if Bun compile regresses on another platform.
+- **Rust/Cargo exists only in the project-local toolchain.** Source `.tools/packaging-env.sh` before running Tauri commands.
 - The Web UI now exposes the new shared-session phase and bid queue, but it is still a minimal projection. It does not yet provide full replay controls, policy tuning, rich arbitration score inspection, or memory inspection.
 - The new tool runtime, memory compaction, replay UI, desktop sidecar lifecycle, and package build pipeline remain follow-up work.
 
@@ -64,15 +69,17 @@ QUORUM_SESSION_KERNEL=shared pnpm dev
 pnpm smoke:shared
 pnpm smoke:sidecar
 pnpm sidecar:node:smoke
+pnpm sidecar:bun:smoke
 pnpm typecheck
 pnpm test
 ```
 
 5. Start the packaging P0 spike from [`AGENT_FRAMEWORK_HANDOFF.md`](./AGENT_FRAMEWORK_HANDOFF.md):
-   - Bun compile compatibility with SQLite. This is still open because `bun` is absent locally.
+   - Bun compile compatibility with SQLite. This is now verified on macOS arm64 with Bun 1.3.14 by using Bun's `bun:sqlite` path inside `SqliteStore`.
    - Playwright/browser-agent compatibility. This is still open.
-   - fallback decision: Bun single binary vs Node runtime + JS bundle/resources. The Node fallback route is now implemented enough to smoke-test.
-6. After the compile/bundle decision, implement Tauri 2, sidecar lifecycle management around the existing handshake, macOS/Windows installers, signing/notarization, and updater.
+   - Windows and macOS x64 build compatibility. Still open.
+   - fallback decision: Bun single binary vs Node runtime + JS bundle/resources. Current default should be Bun single binary; Node fallback remains smoke-tested.
+6. Next implementation target: Tauri 2 desktop shell, sidecar lifecycle management around the existing handshake, macOS/Windows installers, signing/notarization, and updater.
 
 ## TL;DR
 Quorum is a TypeScript/pnpm monorepo: a human + multiple heterogeneous coding agents (Claude Code, Codex, plain API models) collaborate in **one shared group chat on one git branch**. A **Conductor** decides who holds the speaking floor; an append-only **EventLog** is the source of truth; everyone edits **one shared working dir** serialized by a write-floor lock with per-turn checkpoint commits. Milestones **M0–M4 are in place and M5 (web client) is wired**; **M6 (remote access) is not started**. See `SPEC.md` for the full design and `README.md` for the pitch.

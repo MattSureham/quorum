@@ -63,16 +63,31 @@ connections. Validate it with:
 pnpm smoke:sidecar
 ```
 
-One-click install and desktop double-click launch are not implemented yet. The
-remaining packaging spike is Bun compile or a documented Node bundle fallback;
-this machine currently does not have `bun` installed, so compiled sidecar
-compatibility is still unverified. A Node-runtime fallback artifact can be built
-and smoke-tested with:
+Packaging toolchains are isolated under `.tools/`:
+
+```bash
+pnpm packaging:env
+source .tools/packaging-env.sh
+```
+
+Bun single-file sidecar compile is validated:
+
+```bash
+pnpm sidecar:bun:build
+pnpm sidecar:bun:smoke
+```
+
+The Node-runtime fallback artifact can also be built and smoke-tested:
 
 ```bash
 pnpm sidecar:node:build
 pnpm sidecar:node:smoke
 ```
+
+One-click install and desktop double-click launch are not implemented yet. The
+remaining packaging work is the Tauri 2 desktop shell, app lifecycle around the
+existing sidecar handshake, macOS/Windows installers, signing/notarization, and
+auto-update.
 
 ## Status
 

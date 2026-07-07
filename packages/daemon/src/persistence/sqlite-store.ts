@@ -1,17 +1,39 @@
-import Database from "better-sqlite3";
+import { createRequire } from "node:module";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { RoomEvent } from "@quorum/protocol";
 import type { EventStore } from "@quorum/core";
 
+const require = createRequire(import.meta.url);
+
+interface SqliteDb {
+  pragma?(source: string): unknown;
+  exec(source: string): unknown;
+  prepare(source: string): {
+    run(...args: unknown[]): unknown;
+    all(...args: unknown[]): unknown[];
+    get(...args: unknown[]): unknown;
+  };
+  close(): void;
+}
+
+function openDatabase(path: string): SqliteDb {
+  if ((process.versions as any).bun) {
+    const { Database } = require("bun:sqlite") as { Database: new (path: string) => SqliteDb };
+    return new Database(path);
+  }
+  const Database = require("better-sqlite3") as new (path: string) => SqliteDb;
+  return new Database(path);
+}
+
 /** Append-only event store backed by SQLite (better-sqlite3). */
 export class SqliteStore implements EventStore {
-  private readonly db: Database.Database;
+  private readonly db: SqliteDb;
 
   constructor(path = ".quorum/quorum.sqlite") {
     mkdirSync(dirname(path), { recursive: true });
-    this.db = new Database(path);
-    this.db.pragma("journal_mode = WAL");
+    this.db = openDatabase(path);
+    this.db.pragma?.("journal_mode = WAL");
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS events (
         id TEXT PRIMARY KEY, room_id TEXT, seq INTEGER, ts INTEGER, data TEXT NOT NULL

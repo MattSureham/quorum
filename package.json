@@ -19,6 +19,9 @@
     "web:dev": "pnpm --filter @quorum/client-web dev",
     "web:build": "pnpm --filter @quorum/client-web build",
     "web:preview": "pnpm --filter @quorum/client-web preview",
+    "packaging:env": "bash scripts/setup-packaging-env.sh",
+    "sidecar:bun:build": "bash -lc 'source .tools/packaging-env.sh && tsx scripts/build-sidecar-bun.ts'",
+    "sidecar:bun:smoke": "bash -lc 'source .tools/packaging-env.sh && tsx scripts/bun-sidecar-smoke.ts'",
     "sidecar:node:build": "tsx scripts/build-sidecar-node.ts",
     "sidecar:node:smoke": "tsx scripts/node-sidecar-smoke.ts"
   },
