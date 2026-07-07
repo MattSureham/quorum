@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import type {
   ApprovalSignal,
+  Bid,
   CheckpointBody,
   ConductorPolicyConfig,
   FloorGrantBody,
@@ -92,6 +93,17 @@ const previewEvents: RoomEvent[] = [
   event(7, "conductor", "Conductor", "system", "floor_release", { turnId: "turn-1", reason: "done" }),
 ];
 
+interface SharedSessionProjection {
+  enabled: boolean;
+  phase: string;
+  activeSpeaker?: string;
+  activeTurnId?: string;
+  pendingBids: Bid[];
+  selected?: { agentId?: string; score?: number; kind?: string };
+  lastCompleted?: string;
+  debugEvents: RoomEvent[];
+}
+
 function event(
   seq: number,
   id: string,
@@ -144,6 +156,72 @@ function humanHoldsWriteFloor(events: RoomEvent[]): boolean {
   return held;
 }
 
+function projectSharedSession(events: RoomEvent[]): SharedSessionProjection {
+  const pending = new Map<string, Bid>();
+  let phase = "legacy";
+  let activeSpeaker: string | undefined;
+  let activeTurnId: string | undefined;
+  let selected: SharedSessionProjection["selected"];
+  let lastCompleted: string | undefined;
+  let enabled = false;
+
+  for (const item of events) {
+    if (
+      item.type === "phase_changed" ||
+      item.type === "bid_submitted" ||
+      item.type === "bid_settled" ||
+      item.type === "speaker_selected" ||
+      item.type === "turn_started" ||
+      item.type === "turn_completed" ||
+      item.type === "turn_cancelled" ||
+      item.type === "turn_failed"
+    ) {
+      enabled = true;
+    }
+
+    if (item.type === "phase_changed") {
+      const body = item.body as any;
+      phase = String(body.to ?? phase);
+    } else if (item.type === "bid_submitted") {
+      const bid = (item.body as any).bid as Bid | undefined;
+      if (bid) pending.set(bid.bidId, bid);
+    } else if (item.type === "bid_settled") {
+      const body = item.body as any;
+      if (body.action === "withdrawn" && body.bidId) pending.delete(String(body.bidId));
+    } else if (item.type === "speaker_selected") {
+      const body = item.body as any;
+      const winner = body.winner;
+      const bid = winner?.bid as Bid | undefined;
+      if (bid) {
+        pending.delete(bid.bidId);
+        selected = { agentId: bid.agentId, score: winner.score, kind: bid.kind };
+      }
+    } else if (item.type === "turn_started") {
+      const body = item.body as any;
+      activeSpeaker = body.speakerId;
+      activeTurnId = body.turnId;
+    } else if (item.type === "turn_completed" || item.type === "turn_cancelled" || item.type === "turn_failed") {
+      const body = item.body as any;
+      if (body.turnId === activeTurnId) {
+        activeSpeaker = undefined;
+        activeTurnId = undefined;
+      }
+      lastCompleted = body.turnId;
+    }
+  }
+
+  return {
+    enabled,
+    phase,
+    activeSpeaker,
+    activeTurnId,
+    pendingBids: [...pending.values()],
+    selected,
+    lastCompleted,
+    debugEvents: events.filter((item) => item.visibility === "debug" || item.visibility === "system").slice(-12).reverse(),
+  };
+}
+
 function loadSettings(): ClientSettings {
   try {
     const raw = localStorage.getItem("quorum.client.settings");
@@ -187,6 +265,7 @@ function App() {
   const connected = status === "connected";
   const approvals = isPreview ? [] : pendingApprovals(events);
   const holdsWriteFloor = isPreview ? false : humanHoldsWriteFloor(events);
+  const shared = useMemo(() => projectSharedSession(displayEvents), [displayEvents]);
 
   const groupedTurns = useMemo(() => {
     const turns = new Map<string, RoomEvent[]>();
@@ -406,9 +485,9 @@ function App() {
 
         <section className="status-strip">
           <Metric icon={<Activity size={16} />} label="Events" value={String(displayEvents.length)} />
-          <Metric icon={<Hand size={16} />} label="Floor" value={activeTurn?.participantId ?? "open"} />
-          <Metric icon={<PauseCircle size={16} />} label="Last turn" value={latestRelease?.reason ?? "pending"} />
-          <Metric icon={<Settings2 size={16} />} label="Policy" value={policy.name} />
+          <Metric icon={<Hand size={16} />} label={shared.enabled ? "Speaker" : "Floor"} value={shared.activeSpeaker ?? activeTurn?.participantId ?? "open"} />
+          <Metric icon={<PauseCircle size={16} />} label={shared.enabled ? "Phase" : "Last turn"} value={shared.enabled ? shared.phase : latestRelease?.reason ?? "pending"} />
+          <Metric icon={<Settings2 size={16} />} label="Kernel" value={shared.enabled ? "shared-session" : policy.name} />
         </section>
 
         <section className="room-grid">
@@ -430,6 +509,7 @@ function App() {
               <SquareTerminal size={17} />
               <span>Operations</span>
             </div>
+            {shared.enabled ? <SharedSessionPanel shared={shared} /> : null}
             {approvals.length ? (
               <div className="approval-list">
                 {approvals.map((signal) => (
@@ -592,6 +672,47 @@ function Metric({ icon, label, value }: { icon: React.ReactNode; label: string; 
   );
 }
 
+function SharedSessionPanel({ shared }: { shared: SharedSessionProjection }) {
+  return (
+    <section className="shared-panel">
+      <div className="shared-panel-head">
+        <Activity size={15} />
+        <strong>Shared Session</strong>
+        <span>{shared.phase}</span>
+      </div>
+      <div className="shared-kv">
+        <span>active</span>
+        <strong>{shared.activeSpeaker ?? "open"}</strong>
+      </div>
+      <div className="shared-kv">
+        <span>selected</span>
+        <strong>{shared.selected?.agentId ? `${shared.selected.agentId} · ${shared.selected.kind} · ${shared.selected.score?.toFixed(3) ?? "n/a"}` : "none"}</strong>
+      </div>
+      <div className="mini-heading">Bid queue</div>
+      <div className="bid-list">
+        {shared.pendingBids.length ? shared.pendingBids.map((bid) => (
+          <div key={bid.bidId} className="bid-row">
+            <Hand size={14} />
+            <div>
+              <strong>{bid.agentId}</strong>
+              <span>{bid.kind} · conf {bid.confidence.toFixed(2)}</span>
+            </div>
+          </div>
+        )) : <div className="empty-row">No pending bids</div>}
+      </div>
+      <div className="mini-heading">Debug events</div>
+      <div className="debug-list">
+        {shared.debugEvents.length ? shared.debugEvents.map((event) => (
+          <div key={event.id} className="debug-row">
+            <span>#{event.seq}</span>
+            <strong>{event.type}</strong>
+          </div>
+        )) : <div className="empty-row">No debug events</div>}
+      </div>
+    </section>
+  );
+}
+
 function EventRow({ event }: { event: RoomEvent }) {
   const Icon = iconFor(event.type);
   return (
@@ -630,6 +751,15 @@ function iconFor(type: RoomEvent["type"]) {
     case "floor_release": return PauseCircle;
     case "interrupt": return Zap;
     case "checkpoint": return GitCommitHorizontal;
+    case "phase_changed": return Activity;
+    case "bid_submitted": return Hand;
+    case "bid_settled": return Check;
+    case "speaker_selected": return Radio;
+    case "turn_started": return Radio;
+    case "turn_output_chunk": return MessageSquare;
+    case "turn_completed": return CheckCircle2;
+    case "turn_cancelled": return PauseCircle;
+    case "turn_failed": return AlertTriangle;
     case "system": return AlertTriangle;
     default: return CircleDot;
   }
@@ -664,6 +794,37 @@ function renderBody(event: RoomEvent): React.ReactNode {
     case "checkpoint": {
       const body = event.body as CheckpointBody;
       return `${body.summary ?? "checkpoint"} · ${body.stat.files} files · +${body.stat.insertions} -${body.stat.deletions}`;
+    }
+    case "phase_changed": {
+      const body = event.body as any;
+      return `${body.from ?? "?"} -> ${body.to ?? "?"}`;
+    }
+    case "bid_submitted": {
+      const bid = (event.body as any).bid as Bid | undefined;
+      return bid ? `${bid.agentId} · ${bid.kind} · confidence ${bid.confidence.toFixed(2)}` : JSON.stringify(event.body);
+    }
+    case "bid_settled": {
+      const body = event.body as any;
+      return `${body.bidId ?? "bid"} · ${body.action ?? "settled"}`;
+    }
+    case "speaker_selected": {
+      const body = event.body as any;
+      const bid = body.winner?.bid as Bid | undefined;
+      return bid ? `${bid.agentId} selected · ${bid.kind} · score ${Number(body.winner?.score ?? 0).toFixed(3)}` : "no speaker selected";
+    }
+    case "turn_started": {
+      const body = event.body as any;
+      return `${body.speakerId} started ${body.turnId}`;
+    }
+    case "turn_output_chunk": {
+      const body = event.body as any;
+      return body.text ?? JSON.stringify(body);
+    }
+    case "turn_completed":
+    case "turn_cancelled":
+    case "turn_failed": {
+      const body = event.body as any;
+      return `${event.type.replace("turn_", "")}: ${body.turnId ?? ""}`;
     }
     case "system":
       return (event.body as SystemBody).text;

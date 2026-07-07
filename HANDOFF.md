@@ -6,7 +6,10 @@ Working handoff for an agent picking up **Quorum**. Current as of **2026-06-23**
 
 ## Current State For The Next Agent
 
-Latest migration commit: `7d303b8 feat: add shared session architecture kernel`.
+Latest migration commits:
+
+- `7d303b8 feat: add shared session architecture kernel`
+- The follow-up handoff/UI commit adds shared-session Web UI projection and `pnpm smoke:shared`.
 
 What is already implemented:
 
@@ -23,40 +26,39 @@ What is already implemented:
   - explicit session phase transition validation
 - `@quorum/daemon` now has `startSharedSessionRoom()`, which wraps existing adapters through `LegacyAgentAdapter` and routes human prompts through `SessionManager`.
 - The CLI can choose the new kernel with `QUORUM_SESSION_KERNEL=shared`; without that env var it keeps the legacy `Conductor` path.
-- Verification at commit `7d303b8`: `pnpm typecheck` passes and `pnpm test` passes (`33/33` tests).
+- `@quorum/client-web` can now detect shared-session events and display phase, active speaker, bid queue, selected speaker, and debug events.
+- `pnpm smoke:shared` starts a shared-session host, posts over WebSocket, and verifies bid/phase/echo response events.
+- Verification: `pnpm typecheck`, `pnpm test`, `pnpm --filter @quorum/client-web build`, and `pnpm smoke:shared` pass.
 
 What is not implemented yet:
 
 - **One-click install is not done.** There is no Tauri desktop shell yet, no macOS `.dmg`, no Windows installer, no signing/notarization, no auto-update, and no packaged sidecar.
 - **End-user one-click launch is not done.** The app cannot yet be installed and launched by double-clicking a desktop application.
 - **Developer one-command launch exists.** Use `pnpm dev` for the legacy kernel or `QUORUM_SESSION_KERNEL=shared pnpm dev` for the new shared-session kernel.
-- The Web UI still mostly reflects the legacy room event model. It does not yet fully expose the new shared-session phase, bid queue, arbitration scores, settling window, or debug visibility model.
+- The Web UI now exposes the new shared-session phase and bid queue, but it is still a minimal projection. It does not yet provide full replay controls, policy tuning, rich arbitration score inspection, or memory inspection.
 - The new tool runtime, memory compaction, replay UI, desktop sidecar lifecycle, and package build pipeline remain follow-up work.
 
 Recommended next task for the new agent:
 
 1. Keep `legacy-conductor` as a fallback while migrating.
-2. Make the Web UI understand the new shared-session events:
-   - `phase_changed`
-   - `bid_submitted`
-   - `bid_settled`
-   - `speaker_selected`
-   - `turn_started`
-   - `turn_output_chunk`
-   - `turn_completed`
-   - `turn_cancelled`
-   - `turn_failed`
-3. Add UI panels for current phase, active speaker, bid queue, arbitration score details, and event debug timeline.
+2. Expand the shared-session UI from a minimal projection into a real debugging workflow:
+   - richer arbitration score inspection
+   - settling-window state
+   - event payload JSON expansion
+   - replay controls
+   - memory inspector
+3. Decide when to flip the default kernel from `legacy-conductor` to `shared-session`.
 4. Run and test the new kernel with:
 
 ```bash
 pnpm install
 QUORUM_SESSION_KERNEL=shared pnpm dev
+pnpm smoke:shared
 pnpm typecheck
 pnpm test
 ```
 
-5. After the shared-session UI is usable, start the packaging P0 spike from [`AGENT_FRAMEWORK_HANDOFF.md`](./AGENT_FRAMEWORK_HANDOFF.md):
+5. Start the packaging P0 spike from [`AGENT_FRAMEWORK_HANDOFF.md`](./AGENT_FRAMEWORK_HANDOFF.md):
    - Bun compile compatibility with SQLite.
    - subprocess agent compatibility.
    - Playwright/browser-agent compatibility.

@@ -267,6 +267,7 @@ export class SessionManager {
 
   private async settleAndArbitrate(): Promise<void> {
     await delay(this.opts.settlingWindowMs ?? 400);
+    if (!this.running) return;
     await this.mailbox.enqueue("settleAndArbitrate", async () => {
       if (this.phase !== "settling") return;
       for (const bid of this.pendingBids.values()) {
@@ -275,7 +276,7 @@ export class SessionManager {
         });
       }
       await this.arbitrateIfPossible();
-    });
+    }).catch(() => undefined);
   }
 
   private async persistDelta(

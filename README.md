@@ -36,6 +36,8 @@ implemented in `@quorum/core` as a parallel kernel:
 - `Arbiter` — service-side bid scoring with capped rebuttal bonus.
 - `LegacyAgentAdapter` — bridge from the old `Participant.takeTurn()` contract to
   the new `ISpeakerAgent.bid()/speak()` contract.
+- `@quorum/client-web` now projects shared-session events into a phase display,
+  active speaker status, bid queue, selected speaker, and debug timeline.
 
 Copied meeting materials and the implementation handoff are in
 [`docs/architecture/`](./docs/architecture/).
@@ -45,6 +47,17 @@ To run the daemon against the new kernel during migration:
 ```bash
 QUORUM_SESSION_KERNEL=shared pnpm dev
 ```
+
+To run a fast shared-session smoke test without opening the browser:
+
+```bash
+pnpm smoke:shared
+```
+
+Packaging status: developer one-command launch exists, but one-click install and
+desktop double-click launch are not implemented yet. The next packaging step is
+the P0 sidecar compatibility spike described in
+[`AGENT_FRAMEWORK_HANDOFF.md`](./AGENT_FRAMEWORK_HANDOFF.md).
 
 ## Status
 
