@@ -2,10 +2,10 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Quorum",
   "version": "0.0.1",
-  "identifier": "dev.quorum.app",
+  "identifier": "dev.quorum.desktop",
   "build": {
     "beforeDevCommand": "pnpm --filter @quorum/client-web dev",
-    "beforeBuildCommand": "pnpm sidecar:bun:build && pnpm --filter @quorum/client-web build",
+    "beforeBuildCommand": "pnpm -w sidecar:bun:build && pnpm --filter @quorum/client-web build",
     "devUrl": "http://127.0.0.1:5173",
     "frontendDist": "../../../packages/client-web/dist"
   },

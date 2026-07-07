@@ -93,11 +93,11 @@ pnpm sidecar:node:build
 pnpm sidecar:node:smoke
 ```
 
-Installer-grade one-click install is not implemented yet. The remaining packaging
-work is macOS/Windows installer generation, signing/notarization, updater wiring,
-platform-specific validation, and hardening the desktop lifecycle. Current macOS
-bundle validation is blocked on this machine by missing full Xcode; Xcode Command
-Line Tools are installed and `cargo check` passes.
+Installer-grade release is not done yet. An unsigned macOS arm64 `.app` and `.dmg`
+can now be produced with `pnpm desktop:build`, and the bundled app includes the
+Bun sidecar under `Contents/Resources/sidecars/quorum-sidecar`. Remaining release
+work is signing/notarization, updater wiring, Windows installer generation,
+platform-specific validation, and hardening the desktop lifecycle.
 
 ## Status
 

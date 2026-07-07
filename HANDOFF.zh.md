@@ -18,8 +18,8 @@
 - `pnpm packaging:env` 会把 Bun/Rust/Cargo 安装在项目本地 `.tools/`，不改全局 shell 配置。
 
 还没完成：
-- 安装级“一键安装”还没完成：没有签名 `.dmg`、没有 Windows installer、没有 notarization、没有 updater。
-- 当前机器缺完整 Xcode；Xcode Command Line Tools 存在，`pnpm desktop:check` 能跑到 `cargo check` 通过，但 `.app`/`.dmg` 打包验收还需要完整 Xcode。
+- 发布级“一键安装”还没完成：没有签名/公证、没有 Windows installer 验证、没有 updater。
+- `pnpm desktop:build` 已能生成未签名的 macOS arm64 `.app` 和 `.dmg`；`.app` 内包含 `Contents/Resources/sidecars/quorum-sidecar`。
 - 共享 Session 的工具运行时、记忆压缩、replay UI、仲裁得分检查、跨平台桌面验证仍是后续任务。
 
 当前建议验证命令：
@@ -32,6 +32,7 @@ pnpm smoke:shared
 pnpm smoke:sidecar
 pnpm sidecar:bun:smoke
 pnpm desktop:check
+pnpm desktop:build
 ```
 
 ## 一句话概览（TL;DR）
@@ -88,14 +89,14 @@ SPEC.md       完整设计（中文）：数据模型、Conductor 状态机、ad
 - **M6** 远程（relay/E2E/配对二维码、更多 provider）—— **尚未开始**。
 
 ## 建议的下一步
-1. 完成 Tauri bundle 验证：完整 Xcode、macOS `.app`/`.dmg`、Windows installer、签名、公证、updater。
-2. 给桌面 sidecar 增加更完整的生命周期测试：资源路径、异常退出重启、关闭时优雅停机。
+1. 对生成的 `.app` 做启动 smoke，确认真实桌面窗口能拿到 sidecar handshake 并连上 WebSocket。
+2. 完成 Windows installer、签名、公证、updater。
 3. 扩展共享 Session UI：仲裁得分、settling window、事件 JSON 展开、replay controls、memory inspector。
 4. 决定什么时候把默认 kernel 从 legacy conductor 切到 shared-session。
 
 ## 约定 / 注意事项
 - `@quorum/core` 保持**零依赖**；任何需要网络/环境变量/SDK 的东西都放进 `@quorum/daemon`。
-- 先验证再下结论：当前迁移分支上 `pnpm typecheck`、`pnpm test`、`pnpm sidecar:bun:smoke`、`pnpm desktop:check` 通过。
+- 先验证再下结论：当前迁移分支上 `pnpm typecheck`、`pnpm test`、`pnpm sidecar:bun:smoke`、`pnpm desktop:check`、`pnpm desktop:build` 通过。
 - 调试产物（仓库根目录的 `*.png`、`.playwright-mcp/`）已被 gitignore —— 别把它们提交进去。
 - **Git worktree：** `main` 检出在 `/Users/matthew/Projects/quorum`；还有第二个 worktree（`test-framework-debug`）。一条分支同一时间只能在一个 worktree 里被检出，所以别在第二个 worktree 里 `git checkout main`。
 

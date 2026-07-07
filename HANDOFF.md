@@ -13,7 +13,7 @@ Latest migration commits:
 - The sidecar spike commit adds `packages/daemon/src/sidecar.ts` and `pnpm smoke:sidecar`.
 - The Node fallback spike adds `pnpm sidecar:node:build` and `pnpm sidecar:node:smoke`.
 - The packaging env commit adds project-local Bun/Rust setup under `.tools/` and validates Bun single-file sidecar compile with `pnpm sidecar:bun:smoke`.
-- The desktop shell spike adds `apps/desktop`, `pnpm desktop:check`, `pnpm desktop:dev`, and a Tauri command that starts the compiled Bun sidecar and returns its authenticated WebSocket URL to the React client.
+- The desktop shell spike adds `apps/desktop`, `pnpm desktop:check`, `pnpm desktop:dev`, `pnpm desktop:build`, and a Tauri command that starts the compiled Bun sidecar and returns its authenticated WebSocket URL to the React client.
 
 What is already implemented:
 
@@ -41,13 +41,12 @@ What is already implemented:
 - `pnpm sidecar:bun:smoke` validates the compiled Bun sidecar with SQLite, token-authenticated WebSocket, and a shared-session echo turn.
 - `apps/desktop` is a Tauri 2 shell. Its Rust layer manages the sidecar process, parses the stdout handshake, and exposes `get_sidecar_connection()` to the Web UI.
 - The Web UI detects Tauri at startup and replaces the default `ws://127.0.0.1:8787` connection with the sidecar URL returned by `get_sidecar_connection()`.
-- Verification: `pnpm typecheck`, `pnpm test`, `pnpm --filter @quorum/client-web build`, `pnpm smoke:shared`, `pnpm smoke:sidecar`, `pnpm sidecar:node:smoke`, `pnpm sidecar:bun:smoke`, and `cargo check` in `apps/desktop/src-tauri` pass.
+- Verification: `pnpm typecheck`, `pnpm test`, `pnpm --filter @quorum/client-web build`, `pnpm smoke:shared`, `pnpm smoke:sidecar`, `pnpm sidecar:node:smoke`, `pnpm sidecar:bun:smoke`, `pnpm desktop:check`, and `pnpm desktop:build` pass on macOS arm64.
 
 What is not implemented yet:
 
-- **Installer-grade one-click install is not done.** There is no signed macOS `.dmg`, no Windows installer, no signing/notarization, and no auto-update yet.
-- **Desktop double-click launch shell is now scaffolded.** `apps/desktop` can launch the Web UI inside Tauri and start the compiled Bun sidecar through the Rust layer, but full bundle/install validation is still pending.
-- **macOS bundle validation is blocked on this machine by missing full Xcode.** Xcode Command Line Tools exist and `pnpm desktop:check` reaches successful `cargo check`, but signed/bundled `.app`/`.dmg` validation still needs a complete Xcode setup.
+- **Installer-grade release is not done.** There is no signing/notarization, no Windows installer validation, and no auto-update yet.
+- **Desktop double-click launch shell is scaffolded and macOS arm64 bundles build.** `apps/desktop` can launch the Web UI inside Tauri and start the compiled Bun sidecar through the Rust layer. `pnpm desktop:build` produces an unsigned `.app` and `.dmg`; the `.app` contains `Contents/Resources/sidecars/quorum-sidecar`.
 - **Developer one-command launch exists.** Use `pnpm dev` for the legacy kernel or `QUORUM_SESSION_KERNEL=shared pnpm dev` for the new shared-session kernel.
 - **Local sidecar entry exists and Bun compile is verified.** The sidecar can be run through tsx with `pnpm smoke:sidecar`, compiled with Bun using `pnpm sidecar:bun:build`, and verified with `pnpm sidecar:bun:smoke`.
 - **Node-runtime fallback exists.** It is not a single binary, but `pnpm sidecar:node:build` creates a smoke-tested fallback artifact. Keep it as the fallback route if Bun compile regresses on another platform.
@@ -75,6 +74,7 @@ pnpm smoke:sidecar
 pnpm sidecar:node:smoke
 pnpm sidecar:bun:smoke
 pnpm desktop:check
+pnpm desktop:build
 pnpm typecheck
 pnpm test
 ```
@@ -84,7 +84,7 @@ pnpm test
    - Playwright/browser-agent compatibility. This is still open.
    - Windows and macOS x64 build compatibility. Still open.
    - fallback decision: Bun single binary vs Node runtime + JS bundle/resources. Current default should be Bun single binary; Node fallback remains smoke-tested.
-6. Next implementation target: full Tauri bundle validation, macOS/Windows installers, signing/notarization, updater, and platform-specific sidecar path tests.
+6. Next implementation target: app launch smoke against the generated `.app`, Windows installer validation, signing/notarization, updater, and platform-specific sidecar path tests.
 
 ## TL;DR
 Quorum is a TypeScript/pnpm monorepo: a human + multiple heterogeneous coding agents (Claude Code, Codex, plain API models) collaborate in **one shared group chat on one git branch**. A **Conductor** decides who holds the speaking floor; an append-only **EventLog** is the source of truth; everyone edits **one shared working dir** serialized by a write-floor lock with per-turn checkpoint commits. Milestones **M0–M4 are in place and M5 (web client) is wired**; **M6 (remote access) is not started**. See `SPEC.md` for the full design and `README.md` for the pitch.
