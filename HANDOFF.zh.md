@@ -4,6 +4,36 @@
 
 > 2026-07-07 架构更新：Quorum 正在迁移到 agent-framework 会议确定的共享 Session 架构。新的实施交接文档见 [`AGENT_FRAMEWORK_HANDOFF.md`](./AGENT_FRAMEWORK_HANDOFF.md)，完整复制材料在 [`docs/architecture/`](./docs/architecture/)。
 
+## 2026-07-07 最新迁移状态
+
+已完成：
+- 共享 Session 协议、`SessionManager`、`CommandMailbox`、`Arbiter`、`LegacyAgentAdapter` 已接入。
+- CLI 可用 `QUORUM_SESSION_KERNEL=shared` 切到新 kernel。
+- Web UI 已能显示共享 Session 的 phase、当前发言者、bid 队列、选中发言者和 debug timeline。
+- `packages/daemon/src/sidecar.ts` 可启动随机本地端口，输出 `{ port, token, bootId }`，WebSocket 需要 token。
+- `pnpm sidecar:bun:build` 可把 sidecar 编译成 `dist-sidecar/bun/quorum-sidecar`。
+- `pnpm sidecar:bun:smoke` 已验证 Bun 单文件 sidecar、SQLite、token WebSocket 和 echo 回合。
+- `apps/desktop` 已新增 Tauri 2 桌面壳；Rust 层启动 Bun sidecar，读取 handshake，并通过 `get_sidecar_connection()` 把认证后的 WebSocket URL 交给 React。
+- Web UI 在 Tauri 环境启动时会自动连接 sidecar URL，不需要手填端口。
+- `pnpm packaging:env` 会把 Bun/Rust/Cargo 安装在项目本地 `.tools/`，不改全局 shell 配置。
+
+还没完成：
+- 安装级“一键安装”还没完成：没有签名 `.dmg`、没有 Windows installer、没有 notarization、没有 updater。
+- 当前机器缺完整 Xcode；Xcode Command Line Tools 存在，`pnpm desktop:check` 能跑到 `cargo check` 通过，但 `.app`/`.dmg` 打包验收还需要完整 Xcode。
+- 共享 Session 的工具运行时、记忆压缩、replay UI、仲裁得分检查、跨平台桌面验证仍是后续任务。
+
+当前建议验证命令：
+
+```bash
+pnpm install
+pnpm typecheck
+pnpm test
+pnpm smoke:shared
+pnpm smoke:sidecar
+pnpm sidecar:bun:smoke
+pnpm desktop:check
+```
+
 ## 一句话概览（TL;DR）
 Quorum 是一个 TypeScript/pnpm 的 monorepo：一个人类 + 多个异构的编码 agent（Claude Code、Codex、纯 API 模型）在**同一个共享群聊、同一条 git 分支**上协作。一个 **Conductor（指挥）**决定谁拿到发言权（floor）；一条只追加（append-only）的 **EventLog（事件日志）**是唯一真相来源；所有人编辑**同一个共享工作目录**，由一把写入锁（write-floor lock）串行化，并在每个回合（turn）做一次 checkpoint 提交。里程碑 **M0–M4 已就位，M5（web 客户端）已接通**；**M6（远程访问）尚未开始**。完整设计见 `SPEC.md`，项目介绍见 `README.md`。
 
@@ -16,12 +46,14 @@ pnpm dev      # 一条命令：daemon（ws://127.0.0.1:8787）+ web 客户端（
 ```
 然后在浏览器打开 **http://127.0.0.1:5173**（不是 8787——那是 WebSocket 端口；用浏览器访问它会显示 “Upgrade Required”，这是正常的）。
 
-其它脚本：`pnpm demo`（零依赖的双 agent echo 演示）、`pnpm test`（vitest，30 个测试）、`pnpm typecheck`（tsc -b）、`pnpm smoke`（M0 EventLog 自检）。
+其它脚本：`pnpm demo`（零依赖的双 agent echo 演示）、`pnpm test`、`pnpm typecheck`（tsc -b）、`pnpm smoke`（M0 EventLog 自检）、`pnpm desktop:check`（Tauri/Rust 桌面壳静态验证）。
 
 **坑：** 只有一个进程能占用 8787 端口。如果已经有一个独立 daemon 在跑，你会得到 `EADDRINUSE`——先把它停掉（用 `lsof -nP -i :8787` 找到它）。
 
 ## 仓库结构
 ```
+apps/
+  desktop/    Tauri 2 桌面壳
 packages/
   protocol/   零依赖的类型 + zod 线缆 schema（契约层）
   core/       EventLog、Conductor、三种 floor 策略、projection、room-tools —— 零依赖、已测试
@@ -42,7 +74,7 @@ SPEC.md       完整设计（中文）：数据模型、Conductor 状态机、ad
 - **WS 网关**（`daemon/src/gateway/ws-server.ts`，SPEC §10）：客户端→服务端 `subscribe/post_message/interrupt/set_policy/approve_tool/take_write_floor/rollback`；服务端→客户端 `snapshot/event/error`。绑定在 127.0.0.1:8787。
 
 ## 常见改动改哪里
-- **房间（agents、策略、workspace）**：目前**硬编码**在 `packages/cli/src/index.ts`。（README 里的 TODO：改成读 `quorum.config.json`。）
+- **房间（agents、策略、workspace）**：默认读 `quorum.config.json`；也可用 `QUORUM_CONFIG=<path>` 指向其它配置。找不到配置时 `packages/cli/src/index.ts` 会使用内置默认值。
 - **加一个 agent**：往 `participants[]` 里加一个 `ParticipantDescriptor`，带上 `adapter` + `adapterConfig`。`claude-code` 需要 Agent SDK + Claude Code 鉴权；`codex` 需要 PATH 上有 `codex` CLI；`api-model` 是任意 OpenAI 兼容端点；`echo` 是内置的假实现。
 - **Moderator 模型**：`packages/daemon/src/moderator.ts`。通过 `policy.moderatorModel` / `QUORUM_MODERATOR_MODEL`（默认 `gpt-4o-mini`）/ `QUORUM_MODERATOR_BASE_URL` 配置，key 取自 `OPENAI_API_KEY`。任何失败都会降级为“让位给人类”。
 
@@ -56,14 +88,14 @@ SPEC.md       完整设计（中文）：数据模型、Conductor 状态机、ad
 - **M6** 远程（relay/E2E/配对二维码、更多 provider）—— **尚未开始**。
 
 ## 建议的下一步
-1. 把 `cli/src/index.ts` 里硬编码的房间换成一个 `quorum.config.json` 加载器。
-2. 审计/收尾 M5 web 客户端功能（diff 视图、approve-tool + rollback UI、重连）。
-3. 启动 M6（远程传输 + 配对）。
-4. 刷新 `README.md`——它的 “Status” 段落已过期（仍把 web 客户端说成占位符，还引用了并不存在的 `pnpm --filter @quorum/cli start` 脚本；启动 daemon 用 `npx tsx packages/cli/src/index.ts`）。
+1. 完成 Tauri bundle 验证：完整 Xcode、macOS `.app`/`.dmg`、Windows installer、签名、公证、updater。
+2. 给桌面 sidecar 增加更完整的生命周期测试：资源路径、异常退出重启、关闭时优雅停机。
+3. 扩展共享 Session UI：仲裁得分、settling window、事件 JSON 展开、replay controls、memory inspector。
+4. 决定什么时候把默认 kernel 从 legacy conductor 切到 shared-session。
 
 ## 约定 / 注意事项
 - `@quorum/core` 保持**零依赖**；任何需要网络/环境变量/SDK 的东西都放进 `@quorum/daemon`。
-- 先验证再下结论：在 `384c311` 上 `pnpm typecheck` 干净、`pnpm test` 30/30 全绿。
+- 先验证再下结论：当前迁移分支上 `pnpm typecheck`、`pnpm test`、`pnpm sidecar:bun:smoke`、`pnpm desktop:check` 通过。
 - 调试产物（仓库根目录的 `*.png`、`.playwright-mcp/`）已被 gitignore —— 别把它们提交进去。
 - **Git worktree：** `main` 检出在 `/Users/matthew/Projects/quorum`；还有第二个 worktree（`test-framework-debug`）。一条分支同一时间只能在一个 worktree 里被检出，所以别在第二个 worktree 里 `git checkout main`。
 

@@ -57,6 +57,10 @@ interface ClientSettings {
   roomId: string;
 }
 
+interface DesktopSidecarConnection {
+  url: string;
+}
+
 const defaultSettings: ClientSettings = {
   url: "ws://127.0.0.1:8787",
   roomId: "main",
@@ -236,6 +240,17 @@ function saveSettings(settings: ClientSettings): void {
   localStorage.setItem("quorum.client.settings", JSON.stringify(settings));
 }
 
+function isTauriRuntime(): boolean {
+  return "__TAURI_INTERNALS__" in window;
+}
+
+async function resolveDesktopSettings(settings: ClientSettings): Promise<ClientSettings> {
+  if (!isTauriRuntime()) return settings;
+  const { invoke } = await import("@tauri-apps/api/core");
+  const connection = await invoke<DesktopSidecarConnection>("get_sidecar_connection");
+  return { ...settings, url: connection.url };
+}
+
 function App() {
   const [settings, setSettings] = useState<ClientSettings>(() => loadSettings());
   const [draftSettings, setDraftSettings] = useState<ClientSettings>(() => loadSettings());
@@ -355,8 +370,23 @@ function App() {
 
   // Connect on load and tear the socket down cleanly on unmount.
   useEffect(() => {
-    connect(settings, false);
+    let cancelled = false;
+    async function boot() {
+      try {
+        const initial = await resolveDesktopSettings(settings);
+        if (cancelled) return;
+        setSettings(initial);
+        setDraftSettings(initial);
+        connect(initial, false);
+      } catch (err) {
+        if (cancelled) return;
+        setStatus("error");
+        setError(err instanceof Error ? err.message : "Failed to start desktop sidecar");
+      }
+    }
+    void boot();
     return () => {
+      cancelled = true;
       teardownRef.current = true;
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       wsRef.current?.close();

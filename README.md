@@ -63,6 +63,15 @@ connections. Validate it with:
 pnpm smoke:sidecar
 ```
 
+Desktop shell status: a Tauri 2 shell now exists in `apps/desktop`. It starts the
+compiled Bun sidecar, reads the `{ port, token, bootId }` handshake, and gives the
+React client a token-authenticated WebSocket URL automatically.
+
+```bash
+pnpm desktop:check
+pnpm desktop:dev
+```
+
 Packaging toolchains are isolated under `.tools/`:
 
 ```bash
@@ -84,10 +93,11 @@ pnpm sidecar:node:build
 pnpm sidecar:node:smoke
 ```
 
-One-click install and desktop double-click launch are not implemented yet. The
-remaining packaging work is the Tauri 2 desktop shell, app lifecycle around the
-existing sidecar handshake, macOS/Windows installers, signing/notarization, and
-auto-update.
+Installer-grade one-click install is not implemented yet. The remaining packaging
+work is macOS/Windows installer generation, signing/notarization, updater wiring,
+platform-specific validation, and hardening the desktop lifecycle. Current macOS
+bundle validation is blocked on this machine by missing full Xcode; Xcode Command
+Line Tools are installed and `cargo check` passes.
 
 ## Status
 
@@ -147,6 +157,8 @@ Then point a client (or `websocat`) at it: `subscribe`, `post_message`,
 ## Layout
 
 ```
+apps/
+  desktop/    Tauri desktop shell
 packages/
   protocol/   types + zod schema (zero runtime deps)
   core/       room engine: event-log, conductor, policies, projection

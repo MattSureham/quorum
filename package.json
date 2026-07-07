@@ -6,7 +6,7 @@
   "description": "Multi-agent group chat: humans and heterogeneous coding agents (Claude Code, Codex, ...) collaborate in one shared room on one project, with live floor control.",
   "engines": { "node": ">=20" },
   "packageManager": "pnpm@9.12.0",
-  "workspaces": ["packages/*"],
+  "workspaces": ["apps/*", "packages/*"],
   "scripts": {
     "dev": "tsx scripts/dev.ts",
     "demo": "tsx scripts/demo.ts",
@@ -19,6 +19,9 @@
     "web:dev": "pnpm --filter @quorum/client-web dev",
     "web:build": "pnpm --filter @quorum/client-web build",
     "web:preview": "pnpm --filter @quorum/client-web preview",
+    "desktop:dev": "pnpm --filter @quorum/desktop tauri dev",
+    "desktop:build": "pnpm --filter @quorum/desktop tauri build",
+    "desktop:check": "bash -lc 'source .tools/packaging-env.sh && pnpm --filter @quorum/desktop tauri info && cd apps/desktop/src-tauri && cargo check'",
     "packaging:env": "bash scripts/setup-packaging-env.sh",
     "sidecar:bun:build": "bash -lc 'source .tools/packaging-env.sh && tsx scripts/build-sidecar-bun.ts'",
     "sidecar:bun:smoke": "bash -lc 'source .tools/packaging-env.sh && tsx scripts/bun-sidecar-smoke.ts'",
