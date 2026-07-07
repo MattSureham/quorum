@@ -4,6 +4,66 @@ Working handoff for an agent picking up **Quorum**. Current as of **2026-06-23**
 
 > 2026-07-07 architecture update: Quorum is being migrated to the shared-session architecture from the agent-framework meeting. New implementation handoff: [`AGENT_FRAMEWORK_HANDOFF.md`](./AGENT_FRAMEWORK_HANDOFF.md). Full copied docs live in [`docs/architecture/`](./docs/architecture/).
 
+## Current State For The Next Agent
+
+Latest migration commit: `7d303b8 feat: add shared session architecture kernel`.
+
+What is already implemented:
+
+- The meeting handoff and guide were copied into this repo:
+  - [`AGENT_FRAMEWORK_HANDOFF.md`](./AGENT_FRAMEWORK_HANDOFF.md)
+  - [`AGENT_FRAMEWORK_GUIDE.html`](./AGENT_FRAMEWORK_GUIDE.html)
+  - [`docs/architecture/`](./docs/architecture/)
+- `@quorum/protocol` now has the shared-session contract: `SessionPhase`, `SessionEvent`, `SessionCommand`, `Bid`, `ISpeakerAgent`, `AgentRuntime`, `LLMAdapter.chatStream()`, and memory summary types.
+- `@quorum/core` now has the first shared-session kernel:
+  - `SessionManager`
+  - `CommandMailbox`
+  - `Arbiter`
+  - `LegacyAgentAdapter`
+  - explicit session phase transition validation
+- `@quorum/daemon` now has `startSharedSessionRoom()`, which wraps existing adapters through `LegacyAgentAdapter` and routes human prompts through `SessionManager`.
+- The CLI can choose the new kernel with `QUORUM_SESSION_KERNEL=shared`; without that env var it keeps the legacy `Conductor` path.
+- Verification at commit `7d303b8`: `pnpm typecheck` passes and `pnpm test` passes (`33/33` tests).
+
+What is not implemented yet:
+
+- **One-click install is not done.** There is no Tauri desktop shell yet, no macOS `.dmg`, no Windows installer, no signing/notarization, no auto-update, and no packaged sidecar.
+- **End-user one-click launch is not done.** The app cannot yet be installed and launched by double-clicking a desktop application.
+- **Developer one-command launch exists.** Use `pnpm dev` for the legacy kernel or `QUORUM_SESSION_KERNEL=shared pnpm dev` for the new shared-session kernel.
+- The Web UI still mostly reflects the legacy room event model. It does not yet fully expose the new shared-session phase, bid queue, arbitration scores, settling window, or debug visibility model.
+- The new tool runtime, memory compaction, replay UI, desktop sidecar lifecycle, and package build pipeline remain follow-up work.
+
+Recommended next task for the new agent:
+
+1. Keep `legacy-conductor` as a fallback while migrating.
+2. Make the Web UI understand the new shared-session events:
+   - `phase_changed`
+   - `bid_submitted`
+   - `bid_settled`
+   - `speaker_selected`
+   - `turn_started`
+   - `turn_output_chunk`
+   - `turn_completed`
+   - `turn_cancelled`
+   - `turn_failed`
+3. Add UI panels for current phase, active speaker, bid queue, arbitration score details, and event debug timeline.
+4. Run and test the new kernel with:
+
+```bash
+pnpm install
+QUORUM_SESSION_KERNEL=shared pnpm dev
+pnpm typecheck
+pnpm test
+```
+
+5. After the shared-session UI is usable, start the packaging P0 spike from [`AGENT_FRAMEWORK_HANDOFF.md`](./AGENT_FRAMEWORK_HANDOFF.md):
+   - Bun compile compatibility with SQLite.
+   - subprocess agent compatibility.
+   - Playwright/browser-agent compatibility.
+   - HTTP/WebSocket sidecar compatibility.
+   - fallback decision: Bun single binary vs Node runtime + JS bundle/resources.
+6. Only after that spike should the agent implement Tauri 2, sidecar startup handshake, macOS/Windows installers, signing/notarization, and updater.
+
 ## TL;DR
 Quorum is a TypeScript/pnpm monorepo: a human + multiple heterogeneous coding agents (Claude Code, Codex, plain API models) collaborate in **one shared group chat on one git branch**. A **Conductor** decides who holds the speaking floor; an append-only **EventLog** is the source of truth; everyone edits **one shared working dir** serialized by a write-floor lock with per-turn checkpoint commits. Milestones **M0–M4 are in place and M5 (web client) is wired**; **M6 (remote access) is not started**. See `SPEC.md` for the full design and `README.md` for the pitch.
 
