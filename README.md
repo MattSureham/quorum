@@ -54,10 +54,19 @@ To run a fast shared-session smoke test without opening the browser:
 pnpm smoke:shared
 ```
 
-Packaging status: developer one-command launch exists, but one-click install and
-desktop double-click launch are not implemented yet. The next packaging step is
-the P0 sidecar compatibility spike described in
-[`AGENT_FRAMEWORK_HANDOFF.md`](./AGENT_FRAMEWORK_HANDOFF.md).
+Packaging status: developer one-command launch exists, and a local sidecar entry
+now exists at `packages/daemon/src/sidecar.ts`. It binds a random loopback port,
+prints `{ port, token, bootId }` to stdout, and requires the token for WebSocket
+connections. Validate it with:
+
+```bash
+pnpm smoke:sidecar
+```
+
+One-click install and desktop double-click launch are not implemented yet. The
+remaining packaging spike is Bun compile or a documented Node bundle fallback;
+this machine currently does not have `bun` installed, so compiled sidecar
+compatibility is still unverified.
 
 ## Status
 

@@ -10,6 +10,7 @@ Latest migration commits:
 
 - `7d303b8 feat: add shared session architecture kernel`
 - The follow-up handoff/UI commit adds shared-session Web UI projection and `pnpm smoke:shared`.
+- The sidecar spike commit adds `packages/daemon/src/sidecar.ts` and `pnpm smoke:sidecar`.
 
 What is already implemented:
 
@@ -28,13 +29,16 @@ What is already implemented:
 - The CLI can choose the new kernel with `QUORUM_SESSION_KERNEL=shared`; without that env var it keeps the legacy `Conductor` path.
 - `@quorum/client-web` can now detect shared-session events and display phase, active speaker, bid queue, selected speaker, and debug events.
 - `pnpm smoke:shared` starts a shared-session host, posts over WebSocket, and verifies bid/phase/echo response events.
-- Verification: `pnpm typecheck`, `pnpm test`, `pnpm --filter @quorum/client-web build`, and `pnpm smoke:shared` pass.
+- `packages/daemon/src/sidecar.ts` starts a shared-session sidecar on `127.0.0.1:0`, prints `{ port, token, bootId }`, and requires the token for WebSocket connections.
+- `pnpm smoke:sidecar` starts the sidecar entry, validates the handshake, performs a token-authenticated WebSocket round trip, and exercises a subprocess check.
+- Verification: `pnpm typecheck`, `pnpm test`, `pnpm --filter @quorum/client-web build`, `pnpm smoke:shared`, and `pnpm smoke:sidecar` pass.
 
 What is not implemented yet:
 
 - **One-click install is not done.** There is no Tauri desktop shell yet, no macOS `.dmg`, no Windows installer, no signing/notarization, no auto-update, and no packaged sidecar.
 - **End-user one-click launch is not done.** The app cannot yet be installed and launched by double-clicking a desktop application.
 - **Developer one-command launch exists.** Use `pnpm dev` for the legacy kernel or `QUORUM_SESSION_KERNEL=shared pnpm dev` for the new shared-session kernel.
+- **Local sidecar entry exists but is not packaged.** The sidecar can be run through tsx and validated with `pnpm smoke:sidecar`; Bun compile compatibility is not verified because this machine does not currently have `bun` installed.
 - The Web UI now exposes the new shared-session phase and bid queue, but it is still a minimal projection. It does not yet provide full replay controls, policy tuning, rich arbitration score inspection, or memory inspection.
 - The new tool runtime, memory compaction, replay UI, desktop sidecar lifecycle, and package build pipeline remain follow-up work.
 
@@ -54,17 +58,16 @@ Recommended next task for the new agent:
 pnpm install
 QUORUM_SESSION_KERNEL=shared pnpm dev
 pnpm smoke:shared
+pnpm smoke:sidecar
 pnpm typecheck
 pnpm test
 ```
 
 5. Start the packaging P0 spike from [`AGENT_FRAMEWORK_HANDOFF.md`](./AGENT_FRAMEWORK_HANDOFF.md):
-   - Bun compile compatibility with SQLite.
-   - subprocess agent compatibility.
-   - Playwright/browser-agent compatibility.
-   - HTTP/WebSocket sidecar compatibility.
+   - Bun compile compatibility with SQLite. This is still open because `bun` is absent locally.
+   - Playwright/browser-agent compatibility. This is still open.
    - fallback decision: Bun single binary vs Node runtime + JS bundle/resources.
-6. Only after that spike should the agent implement Tauri 2, sidecar startup handshake, macOS/Windows installers, signing/notarization, and updater.
+6. After the compile/bundle decision, implement Tauri 2, sidecar lifecycle management around the existing handshake, macOS/Windows installers, signing/notarization, and updater.
 
 ## TL;DR
 Quorum is a TypeScript/pnpm monorepo: a human + multiple heterogeneous coding agents (Claude Code, Codex, plain API models) collaborate in **one shared group chat on one git branch**. A **Conductor** decides who holds the speaking floor; an append-only **EventLog** is the source of truth; everyone edits **one shared working dir** serialized by a write-floor lock with per-turn checkpoint commits. Milestones **M0–M4 are in place and M5 (web client) is wired**; **M6 (remote access) is not started**. See `SPEC.md` for the full design and `README.md` for the pitch.

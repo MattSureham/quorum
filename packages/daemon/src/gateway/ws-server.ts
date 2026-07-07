@@ -9,6 +9,7 @@ export interface GatewayDeps {
   room: Room;
   setPolicy: (cfg: ConductorPolicyConfig) => void;
   humanId?: string;
+  authToken?: string;
   /** Override human prompt handling, e.g. to route through SessionManager. */
   postMessage?: (text: string, addressedTo?: string[]) => Promise<void> | void;
   /** Resolve a pending tool-approval request (approve_tool). */
@@ -36,7 +37,7 @@ export class Gateway {
       this.wss.once("listening", resolve);
       this.wss.once("error", reject);
     });
-    this.wss.on("connection", (ws) => this.onConnection(ws));
+    this.wss.on("connection", (ws, req) => this.onConnection(ws, req));
     this.unsubscribeLog = this.deps.log.on((e) => this.broadcast({ t: "event", event: e }));
   }
 
@@ -56,7 +57,19 @@ export class Gateway {
     return { kind: "human" as const, id: this.deps.humanId ?? "human", display: "Human" };
   }
 
-  private onConnection(ws: WebSocket): void {
+  private isAuthorized(req: import("node:http").IncomingMessage): boolean {
+    if (!this.deps.authToken) return true;
+    const auth = req.headers.authorization;
+    if (auth === `Bearer ${this.deps.authToken}`) return true;
+    const url = new URL(req.url ?? "/", "ws://127.0.0.1");
+    return url.searchParams.get("token") === this.deps.authToken;
+  }
+
+  private onConnection(ws: WebSocket, req: import("node:http").IncomingMessage): void {
+    if (!this.isAuthorized(req)) {
+      ws.close(1008, "unauthorized");
+      return;
+    }
     this.clients.add(ws);
     ws.on("close", () => this.clients.delete(ws));
     ws.on("message", (raw) => {

@@ -12,6 +12,7 @@
     "demo": "tsx scripts/demo.ts",
     "smoke": "tsx scripts/smoke.ts",
     "smoke:shared": "tsx scripts/shared-session-smoke.ts",
+    "smoke:sidecar": "tsx scripts/sidecar-smoke.ts",
     "test": "vitest run",
     "typecheck": "tsc -b",
     "build": "tsc -b",
