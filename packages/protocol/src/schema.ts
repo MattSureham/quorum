@@ -3,6 +3,55 @@
 // stays dependency-free. Requires `zod` (install before use).
 import { z } from "zod";
 
+export const SessionPhaseSchema = z.enum([
+  "idle",
+  "collecting_bids",
+  "arbitrating",
+  "speaker_granted",
+  "speaking",
+  "settling",
+  "paused",
+  "ended",
+]);
+
+export const BidSchema = z.object({
+  bidId: z.string(),
+  agentId: z.string(),
+  epoch: z.number().int(),
+  kind: z.enum(["answer", "rebuttal", "followup", "clarification"]),
+  replyToTurnId: z.string().optional(),
+  confidence: z.number(),
+  createdAtSeq: z.number().int(),
+  expiresAfterRound: z.number().int(),
+  revision: z.number().int(),
+  rationale: z.string().optional(),
+});
+
+export const SessionCommandSchema = z.object({
+  commandId: z.string(),
+  idempotencyKey: z.string(),
+  sessionId: z.string(),
+  actorId: z.string(),
+  type: z.string(),
+  expectedVersion: z.number().int().optional(),
+  submittedAt: z.string(),
+  payload: z.unknown(),
+});
+
+export const SessionEventSchema = z.object({
+  schemaVersion: z.number().int(),
+  eventId: z.string(),
+  sessionId: z.string(),
+  seq: z.number().int(),
+  type: z.string(),
+  actorId: z.string(),
+  correlationId: z.string(),
+  causationId: z.string().optional(),
+  occurredAt: z.string(),
+  visibility: z.enum(["participant", "debug", "system"]),
+  payload: z.unknown(),
+});
+
 export const ClientMessageSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("subscribe"), roomId: z.string(), sinceSeq: z.number().optional() }),
   z.object({ t: z.literal("post_message"), roomId: z.string(), text: z.string(), addressedTo: z.array(z.string()).optional() }),

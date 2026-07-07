@@ -1,7 +1,7 @@
 #!/usr/bin/env -S node --experimental-strip-types
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { startRoom } from "@quorum/daemon";
+import { startRoom, startSharedSessionRoom } from "@quorum/daemon";
 import type { ConductorPolicyConfig, ParticipantDescriptor, Room } from "@quorum/protocol";
 
 interface RoomConfig {
@@ -55,7 +55,11 @@ const room: Room = {
 };
 
 const port = Number(process.env.QUORUM_PORT ?? 8787);
-const host = await startRoom(room, { port });
+const sharedSession = process.env.QUORUM_SESSION_KERNEL === "shared";
+const host = sharedSession
+  ? await startSharedSessionRoom(room, { port })
+  : await startRoom(room, { port });
 console.log(`Quorum daemon on ws://127.0.0.1:${port}  (room "${room.id}", workspace ${room.workspacePath})`);
+console.log(`  session kernel: ${sharedSession ? "shared-session" : "legacy-conductor"}`);
 console.log(`  config: ${source}`);
 process.on("SIGINT", async () => { await host.stop(); process.exit(0); });

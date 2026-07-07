@@ -2,6 +2,8 @@
 
 给接手 **Quorum** 的下一个 agent 的工作交接。截至 **2026-06-23**，`main` 在提交 `384c311`。English version: [`HANDOFF.md`](./HANDOFF.md)。
 
+> 2026-07-07 架构更新：Quorum 正在迁移到 agent-framework 会议确定的共享 Session 架构。新的实施交接文档见 [`AGENT_FRAMEWORK_HANDOFF.md`](./AGENT_FRAMEWORK_HANDOFF.md)，完整复制材料在 [`docs/architecture/`](./docs/architecture/)。
+
 ## 一句话概览（TL;DR）
 Quorum 是一个 TypeScript/pnpm 的 monorepo：一个人类 + 多个异构的编码 agent（Claude Code、Codex、纯 API 模型）在**同一个共享群聊、同一条 git 分支**上协作。一个 **Conductor（指挥）**决定谁拿到发言权（floor）；一条只追加（append-only）的 **EventLog（事件日志）**是唯一真相来源；所有人编辑**同一个共享工作目录**，由一把写入锁（write-floor lock）串行化，并在每个回合（turn）做一次 checkpoint 提交。里程碑 **M0–M4 已就位，M5（web 客户端）已接通**；**M6（远程访问）尚未开始**。完整设计见 `SPEC.md`，项目介绍见 `README.md`。
 

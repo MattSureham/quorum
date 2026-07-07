@@ -1,0 +1,122 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Implementation Handoff</title><style>body{margin:0;background:#f7f8fb;color:#172033;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans SC","Microsoft YaHei",Arial,sans-serif;line-height:1.6}.wrap{max-width:1060px;margin:0 auto;padding:34px 24px 64px}h1{font-size:30px;line-height:1.25;margin:0 0 24px}h2{font-size:22px;margin:32px 0 12px;padding-top:10px;border-top:1px solid #d8deea}h3{font-size:17px;margin:22px 0 8px}p{margin:10px 0}ul{margin:8px 0 14px;padding-left:24px}li{margin:5px 0}code{background:#eef1f7;border-radius:4px;padding:1px 4px;font-family:SFMono-Regular,Consolas,monospace}pre{background:#111827;color:#f9fafb;border-radius:8px;padding:14px;overflow:auto}pre code{background:transparent;color:inherit;padding:0}table{border-collapse:collapse;width:100%;background:white}td,th{border:1px solid #d8deea;padding:8px;text-align:left}a{color:#1457d9}@media print{body{background:white}.wrap{max-width:none}}</style></head><body><main class="wrap"><p><h1>Multi-Agent Shared Session Framework: Implementation Handoff</h1></p><p>Source meeting: <code>d65264e9-17ee-4a2c-a3c7-7df24a12317f</code></p><p>Purpose: this document is the implementation handoff for coding agents. It is not a meeting transcript. It contains the decisions, module boundaries, interfaces, invariants, P0 tasks, and validation gates required to start implementation without re-running architecture discovery.</p><p><h2>1. Final Architecture Decision</h2></p><p>Build on the existing TypeScript codebase. Do not rewrite the backend in Python.</p><p>The product should evolve into a local multi-agent shared-session runtime with:</p><p><ul><li>A custom event-sourced <code>SessionManager</code> as the authoritative state machine.</li><li>Multiple heterogeneous agents participating in the same live session.</li><li>Human prompts that trigger raise-hand / microphone bidding.</li><li>Agent rebuttals that may be queued while another speaker is active, but are only arbitrated after the current speaker finishes.</li><li>A Web UI for session inspection, live debugging, replay, configuration, and policy tuning.</li><li>A desktop app for macOS and Windows using Tauri 2 plus a local sidecar server.</li><li>A localhost server mode retained for debugging, automation, and external clients.</li></ul></p><p><h2>2. Non-Negotiable Decisions</h2></p><p><h3>2.1 Language and Runtime</h3></p><p><ul><li>Primary language: TypeScript.</li><li>Runtime target: Bun preferred, Node-compatible fallback.</li><li>Frontend: React + Vite.</li><li>Validation: zod schemas in a shared protocol package.</li><li>Storage: SQLite in WAL mode.</li><li>Desktop shell: Tauri 2.</li><li>Testing: vitest, fast-check, deterministic scheduler.</li></ul></p><p>Reason: the current repo already contains substantial TypeScript assets: existing meeting engine, agent abstraction, WebSocket/HTTP server, provider adapters, browser agents, subprocess agents, protocol agents, MCP support, image context, and local orchestration logic.</p><p><h3>2.2 LangGraph Boundary</h3></p><p>LangGraph must not be used for global session orchestration.</p><p>Allowed:</p><p><ul><li>Optional agent-internal execution engine.</li><li>Optional ReAct/tool loop implementation inside a single agent.</li><li>Optional agent-private checkpointing scoped by <code>(sessionId, agentId)</code>.</li></ul></p><p>Forbidden:</p><p><ul><li>Global shared-session state.</li><li>Turn-taking.</li><li>Bid arbitration.</li><li>Shared memory authority.</li><li>Event log authority.</li></ul></p><p>The session-level source of truth is the custom <code>SessionManager</code>, event log, and state projection.</p><p><h3>2.3 Desktop Packaging</h3></p><p>Use Tauri 2 with a sidecar server.</p><p>The sidecar should:</p><p><ul><li>Bind to <code>127.0.0.1:0</code> in desktop mode.</li><li>Generate a random token and <code>bootId</code>.</li><li>Print exactly one startup JSON line to stdout:</li></ul></p><p><pre><code>{&quot;port&quot;:54321,&quot;token&quot;:&quot;&lt;random-hex&gt;&quot;,&quot;bootId&quot;:&quot;&lt;uuid&gt;&quot;}</code></pre></p><p><ul><li>Serve HTTP and WebSocket APIs on the selected loopback port.</li><li>Require auth on all HTTP and WebSocket requests.</li><li>Flush SQLite and terminate sessions cleanly on shutdown.</li></ul></p><p>The localhost debug mode uses the same server factory, but a different entrypoint:</p><p><ul><li><code>serve.ts</code>: fixed or configured port, default <code>4200</code>, debug-friendly auth.</li><li><code>sidecar.ts</code>: port <code>0</code>, mandatory token, stdout handshake.</li></ul></p><p><h2>3. Target Repository Layout</h2></p><p>Create or migrate toward this layout:</p><p><pre><code>apps/
+  server/
+    src/
+      api/
+      agents/
+      cli/
+        serve.ts
+        sidecar.ts
+      config/
+      core/
+        SessionManager.ts
+        EventStore.ts
+        StateMachine.ts
+        Arbiter.ts
+        CommandMailbox.ts
+      memory/
+      security/
+      storage/
+      tools/
+  desktop/
+    src-tauri/
+    ui/
+packages/
+  protocol/
+    src/
+      events.ts
+      commands.ts
+      agents.ts
+      sessions.ts
+      memory.ts
+      tools.ts
+tests/
+  arbitration/
+  integration/
+  packaging/
+  scheduler/
+  state-machine/</code></pre></p><p>Preserve existing code and history where possible. Add adapters instead of forcing a large rewrite.</p><p><h2>4. Core State Model</h2></p><p>Each session has one serial command mailbox. No async caller may mutate session state directly. UI events, agent callbacks, tool results, WebSocket messages, timers, and cancellation signals must all submit commands into the mailbox.</p><p><h3>4.1 Session Phase</h3></p><p><pre><code>export type SessionPhase =
+  | &quot;idle&quot;
+  | &quot;collecting_bids&quot;
+  | &quot;arbitrating&quot;
+  | &quot;speaker_granted&quot;
+  | &quot;speaking&quot;
+  | &quot;settling&quot;
+  | &quot;paused&quot;
+  | &quot;ended&quot;;</code></pre></p><p><h3>4.2 Required Invariants</h3></p><p><ul><li>At most one active turn per session.</li><li><code>speaker.selected</code> is only valid when there is no active speaker.</li><li>During <code>speaking</code>, bids may be collected but arbitration is forbidden.</li><li>Arbitration may run only after <code>turn.completed</code>, <code>turn.cancelled</code>, <code>turn.failed</code>, or <code>turn.timed_out</code>.</li><li>Every streamed chunk carries <code>turnId</code> and <code>generation</code>.</li><li>Late chunks from old generations must be rejected.</li><li>SQLite transactions must be short and must not wrap model calls or tool calls.</li><li>Persistent event append and projection update happen in the same transaction.</li><li>If a state mutation cannot be persisted, the session must pause or fail closed.</li></ul></p><p><h2>5. Event and Command Protocol</h2></p><p><h3>5.1 Event Envelope</h3></p><p><pre><code>export interface SessionEvent&lt;TPayload = unknown&gt; {
+  schemaVersion: number;
+  eventId: string;
+  sessionId: string;
+  seq: number;
+  type: string;
+  actorId: string;
+  correlationId: string;
+  causationId?: string;
+  occurredAt: string;
+  visibility: &quot;participant&quot; | &quot;debug&quot; | &quot;system&quot;;
+  payload: TPayload;
+}</code></pre></p><p>Rules:</p><p><ul><li><code>seq</code> is the only authoritative session ordering key.</li><li>Events are append-only.</li><li>Event schemas must be versioned.</li><li>Upcasters are required for old event versions.</li><li>Replay rebuilds state from events and snapshots without model calls.</li></ul></p><p><h3>5.2 Command Envelope</h3></p><p><pre><code>export interface SessionCommand&lt;TPayload = unknown&gt; {
+  commandId: string;
+  idempotencyKey: string;
+  sessionId: string;
+  actorId: string;
+  type: string;
+  expectedVersion?: number;
+  submittedAt: string;
+  payload: TPayload;
+}</code></pre></p><p>Rules:</p><p><ul><li>Commands are inputs, events are facts.</li><li>Duplicate commands with the same idempotency key must not create duplicate events.</li><li>Admin commands may require <code>expectedVersion</code>.</li></ul></p><p><h2>6. Turn-Taking, Raise-Hand, and Rebuttal</h2></p><p><h3>6.1 Bid Type</h3></p><p><pre><code>export type BidKind = &quot;answer&quot; | &quot;rebuttal&quot; | &quot;followup&quot; | &quot;clarification&quot;;
+
+export interface Bid {
+  bidId: string;
+  agentId: string;
+  epoch: number;
+  kind: BidKind;
+  replyToTurnId?: string;
+  confidence: number;
+  createdAtSeq: number;
+  expiresAfterRound: number;
+  revision: number;
+}</code></pre></p><p><h3>6.2 Arbitration Policy</h3></p><p>Agents do not provide trusted scores. They only provide structured intent and a small confidence signal.</p><p>Server-side score:</p><p><pre><code>score =
+  policy_base_score(kind, capability_match, user_mention, waiting_rounds)
+  + decay_penalty(recent_speaking_count)
+  + limited_rebuttal_bonus
+  + confidence * epsilon</code></pre></p><p>Rules:</p><p><ul><li>User explicit mention has top priority.</li><li>Rebuttal bonus is capped at 20% of base score.</li><li>Rebuttal is only eligible against the immediately previous completed turn.</li><li>Rebuttal chains should be limited by policy.</li><li>Recent speakers receive a decay penalty.</li><li>Agents skipped for too many rounds receive anti-starvation boost.</li><li>Stable tie-breaks must be deterministic and persisted.</li><li>Other agents cannot see live bid rationale or competing bid details.</li><li>Debug UI may show all bid rationale and scoring components.</li></ul></p><p><h3>6.3 Settling Window</h3></p><p>After a turn ends, open a short settling window, default 300-500ms.</p><p>Allowed during settling:</p><p><ul><li>Withdraw a provisional bid.</li><li>Downgrade priority.</li></ul></p><p>Forbidden during settling:</p><p><ul><li>Changing bid kind.</li><li>Increasing priority.</li><li>Changing <code>replyToTurnId</code>.</li><li>Creating a stronger new rebuttal based on hidden scoring.</li></ul></p><p><h2>7. Agent Harness</h2></p><p><h3>7.1 New Agent Interface</h3></p><p><pre><code>export interface ISpeakerAgent {
+  health(): Promise&lt;AgentHealth&gt;;
+  shutdown(): Promise&lt;void&gt;;
+  bid(ctx: BidContext): Promise&lt;Bid&gt;;
+  speak(
+    turn: TurnContext,
+    runtime: AgentRuntime,
+    signal: AbortSignal
+  ): AsyncGenerator&lt;AgentDelta&gt;;
+  observe?(event: SessionEvent): Promise&lt;void&gt;;
+}</code></pre></p><p><h3>7.2 Runtime Injected Into Agents</h3></p><p><pre><code>export interface AgentRuntime {
+  callTool(req: ToolCallRequest): Promise&lt;ToolCallResult&gt;;
+  readContext(seq: number): Promise&lt;ContextSnapshot&gt;;
+  writeSharedMemory(cmd: SharedMemoryCommand): Promise&lt;WriteResult&gt;;
+}</code></pre></p><p>Rules:</p><p><ul><li>Tool calls go through <code>AgentRuntime.callTool()</code>.</li><li>Tool calls are not encoded as text deltas.</li><li><code>SessionManager</code> handles auth, budget, audit log, human approval, timeout, cancellation, and event recording.</li><li>Subprocess and protocol agents receive the same capabilities through the external agent protocol.</li><li>Legacy <code>respond()</code> agents are wrapped with <code>LegacyAgentAdapter</code>.</li></ul></p><p><h3>7.3 LLM Adapter Migration</h3></p><p><pre><code>export interface LLMAdapter {
+  chat(req: ChatRequest, signal?: AbortSignal): Promise&lt;ChatResponse&gt;;
+  chatStream(req: ChatRequest, signal?: AbortSignal): AsyncGenerator&lt;ChatDelta&gt;;
+}</code></pre></p><p>Migration rule:</p><p><ul><li>Add <code>chatStream()</code>.</li><li>Keep <code>chat()</code> as a compatibility method that can collect <code>chatStream()</code>.</li><li>Existing providers can migrate incrementally.</li></ul></p><p><h2>8. Streaming and Backpressure</h2></p><p>Streaming pipeline:</p><p><li>1. <code>SessionManager</code> consumes <code>agent.speak()</code> with <code>for await</code>.</li><br><li>2. Deltas enter a bounded accumulator.</li><br><li>3. Every 50-100ms, or after a byte threshold, flush as one <code>turn.output.chunk</code>.</li><br><li>4. Persist chunk to SQLite.</li><br><li>5. Broadcast persisted event to clients.</li><br><li>6. Slow WebSocket clients use bounded send queues.</li><br><li>7. Clients that fall behind are disconnected and reconnect using <code>after_seq</code>.</li><br><li>8. If provider streams cannot be backpressured and buffers fill, cancel the turn.</li></p><p>Principle: persistence first, UI realtime second. Never drop authoritative chunks.</p><p><h2>9. Memory Architecture</h2></p><p><h3>9.1 Layers</h3></p><p>| Layer | Authority | Scope | Notes |<br>|---|---|---|---|<br>| Transcript / Event Log | Authoritative | Session | Never deleted by compaction |<br>| Working Memory | Derived | Session | Summaries with provenance |<br>| Shared Memory | Event-written | Session | Versioned and auditable |<br>| Agent-Private Memory | Agent-owned | <code>(sessionId, agentId)</code> | LangGraph checkpoint may live here |<br>| Long-Term Memory | User opt-in | User / namespace | Viewable, deletable, TTL-capable |</p><p><h3>9.2 Summary Provenance</h3></p><p>Every summary must include:</p><p><pre><code>export interface MemorySummary {
+  summaryId: string;
+  sessionId: string;
+  sourceFromSeq: number;
+  sourceToSeq: number;
+  sourceHash: string;
+  model: string;
+  promptVersion: string;
+  createdAt: string;
+  content: string;
+}</code></pre></p><p>Compaction must not delete the authoritative event log. It may archive old events later, but replay and audit requirements must be preserved.</p><p><h2>10. Storage and Migration</h2></p><p>Use SQLite WAL with these core tables:</p><p><ul><li><code>sessions</code></li><li><code>events</code></li><li><code>session_snapshots</code></li><li><code>turns</code></li><li><code>bids</code></li><li><code>working_memory_summaries</code></li><li><code>shared_memory</code></li><li><code>agent_private_memory</code></li><li><code>long_term_memory</code></li><li><code>agent_configs</code></li><li><code>provider_configs</code></li><li><code>schema_migrations</code></li></ul></p><p>Indexes required in P0:</p><p><ul><li><code>events(session_id, seq)</code> unique.</li><li><code>events(session_id, type, seq)</code>.</li><li><code>turns(session_id, turn_id)</code>.</li><li><code>bids(session_id, epoch, agent_id)</code>.</li></ul></p><p>Migration strategy:</p><p><ul><li>Use expand-migrate-contract.</li><li>Backup before schema upgrade.</li><li>Import existing JSON sessions once.</li><li>Do not dual-write JSON and SQLite.</li></ul></p><p><h2>11. Security Boundary</h2></p><p>Call this permission isolation, not a full OS sandbox unless OS-level isolation is implemented.</p><p>Required:</p><p><ul><li>Sidecar binds loopback only.</li><li>Desktop sidecar uses random port and random token.</li><li>Token must not be written to disk, logs, argv, SQLite, or crash reports.</li><li>WebSocket validates auth, Origin, and Host.</li><li>Defend against DNS rebinding.</li><li>API keys do not enter WebView, event log, session DB, or crash reports.</li><li>macOS keys stored in Keychain.</li><li>Windows keys stored in Credential Manager.</li><li>Subprocesses use argv arrays, not shell strings.</li><li>Subprocess environment is scrubbed.</li><li>Subprocess cwd is restricted.</li><li>Process tree must be terminated on cancellation or shutdown.</li><li>Plugin permissions declared in a manifest and tied to version or content hash.</li><li>New plugin permissions require re-authorization.</li></ul></p><p><h2>12. Web UI Scope</h2></p><p><h3>P0 Screens</h3></p><p><ul><li>Session Dashboard.</li><li>Live Session View.</li><li>Event Timeline.</li></ul></p><p><h3>P1 Screens</h3></p><p><ul><li>Session Replay.</li><li>Agent Configuration.</li><li>Memory Inspector.</li></ul></p><p><h3>P2 Screens</h3></p><p><ul><li>Provider / Key Management.</li><li>Policy Settings.</li><li>Debug Console.</li></ul></p><p>Debug UI must expose:</p><p><ul><li>Event timeline.</li><li>Bid queue.</li><li>Bid scoring components.</li><li>Agent health.</li><li>Current phase.</li><li>Current speaker.</li><li>Stream chunk queue.</li><li>Sidecar status.</li><li>Replay from <code>after_seq</code>.</li></ul></p><p><h2>13. Desktop Build and Release</h2></p><p><h3>P0 Compatibility Spike</h3></p><p>Before committing to Bun-compiled sidecar packaging, verify compiled output can run:</p><p><ul><li>SQLite driver.</li><li>HTTP server.</li><li>WebSocket server.</li><li>subprocess agents.</li><li>browser / Playwright import and launch path.</li><li>dynamic resource paths.</li><li>process cancellation.</li></ul></p><p>If spike fails, keep the same architecture and switch packaging to Node runtime plus JS bundle/resources.</p><p><h3>Release Requirements</h3></p><p><ul><li>macOS arm64 build.</li><li>macOS x64 build.</li><li>Windows x64 build.</li><li>macOS codesign and notarization.</li><li>Windows signing, e.g. Azure Trusted Signing or equivalent.</li><li>Tauri updater manifest and signed update artifacts.</li></ul></p><p><h2>14. P0 Implementation Plan</h2></p><p>P0 goal: prove the new shared-session kernel works with three agents, live bidding, queued rebuttals, deterministic persistence, and a minimal UI.</p><p><h3>P0 Tasks</h3></p><p><li>1. Create <code>packages/protocol</code> with zod schemas for events, commands, sessions, bids, turns, agents, tools, memory.</li><br><li>2. Implement SQLite event store and migration bootstrap.</li><br><li>3. Implement <code>CommandMailbox</code>.</li><br><li>4. Implement <code>SessionState</code> projection.</li><br><li>5. Implement explicit <code>StateMachine</code>.</li><br><li>6. Implement <code>Arbiter</code> with server-side scoring.</li><br><li>7. Implement bid collection and settling window.</li><br><li>8. Implement <code>ISpeakerAgent</code>.</li><br><li>9. Implement <code>LegacyAgentAdapter</code>.</li><br><li>10. Add <code>LLMAdapter.chatStream()</code>.</li><br><li>11. Implement bounded streaming accumulator and persisted chunks.</li><br><li>12. Implement HTTP and WebSocket API.</li><br><li>13. Implement <code>createServer()</code>.</li><br><li>14. Add <code>serve.ts</code> and <code>sidecar.ts</code>.</li><br><li>15. Build React P0 UI: dashboard, live session, event timeline.</li><br><li>16. Add deterministic scheduler test harness.</li><br><li>17. Add property tests for arbitration and state machine.</li><br><li>18. Add integration test for a three-agent open discussion.</li><br><li>19. Add packaging compatibility spike.</li><br><li>20. Preserve regression tests for existing meeting modes.</li></p><p><h3>P0 Acceptance Criteria</h3></p><p><ul><li>User prompt opens a bid epoch.</li><li>At least three agents can bid.</li><li>Service-side arbiter selects a speaker.</li><li>Speaker streams output.</li><li>Other agents may bid during speaking.</li><li>No new speaker is selected while current speaker is active.</li><li>After turn end, settling window runs.</li><li>Rebuttal can be selected after turn end.</li><li>Events persist in SQLite.</li><li>Reconnecting UI can catch up via <code>after_seq</code>.</li><li>Replay rebuilds the same projected state.</li><li>All P0 tests pass.</li><li>Bun compile spike either passes or produces a documented fallback decision.</li></ul></p><p><h2>15. P1-P3 Roadmap</h2></p><p><h3>P1</h3></p><p><ul><li>Working memory compaction.</li><li>Replay API and Replay UI.</li><li>Agent config UI.</li><li>Memory inspector.</li><li>Tauri desktop app.</li><li>Sidecar lifecycle management.</li><li>macOS notarization.</li><li>Windows signing.</li><li>Auto-update.</li></ul></p><p><h3>P2</h3></p><p><ul><li>Long-term memory.</li><li>Agent-private namespaces.</li><li>SecretResolver with OS keychain.</li><li>Tool sandbox and process-tree isolation.</li><li>Plugin permission manifest.</li><li>Provider/key configuration UI.</li><li>Policy settings UI.</li></ul></p><p><h3>P3</h3></p><p><ul><li>Large transcript performance optimization.</li><li>Stress testing.</li><li>Full Debug Console.</li><li>Release documentation.</li><li>Public distribution hardening.</li></ul></p><p><h2>16. Required Tests</h2></p><p><h3>Scheduler</h3></p><p><ul><li>Fake clock.</li><li>Deterministic async execution.</li><li>Timer control.</li></ul></p><p><h3>Property Tests</h3></p><p><ul><li>No starvation.</li><li>Rebuttal bonus cap.</li><li>No <code>speaker.selected</code> during <code>speaking</code>.</li><li>Legal phase transitions only.</li><li>Idempotent command handling.</li><li>Replay determinism.</li></ul></p><p><h3>Integration Tests</h3></p><p><ul><li>Three-agent open discussion.</li><li>Bid during speaking.</li><li>Cancel mid-turn.</li><li>Agent timeout.</li><li>Sidecar restart recovery.</li><li>UI reconnect with <code>after_seq</code>.</li></ul></p><p><h3>Packaging Tests</h3></p><p><ul><li>Start compiled sidecar.</li><li>Call <code>/health</code>.</li><li>Open WebSocket.</li><li>Run SQLite operation.</li><li>Spawn and cancel subprocess.</li><li>Import or launch Playwright path.</li></ul></p><p><h2>17. Rejected Alternatives</h2></p><p><ul><li>Python rewrite: rejected due to high cost and loss of existing TypeScript assets.</li><li>LangGraph as global scheduler: rejected because dynamic bidding and runtime agent arbitration are better modeled as an event-driven state machine.</li><li>Electron: rejected because the app already uses a local server model and Tauri has lower overhead with cleaner sidecar lifecycle.</li><li>Fixed desktop port: rejected due to multi-instance conflicts and security.</li><li>Agent self-scoring: rejected because agents can game scores.</li><li>Token-by-token SQLite writes: rejected due to write amplification.</li><li>Redis pub/sub: rejected because the desktop app should not require external services.</li><li>Exposing bid rationale to agents: rejected due to strategic behavior risk.</li><li>JSON/SQLite dual-write migration: rejected because consistency is hard to prove.</li></ul></p><p><h2>18. Open Validation Items</h2></p><p>These do not block P0 architecture work, but must be validated early:</p><p><ul><li>Bun compile compatibility with SQLite, subprocess, Playwright, and dynamic resources.</li><li>Windows Job Object behavior from compiled sidecar.</li><li>Exact Tauri updater flow for private distribution.</li><li>Azure Trusted Signing setup details.</li><li>Whether future OS-level sandboxing is required beyond permission isolation.</li></ul></p><p><h2>19. First Prompt for Implementation Agents</h2></p><p>Use this prompt to start P0:</p><p><pre><code>Implement P0 of the multi-agent shared-session framework described in data/meetings/d65264e9-17ee-4a2c-a3c7-7df24a12317f-implementation-handoff.md.
+
+Start by creating packages/protocol with zod schemas and TypeScript types for SessionEvent, SessionCommand, SessionPhase, Bid, Turn, AgentDelta, ISpeakerAgent, AgentRuntime, and LLMAdapter.chatStream().
+
+Then implement apps/server/src/core with CommandMailbox, EventStore, StateMachine, Arbiter, and SessionManager. Preserve existing MeetingEngine behavior by adding adapters instead of deleting current functionality.
+
+Acceptance criteria for this first slice:
+- Three stub agents can join one session.
+- A user prompt opens bid collection.
+- Arbiter selects one speaker.
+- Speaker streams chunks persisted as events.
+- Bids during speaking are queued and only arbitrated after turn end.
+- Replay from events reconstructs the same state.
+- Vitest and fast-check tests cover no-speaker-during-speaking and rebuttal-bonus-cap invariants.</code></pre></p><p></p></main></body></html>

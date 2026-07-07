@@ -1,4 +1,5 @@
 export { startRoom, type RoomHost } from "./room-host.js";
+export { startSharedSessionRoom, type SharedSessionHost } from "./shared-session-host.js";
 export { registerAdapter, createParticipant, type AdapterFactory } from "./adapters/registry.js";
 export { EchoAdapter, type EchoScript, type EchoLine } from "./adapters/echo.js";
 export { ClaudeCodeAdapter, type ClaudeOptions } from "./adapters/claude-code.js";

@@ -1,6 +1,11 @@
 export { EventLog } from "./event-log.js";
 export { InMemoryStore } from "./in-memory-store.js";
+export { Arbiter, type ArbitrationContext, type ArbitrationDecision, type ScoredBid } from "./arbiter.js";
+export { CommandMailbox } from "./command-mailbox.js";
 export { Conductor, type ConductorOptions } from "./conductor.js";
+export { LegacyAgentAdapter } from "./legacy-agent-adapter.js";
+export { SessionManager, type SessionManagerOptions, type SessionSnapshot } from "./session-manager.js";
+export { assertTransition, canTransition } from "./session-state.js";
 export { freeForAll, directed, makeModerated, type Moderator } from "./policies/index.js";
 export { renderProjection, buildProtocol } from "./projection.js";
 export {

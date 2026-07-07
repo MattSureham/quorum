@@ -25,6 +25,27 @@ See **[SPEC.md](./SPEC.md)** for the full design (data model, Conductor state
 machine, adapter contracts with verified Claude Code / Codex invocations, WS
 protocol, milestones M0–M6, acceptance tests).
 
+## 2026-07 Architecture Update
+
+Quorum is being migrated to the newer shared-session architecture captured in
+[`AGENT_FRAMEWORK_HANDOFF.md`](./AGENT_FRAMEWORK_HANDOFF.md). The first slice is
+implemented in `@quorum/core` as a parallel kernel:
+
+- `SessionManager` — event-sourced shared-session state machine.
+- `CommandMailbox` — serial command execution per session.
+- `Arbiter` — service-side bid scoring with capped rebuttal bonus.
+- `LegacyAgentAdapter` — bridge from the old `Participant.takeTurn()` contract to
+  the new `ISpeakerAgent.bid()/speak()` contract.
+
+Copied meeting materials and the implementation handoff are in
+[`docs/architecture/`](./docs/architecture/).
+
+To run the daemon against the new kernel during migration:
+
+```bash
+QUORUM_SESSION_KERNEL=shared pnpm dev
+```
+
 ## Status
 
 Scaffold + runnable core (M0 done, M1/M2 core logic in place):

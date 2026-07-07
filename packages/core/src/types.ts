@@ -21,7 +21,7 @@ export interface AppendInput {
   replyTo?: string;
   addressedTo?: string[];
   turnId?: string;
-  visibility?: "room" | "private";
+  visibility?: "room" | "private" | "participant" | "debug" | "system";
 }
 
 // What an agent yields during its turn. The Conductor stamps author/seq/id/ts/turnId
@@ -31,7 +31,7 @@ export interface PartialRoomEvent {
   body: unknown;
   replyTo?: string;
   addressedTo?: string[];
-  visibility?: "room" | "private";
+  visibility?: "room" | "private" | "participant" | "debug" | "system";
 }
 
 export interface TurnInput {

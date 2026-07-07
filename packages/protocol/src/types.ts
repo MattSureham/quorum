@@ -12,6 +12,15 @@ export type EventType =
   | "floor_release"  // turn ended, floor returned
   | "interrupt"      // preemption (usually from the human)
   | "checkpoint"     // a workspace snapshot (git diff stat)
+  | "phase_changed"  // shared-session phase transition
+  | "bid_submitted"  // structured bid persisted for replay/debug
+  | "bid_settled"    // bid withdrawn/downgraded/confirmed during settling
+  | "speaker_selected"
+  | "turn_started"
+  | "turn_output_chunk"
+  | "turn_completed"
+  | "turn_cancelled"
+  | "turn_failed"
   | "system";        // system / error / status change
 
 export interface EventAuthor {
@@ -31,7 +40,7 @@ export interface RoomEvent {
   replyTo?: string;         // threading / "rebuts" (points at an event id)
   addressedTo?: string[];   // @'d participant ids (empty = everyone)
   turnId?: string;          // which turn this belongs to
-  visibility: "room" | "private";
+  visibility: "room" | "private" | "participant" | "debug" | "system";
 }
 
 // ---- body shapes (discriminated by RoomEvent.type) ----
@@ -99,4 +108,176 @@ export interface Turn {
   endedAt?: number;
   fromSeq: number;
   outcome?: "done" | "interrupted" | "timeout" | "error";
+}
+
+// ---- shared-session kernel (new architecture) ----
+export type SessionPhase =
+  | "idle"
+  | "collecting_bids"
+  | "arbitrating"
+  | "speaker_granted"
+  | "speaking"
+  | "settling"
+  | "paused"
+  | "ended";
+
+export type SessionEventVisibility = "participant" | "debug" | "system";
+
+export interface SessionEvent<TPayload = unknown> {
+  schemaVersion: number;
+  eventId: string;
+  sessionId: string;
+  seq: number;
+  type: string;
+  actorId: string;
+  correlationId: string;
+  causationId?: string;
+  occurredAt: string;
+  visibility: SessionEventVisibility;
+  payload: TPayload;
+}
+
+export interface SessionCommand<TPayload = unknown> {
+  commandId: string;
+  idempotencyKey: string;
+  sessionId: string;
+  actorId: string;
+  type: string;
+  expectedVersion?: number;
+  submittedAt: string;
+  payload: TPayload;
+}
+
+export type BidKind = "answer" | "rebuttal" | "followup" | "clarification";
+
+export interface Bid {
+  bidId: string;
+  agentId: string;
+  epoch: number;
+  kind: BidKind;
+  replyToTurnId?: string;
+  confidence: number;
+  createdAtSeq: number;
+  expiresAfterRound: number;
+  revision: number;
+  rationale?: string;
+}
+
+export interface BidContext {
+  sessionId: string;
+  epoch: number;
+  prompt: string;
+  phase: SessionPhase;
+  participants: ParticipantDescriptor[];
+  transcript: RoomEvent[];
+  lastTurnId?: string;
+}
+
+export interface TurnContext {
+  sessionId: string;
+  turnId: string;
+  generation: number;
+  epoch: number;
+  speakerId: string;
+  prompt: string;
+  contextSeq: number;
+  participants: ParticipantDescriptor[];
+  transcript: RoomEvent[];
+}
+
+export type AgentDelta =
+  | { type: "text"; text: string }
+  | { type: "thinking"; text: string }
+  | { type: "tool_call"; tool: string; args: unknown; callId?: string }
+  | { type: "tool_result"; callId: string; ok: boolean; stdout?: string; exitCode?: number }
+  | { type: "done" };
+
+export interface AgentHealth {
+  ok: boolean;
+  status?: ParticipantStatus;
+  detail?: string;
+}
+
+export interface ToolCallRequest {
+  tool: string;
+  args: unknown;
+  callId?: string;
+  riskLevel?: "low" | "medium" | "high";
+}
+
+export interface ToolCallResult {
+  callId: string;
+  ok: boolean;
+  stdout?: string;
+  stderr?: string;
+  exitCode?: number;
+}
+
+export interface ContextSnapshot {
+  seq: number;
+  events: RoomEvent[];
+}
+
+export interface SharedMemoryCommand {
+  namespace: string;
+  key: string;
+  value: unknown;
+  expectedVersion?: number;
+}
+
+export interface WriteResult {
+  ok: boolean;
+  version?: number;
+  error?: string;
+}
+
+export interface AgentRuntime {
+  callTool(req: ToolCallRequest): Promise<ToolCallResult>;
+  readContext(seq: number): Promise<ContextSnapshot>;
+  writeSharedMemory(cmd: SharedMemoryCommand): Promise<WriteResult>;
+}
+
+export interface ISpeakerAgent {
+  readonly id: string;
+  readonly descriptor: ParticipantDescriptor;
+  health(): Promise<AgentHealth>;
+  shutdown(): Promise<void>;
+  bid(ctx: BidContext): Promise<Bid>;
+  speak(turn: TurnContext, runtime: AgentRuntime, signal: AbortSignal): AsyncGenerator<AgentDelta>;
+  observe?(event: RoomEvent): Promise<void>;
+}
+
+export interface ChatRequest {
+  messages: Array<{ role: "system" | "user" | "assistant" | "tool"; content: string }>;
+  model?: string;
+  temperature?: number;
+  maxTokens?: number;
+}
+
+export interface ChatDelta {
+  type: "text" | "thinking" | "done";
+  text?: string;
+}
+
+export interface ChatResponse {
+  content: string;
+  model?: string;
+  usage?: Record<string, number>;
+}
+
+export interface LLMAdapter {
+  chat(req: ChatRequest, signal?: AbortSignal): Promise<ChatResponse>;
+  chatStream(req: ChatRequest, signal?: AbortSignal): AsyncGenerator<ChatDelta>;
+}
+
+export interface MemorySummary {
+  summaryId: string;
+  sessionId: string;
+  sourceFromSeq: number;
+  sourceToSeq: number;
+  sourceHash: string;
+  model: string;
+  promptVersion: string;
+  createdAt: string;
+  content: string;
 }

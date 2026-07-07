@@ -9,6 +9,8 @@ export interface GatewayDeps {
   room: Room;
   setPolicy: (cfg: ConductorPolicyConfig) => void;
   humanId?: string;
+  /** Override human prompt handling, e.g. to route through SessionManager. */
+  postMessage?: (text: string, addressedTo?: string[]) => Promise<void> | void;
   /** Resolve a pending tool-approval request (approve_tool). */
   approveTool?: (callId: string, allow: boolean) => void;
   /** Let the human take the write floor to edit files directly (take_write_floor). */
@@ -75,7 +77,10 @@ export class Gateway {
         ws.send(JSON.stringify({ t: "snapshot", room: this.deps.room, events: this.deps.log.replay(m.sinceSeq ?? 0) }));
         break;
       case "post_message":
-        void this.deps.log.append({ author: this.human(), type: "message", body: { text: m.text }, addressedTo: m.addressedTo });
+        if (this.deps.postMessage) void Promise.resolve(this.deps.postMessage(m.text, m.addressedTo)).catch((err) =>
+          ws.send(JSON.stringify({ t: "error", text: `post_message failed: ${err instanceof Error ? err.message : String(err)}` })),
+        );
+        else void this.deps.log.append({ author: this.human(), type: "message", body: { text: m.text }, addressedTo: m.addressedTo });
         break;
       case "interrupt":
         void this.deps.log.append({ author: this.human(), type: "interrupt", body: { by: "human", hard: !!m.hard } });
