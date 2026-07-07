@@ -865,12 +865,37 @@ h1 {
   }
 
   .app-shell {
-    display: block;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .workspace {
+    order: 1;
+  }
+
+  .sidebar {
+    order: 2;
+    padding: 12px;
+    border-top: 1px solid #ccd6d2;
+    border-right: 0;
   }
 
   .sidebar,
   .workspace {
     min-height: auto;
+  }
+
+  .brand-block {
+    min-height: 42px;
+    padding: 4px 2px 8px;
+  }
+
+  .connection-panel label {
+    display: none;
+  }
+
+  .connection-panel .primary-action {
+    min-height: 34px;
   }
 
   .topbar,
@@ -879,15 +904,51 @@ h1 {
     flex-direction: column;
   }
 
+  .topbar {
+    min-height: 0;
+    gap: 12px;
+    padding: 16px 14px 12px;
+  }
+
+  .workspace-path {
+    white-space: normal;
+  }
+
   .segmented-control {
     width: 100%;
   }
 
   .status-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 10px 12px;
   }
 
   .room-grid {
+    display: flex;
+    flex-direction: column;
     padding: 12px;
+  }
+
+  .activity-panel {
+    order: -1;
+    min-height: auto;
+  }
+
+  .debug-heading,
+  .debug-list {
+    display: none;
+  }
+
+  .transcript {
+    min-height: 520px;
+  }
+
+  .event-feed {
+    max-height: 540px;
+  }
+
+  textarea {
+    min-height: 96px;
   }
 }

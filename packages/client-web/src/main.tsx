@@ -704,7 +704,7 @@ function Metric({ icon, label, value }: { icon: React.ReactNode; label: string; 
 
 function SharedSessionPanel({ shared }: { shared: SharedSessionProjection }) {
   return (
-    <section className="shared-panel">
+    <section className="shared-panel shared-session-panel">
       <div className="shared-panel-head">
         <Activity size={15} />
         <strong>Shared Session</strong>
@@ -718,7 +718,7 @@ function SharedSessionPanel({ shared }: { shared: SharedSessionProjection }) {
         <span>selected</span>
         <strong>{shared.selected?.agentId ? `${shared.selected.agentId} · ${shared.selected.kind} · ${shared.selected.score?.toFixed(3) ?? "n/a"}` : "none"}</strong>
       </div>
-      <div className="mini-heading">Bid queue</div>
+      <div className="mini-heading bid-heading">Bid queue</div>
       <div className="bid-list">
         {shared.pendingBids.length ? shared.pendingBids.map((bid) => (
           <div key={bid.bidId} className="bid-row">
@@ -730,7 +730,7 @@ function SharedSessionPanel({ shared }: { shared: SharedSessionProjection }) {
           </div>
         )) : <div className="empty-row">No pending bids</div>}
       </div>
-      <div className="mini-heading">Debug events</div>
+      <div className="mini-heading debug-heading">Debug events</div>
       <div className="debug-list">
         {shared.debugEvents.length ? shared.debugEvents.map((event) => (
           <div key={event.id} className="debug-row">
