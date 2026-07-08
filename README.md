@@ -74,6 +74,9 @@ The WebSocket gateway also exposes `replay_projection`, and the Web UI includes
 a Replay panel that rebuilds shared-session phase/speaker/bid state from a chosen
 event sequence.
 
+The Web UI composer now stays at the top of the Operations panel, so manual
+testing can start by typing in "Message the room" and pressing Send.
+
 Working-memory summaries are now generated, persisted, triggerable through
 WebSocket `compact_memory`, exposed in the Web UI Memory panel, and automatically
 created after turns once the configured event thresholds are reached.

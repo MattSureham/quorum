@@ -546,7 +546,7 @@ function App() {
             <div className="workspace-path">{displayRoom.workspacePath ?? "No workspace selected"}</div>
           </div>
           <div className="topbar-actions">
-            <SegmentedControl current={policy.name} disabled={status !== "connected"} onChange={setPolicy} />
+            <SegmentedControl current={policy.name} disabled={status !== "connected" || shared.enabled} onChange={setPolicy} />
             <button className="danger-action" type="button" disabled={status !== "connected"} onClick={sendInterrupt}>
               <Zap size={16} />
               <span>Interrupt</span>
@@ -580,6 +580,43 @@ function App() {
               <SquareTerminal size={17} />
               <span>Operations</span>
             </div>
+            <section className="composer-panel">
+              <div className="agent-targets">
+                {agents.map((agent) => (
+                  <button
+                    key={agent.id}
+                    className={selectedTargets.includes(agent.id) ? "target-chip selected" : "target-chip"}
+                    type="button"
+                    onClick={() => toggleTarget(agent.id)}
+                  >
+                    <Bot size={14} />
+                    <span>{agent.id}</span>
+                  </button>
+                ))}
+              </div>
+              <textarea
+                value={composer}
+                onChange={(input) => setComposer(input.currentTarget.value)}
+                onKeyDown={(key) => {
+                  if (key.key === "Enter" && (key.metaKey || key.ctrlKey)) sendMessage();
+                }}
+                placeholder="Message the room"
+              />
+              <button className="send-action" type="button" disabled={!connected || !composer.trim()} onClick={sendMessage}>
+                <Send size={16} />
+                <span>Send</span>
+              </button>
+              <button
+                className={holdsWriteFloor ? "write-floor-action holding" : "write-floor-action"}
+                type="button"
+                disabled={!connected || holdsWriteFloor}
+                onClick={takeWriteFloor}
+                title="Pause agents and edit files directly. Sending a message hands the floor back."
+              >
+                <PenLine size={16} />
+                <span>{holdsWriteFloor ? "You hold the write floor" : "Take write floor"}</span>
+              </button>
+            </section>
             {shared.enabled ? <SharedSessionPanel shared={shared} /> : null}
             {shared.enabled ? (
               <ReplayPanel
@@ -622,42 +659,6 @@ function App() {
                 ))}
               </div>
             ) : null}
-            <div className="agent-targets">
-              {agents.map((agent) => (
-                <button
-                  key={agent.id}
-                  className={selectedTargets.includes(agent.id) ? "target-chip selected" : "target-chip"}
-                  type="button"
-                  onClick={() => toggleTarget(agent.id)}
-                >
-                  <Bot size={14} />
-                  <span>{agent.id}</span>
-                </button>
-              ))}
-            </div>
-            <textarea
-              value={composer}
-              onChange={(input) => setComposer(input.currentTarget.value)}
-              onKeyDown={(key) => {
-                if (key.key === "Enter" && (key.metaKey || key.ctrlKey)) sendMessage();
-              }}
-              placeholder="Message the room"
-            />
-            <button className="send-action" type="button" disabled={!connected || !composer.trim()} onClick={sendMessage}>
-              <Send size={16} />
-              <span>Send</span>
-            </button>
-            <button
-              className={holdsWriteFloor ? "write-floor-action holding" : "write-floor-action"}
-              type="button"
-              disabled={!connected || holdsWriteFloor}
-              onClick={takeWriteFloor}
-              title="Pause agents and edit files directly. Sending a message hands the floor back."
-            >
-              <PenLine size={16} />
-              <span>{holdsWriteFloor ? "You hold the write floor" : "Take write floor"}</span>
-            </button>
-
             <div className="section-heading compact">
               <Wrench size={16} />
               <span>Tool Activity</span>
