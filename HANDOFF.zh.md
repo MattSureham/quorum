@@ -19,11 +19,12 @@
 - SQLite 现在会初始化共享 Session 需要的 sessions、turns、bids、snapshots、memory、agent/provider configs 和 schema_migrations 表，同时保留 append-only event log 作为唯一真相来源。
 - `projectSessionState()` 已能从 replayed events 重建当前共享 Session 投影。
 - 测试已覆盖 SQLite 派生表、旧 events 单表迁移、replay projection、三个 agent 通过 queued bids 进行开放讨论。
+- shared-session 的 `AgentRuntime.callTool()` 已接入人工审批闭环：会发出 requested/granted/denied approval signal，并通过 WebSocket `approve_tool` 返回 approved/denied `ToolCallResult`。
 
 还没完成：
 - 发布级“一键安装”还没完成：没有签名/公证、没有 Windows installer 验证、没有 updater。
 - `pnpm desktop:build` 已能生成未签名的 macOS arm64 `.app` 和 `.dmg`；`.app` 内包含 `Contents/Resources/sidecars/quorum-sidecar`。
-- 共享 Session 的工具运行时、记忆压缩、replay UI、仲裁得分检查、跨平台桌面验证仍是后续任务。
+- 真实工具执行器、记忆压缩、replay UI、跨平台桌面验证仍是后续任务。
 
 当前建议验证命令：
 

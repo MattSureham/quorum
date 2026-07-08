@@ -74,6 +74,36 @@ class StubSpeaker implements ISpeakerAgent {
   }
 }
 
+class ToolSpeaker implements ISpeakerAgent {
+  readonly descriptor: ParticipantDescriptor = { id: "tool-agent", kind: "agent", display: "tool-agent", adapter: "stub", status: "idle" };
+  readonly id = "tool-agent";
+
+  async health(): Promise<AgentHealth> {
+    return { ok: true };
+  }
+
+  async shutdown(): Promise<void> {}
+
+  async bid(ctx: BidContext): Promise<Bid> {
+    return {
+      bidId: ulid(),
+      agentId: this.id,
+      epoch: ctx.epoch,
+      kind: "answer",
+      confidence: 1,
+      createdAtSeq: ctx.transcript.at(-1)?.seq ?? 0,
+      expiresAfterRound: ctx.epoch + 1,
+      revision: 0,
+    };
+  }
+
+  async *speak(_turn: TurnContext, runtime: AgentRuntime): AsyncGenerator<AgentDelta> {
+    const result = await runtime.callTool({ callId: "tool-call-1", tool: "Bash", args: { cmd: "pwd" } });
+    yield { type: "text", text: result.ok ? "tool approved" : "tool denied" };
+    yield { type: "done" };
+  }
+}
+
 describe("SessionManager", () => {
   it("queues bids during speaking and selects the next speaker only after turn completion", async () => {
     const log = new EventLog("room", new InMemoryStore());
@@ -182,6 +212,33 @@ describe("SessionManager", () => {
       expect(projected.activeTurn).toEqual(snapshot.activeTurn);
       expect(projected.lastTurnId).toBe(snapshot.lastTurnId);
       expect(projected.pendingBids).toEqual(snapshot.pendingBids);
+    } finally {
+      await session.stop();
+    }
+  });
+
+  it("gates AgentRuntime tool calls on approval", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const events: RoomEvent[] = [];
+    log.on((event) => events.push(event));
+    const session = new SessionManager({
+      sessionId: "room",
+      title: "Tool test",
+      log,
+      agents: [new ToolSpeaker()],
+      settlingWindowMs: 20,
+      turnTimeoutMs: 1_000,
+    });
+
+    session.start();
+    try {
+      await session.submitUserPrompt("use a tool");
+      await waitFor(() => events.some((event) => (event.body as any).approval?.callId === "tool-call-1" && (event.body as any).approval?.state === "requested"));
+
+      session.approveTool("tool-call-1", true);
+      await waitFor(() => events.some((event) => event.type === "message" && (event.body as any).text === "tool approved"));
+
+      expect(events.some((event) => (event.body as any).approval?.callId === "tool-call-1" && (event.body as any).approval?.state === "granted")).toBe(true);
     } finally {
       await session.stop();
     }

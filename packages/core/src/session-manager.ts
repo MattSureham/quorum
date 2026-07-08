@@ -60,6 +60,7 @@ export class SessionManager {
   private lastTurnId?: string;
   private lastPrompt = "";
   private running = false;
+  private readonly pendingToolApprovals = new Map<string, { tool: string; resolve: (allow: boolean) => void }>();
 
   constructor(private readonly opts: SessionManagerOptions) {
     for (const agent of opts.agents) this.byId.set(agent.id, agent);
@@ -73,6 +74,8 @@ export class SessionManager {
   async stop(): Promise<void> {
     this.running = false;
     this.mailbox.stop();
+    for (const pending of this.pendingToolApprovals.values()) pending.resolve(false);
+    this.pendingToolApprovals.clear();
     if (this.active) {
       this.active.ac.abort();
       await this.append("turn_cancelled", { turnId: this.active.turnId, reason: "session stopped" }, "system");
@@ -127,6 +130,20 @@ export class SessionManager {
 
   async drain(): Promise<void> {
     await this.mailbox.drain();
+  }
+
+  approveTool(callId: string, allow: boolean): void {
+    const pending = this.pendingToolApprovals.get(callId);
+    if (!pending) return;
+    this.pendingToolApprovals.delete(callId);
+    pending.resolve(allow);
+    void this.mailbox.enqueue("approveTool", () =>
+      this.append("system", {
+        level: "info",
+        text: `tool ${allow ? "approved" : "denied"}: ${pending.tool} [${callId}]`,
+        approval: { callId, tool: pending.tool, state: allow ? "granted" : "denied" },
+      }, "system"),
+    ).catch(() => undefined);
   }
 
   private async collectAndMaybeArbitrate(prompt: string): Promise<void> {
@@ -321,12 +338,7 @@ export class SessionManager {
 
   private runtime(): AgentRuntime {
     return {
-      callTool: async (req: ToolCallRequest): Promise<ToolCallResult> => ({
-        callId: req.callId ?? ulid(),
-        ok: false,
-        stderr: "tool runtime not wired yet",
-        exitCode: 1,
-      }),
+      callTool: (req: ToolCallRequest): Promise<ToolCallResult> => this.requestToolApproval(req),
       readContext: async (seq: number): Promise<ContextSnapshot> => ({
         seq: this.opts.log.headSeq,
         events: this.opts.log.replay(seq),
@@ -351,6 +363,26 @@ export class SessionManager {
         return { ok: true, version };
       },
     };
+  }
+
+  private async requestToolApproval(req: ToolCallRequest): Promise<ToolCallResult> {
+    const callId = req.callId ?? ulid();
+    const allow = await new Promise<boolean>((resolve) => {
+      this.pendingToolApprovals.set(callId, { tool: req.tool, resolve });
+      void this.mailbox.enqueue("requestToolApproval", () =>
+        this.append("system", {
+          level: "warn",
+          text: `approval needed: ${req.tool} [${callId}] — approve or deny`,
+          approval: { callId, tool: req.tool, state: "requested" },
+        }, "system", { turnId: this.active?.turnId }),
+      ).catch(() => {
+        this.pendingToolApprovals.delete(callId);
+        resolve(false);
+      });
+    });
+    return allow
+      ? { callId, ok: true, stdout: "approved", exitCode: 0 }
+      : { callId, ok: false, stderr: "denied by human", exitCode: 1 };
   }
 
   private participants(): ParticipantDescriptor[] {

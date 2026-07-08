@@ -77,4 +77,27 @@ describe("Gateway", () => {
       await gateway.close();
     }
   });
+
+  it("routes approve_tool to the host dependency", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    let approval: { callId: string; allow: boolean } | undefined;
+    const gateway = new Gateway({
+      log,
+      room,
+      humanId: "human",
+      setPolicy: () => {},
+      approveTool: (callId, allow) => { approval = { callId, allow }; },
+    }, 0);
+    await gateway.ready;
+    const ws = await connect(gateway.url());
+
+    try {
+      ws.send(JSON.stringify({ t: "approve_tool", roomId: "room", callId: "call-1", allow: true }));
+      await waitFor(() => approval?.callId === "call-1");
+      expect(approval).toEqual({ callId: "call-1", allow: true });
+    } finally {
+      ws.close();
+      await gateway.close();
+    }
+  });
 });

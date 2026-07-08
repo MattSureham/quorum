@@ -62,6 +62,9 @@ pnpm smoke:shared
 The test suite includes a three-agent shared-session integration test that verifies
 queued bids can drive an open discussion across three agents.
 
+Shared-session tool calls now have the approval loop wired through WebSocket
+`approve_tool`; the actual sandboxed execution backend is still a follow-up.
+
 Packaging status: developer one-command launch exists, and a local sidecar entry
 now exists at `packages/daemon/src/sidecar.ts`. It binds a random loopback port,
 prints `{ port, token, bootId }` to stdout, and requires the token for WebSocket
