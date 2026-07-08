@@ -2,7 +2,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import type { AddressInfo } from "node:net";
 import { ClientMessageSchema } from "@quorum/protocol/schema";
 import type { Room, ConductorPolicyConfig } from "@quorum/protocol";
-import type { EventLog } from "@quorum/core";
+import { projectSessionState, type EventLog } from "@quorum/core";
 
 export interface GatewayDeps {
   log: EventLog;
@@ -104,6 +104,18 @@ export class Gateway {
       case "approve_tool":
         this.deps.approveTool?.(m.callId, !!m.allow);
         break;
+      case "replay_projection": {
+        const afterSeq = m.afterSeq ?? 0;
+        const events = this.deps.log.replay(afterSeq);
+        ws.send(JSON.stringify({
+          t: "replay_projection",
+          afterSeq,
+          headSeq: this.deps.log.headSeq,
+          eventCount: events.length,
+          projection: projectSessionState(events),
+        }));
+        break;
+      }
       case "take_write_floor":
         void Promise.resolve(this.deps.takeWriteFloor?.()).catch(() => {});
         break;

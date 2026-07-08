@@ -66,6 +66,10 @@ Shared-session tool calls now have the approval loop wired through WebSocket
 `approve_tool`. Approved safe room tools execute and emit `tool_call` /
 `tool_result`; external sandboxed execution is still a follow-up.
 
+The WebSocket gateway also exposes `replay_projection`, and the Web UI includes
+a Replay panel that rebuilds shared-session phase/speaker/bid state from a chosen
+event sequence.
+
 Packaging status: developer one-command launch exists, and a local sidecar entry
 now exists at `packages/daemon/src/sidecar.ts`. It binds a random loopback port,
 prints `{ port, token, bootId }` to stdout, and requires the token for WebSocket

@@ -100,4 +100,29 @@ describe("Gateway", () => {
       await gateway.close();
     }
   });
+
+  it("returns a replay projection from persisted events", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    await log.append({
+      author: { kind: "system", id: "session", display: "SessionManager" },
+      type: "phase_changed",
+      body: { from: "idle", to: "collecting_bids", epoch: 1 },
+      visibility: "system",
+    });
+    const gateway = new Gateway({ log, room, humanId: "human", setPolicy: () => {} }, 0);
+    await gateway.ready;
+    const ws = await connect(gateway.url());
+
+    try {
+      ws.send(JSON.stringify({ t: "replay_projection", roomId: "room", afterSeq: 0 }));
+      const message = await nextMessage(ws);
+      expect(message.t).toBe("replay_projection");
+      expect(message.eventCount).toBe(1);
+      expect(message.projection.phase).toBe("collecting_bids");
+      expect(message.projection.epoch).toBe(1);
+    } finally {
+      ws.close();
+      await gateway.close();
+    }
+  });
 });

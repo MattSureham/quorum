@@ -50,7 +50,17 @@ type ConnectionState = "idle" | "connecting" | "connected" | "offline" | "error"
 type ServerMessage =
   | { t: "snapshot"; room: Room; events: RoomEvent[] }
   | { t: "event"; event: RoomEvent }
+  | { t: "replay_projection"; afterSeq: number; headSeq: number; eventCount: number; projection: SharedSessionProjectionResult }
   | { t: "error"; text: string };
+
+interface SharedSessionProjectionResult {
+  phase: string;
+  epoch: number;
+  activeTurn?: { turnId: string; speakerId: string; generation: number };
+  pendingBids: Bid[];
+  selected?: { agentId?: string; score?: number; kind?: string };
+  lastTurnId?: string;
+}
 
 interface ClientSettings {
   url: string;
@@ -265,6 +275,8 @@ function App() {
   const [events, setEvents] = useState<RoomEvent[]>([]);
   const [selectedTargets, setSelectedTargets] = useState<string[]>([]);
   const [composer, setComposer] = useState("");
+  const [replayAfterSeq, setReplayAfterSeq] = useState("0");
+  const [replayResult, setReplayResult] = useState<ServerMessage & { t: "replay_projection" }>();
   const wsRef = useRef<WebSocket | null>(null);
   const lastSeqRef = useRef(0);
   const attemptRef = useRef(0);
@@ -353,6 +365,8 @@ function App() {
           setEvents((current) => ingest(mergeEvents(current, message.events)));
         } else if (message.t === "event") {
           setEvents((current) => ingest(mergeEvents(current, [message.event])));
+        } else if (message.t === "replay_projection") {
+          setReplayResult(message);
         } else if (message.t === "error") {
           setError(message.text);
         }
@@ -433,6 +447,12 @@ function App() {
 
   function takeWriteFloor() {
     send({ t: "take_write_floor" });
+  }
+
+  function replayProjection() {
+    const afterSeq = Math.max(0, Number.parseInt(replayAfterSeq, 10) || 0);
+    setReplayAfterSeq(String(afterSeq));
+    send({ t: "replay_projection", afterSeq });
   }
 
   function rollback(toHead: string) {
@@ -545,6 +565,15 @@ function App() {
               <span>Operations</span>
             </div>
             {shared.enabled ? <SharedSessionPanel shared={shared} /> : null}
+            {shared.enabled ? (
+              <ReplayPanel
+                afterSeq={replayAfterSeq}
+                result={replayResult}
+                disabled={!connected}
+                onAfterSeq={setReplayAfterSeq}
+                onReplay={replayProjection}
+              />
+            ) : null}
             {approvals.length ? (
               <div className="approval-list">
                 {approvals.map((signal) => (
@@ -759,6 +788,53 @@ function SharedSessionPanel({ shared }: { shared: SharedSessionProjection }) {
           </div>
         )) : <div className="empty-row">No debug events</div>}
       </div>
+    </section>
+  );
+}
+
+function ReplayPanel({
+  afterSeq,
+  result,
+  disabled,
+  onAfterSeq,
+  onReplay,
+}: {
+  afterSeq: string;
+  result?: ServerMessage & { t: "replay_projection" };
+  disabled: boolean;
+  onAfterSeq: (value: string) => void;
+  onReplay: () => void;
+}) {
+  return (
+    <section className="replay-panel">
+      <div className="replay-head">
+        <RefreshCcw size={15} />
+        <strong>Replay</strong>
+      </div>
+      <div className="replay-controls">
+        <label>
+          <span>after seq</span>
+          <input
+            inputMode="numeric"
+            value={afterSeq}
+            onChange={(input) => onAfterSeq(input.currentTarget.value)}
+          />
+        </label>
+        <button type="button" disabled={disabled} onClick={onReplay}>
+          <RefreshCcw size={14} />
+          <span>Run</span>
+        </button>
+      </div>
+      {result ? (
+        <div className="replay-result">
+          <div><span>events</span><strong>{result.eventCount}</strong></div>
+          <div><span>head</span><strong>{result.headSeq}</strong></div>
+          <div><span>phase</span><strong>{result.projection.phase}</strong></div>
+          <div><span>speaker</span><strong>{result.projection.activeTurn?.speakerId ?? "open"}</strong></div>
+          <div><span>bids</span><strong>{result.projection.pendingBids.length}</strong></div>
+          <div><span>last</span><strong>{result.projection.lastTurnId?.slice(0, 8) ?? "none"}</strong></div>
+        </div>
+      ) : null}
     </section>
   );
 }
