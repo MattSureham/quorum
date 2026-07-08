@@ -1,6 +1,6 @@
 # HANDOFF
 
-Working handoff for an agent picking up **Quorum**. Current as of **2026-06-23**, `main` at commit `384c311`. 中文版见 [`HANDOFF.zh.md`](./HANDOFF.zh.md)。
+Working handoff for an agent picking up **Quorum**. Current as of **2026-07-08**, `main` at commit `ac788aa`. 中文版见 [`HANDOFF.zh.md`](./HANDOFF.zh.md)。
 
 > 2026-07-07 architecture update: Quorum is being migrated to the shared-session architecture from the agent-framework meeting. New implementation handoff: [`AGENT_FRAMEWORK_HANDOFF.md`](./AGENT_FRAMEWORK_HANDOFF.md). Full copied docs live in [`docs/architecture/`](./docs/architecture/).
 
@@ -14,6 +14,78 @@ Latest migration commits:
 - The Node fallback spike adds `pnpm sidecar:node:build` and `pnpm sidecar:node:smoke`.
 - The packaging env commit adds project-local Bun/Rust setup under `.tools/` and validates Bun single-file sidecar compile with `pnpm sidecar:bun:smoke`.
 - The desktop shell spike adds `apps/desktop`, `pnpm desktop:check`, `pnpm desktop:dev`, `pnpm desktop:build`, and a Tauri command that starts the compiled Bun sidecar and returns its authenticated WebSocket URL to the React client.
+
+## This Session Implementation Log
+
+The following is the implementation trail from this session. It is written for the next agent to continue without reconstructing context from chat history.
+
+1. `7d303b8 feat: add shared session architecture kernel`
+   - Files: `packages/protocol/src/types.ts`, `packages/protocol/src/schema.ts`, `packages/core/src/session-manager.ts`, `packages/core/src/command-mailbox.ts`, `packages/core/src/arbiter.ts`, `packages/core/src/session-state.ts`, `packages/core/src/legacy-agent-adapter.ts`, `packages/daemon/src/shared-session-host.ts`, `packages/cli/src/index.ts`, tests and docs.
+   - Work: introduced the shared-session contract and kernel: explicit phases, append-only event commands, bid collection, arbitration, turn ownership, queued bids during speaking, legacy adapter wrapping, and `QUORUM_SESSION_KERNEL=shared` boot path.
+
+2. `2e15f2a docs: clarify shared session handoff status`
+   - Files: `README.md`, `HANDOFF.md`, `HANDOFF.zh.md`.
+   - Work: copied the meeting conclusions into handoff docs and clarified what had been implemented versus what remained open for the new shared-session architecture.
+
+3. `eaf18b2 feat: surface shared session state in web UI`
+   - Files: `packages/client-web/src/main.tsx`, `packages/client-web/src/styles.css`, daemon/gateway wiring as needed, docs.
+   - Work: exposed shared-session phase, active speaker, pending bids, selected speaker, and debug events in the Web UI so the new kernel could be inspected from the browser.
+
+4. `1d7f27c feat: add authenticated sidecar entry`
+   - Files: `packages/daemon/src/sidecar.ts`, WebSocket gateway auth path, smoke scripts, package scripts, docs.
+   - Work: added a local sidecar entrypoint that binds an ephemeral loopback port, prints `{ port, token, bootId }`, and requires the token for WebSocket connections.
+
+5. `81aef87 feat: add node sidecar fallback smoke`
+   - Files: `scripts/build-sidecar-node.ts`, `scripts/node-sidecar-smoke.ts`, package scripts, docs.
+   - Work: added a Node-runtime sidecar fallback build/smoke path for platforms where Bun single-file packaging is unsuitable.
+
+6. `de2ff9b feat: verify bun sidecar in local packaging env`
+   - Files: `.tools/` setup scripts, `scripts/bun-sidecar-smoke.ts`, packaging scripts, SQLite sidecar compatibility code, docs.
+   - Work: added project-local Bun/Rust tooling setup and verified Bun single-file sidecar execution with SQLite, authenticated WebSocket, and shared-session echo turn.
+
+7. `ff6825f feat: add tauri desktop sidecar shell`
+   - Files: `apps/desktop/**`, Tauri Rust layer, Web UI Tauri connection detection, package scripts, docs.
+   - Work: scaffolded the desktop shell. The Rust layer starts the compiled Bun sidecar, parses the stdout handshake, and exposes the authenticated WebSocket URL to React.
+
+8. `827efdb fix: validate desktop bundle build`
+   - Files: `apps/desktop/src-tauri/**`, desktop build config/resources, scripts/docs.
+   - Work: fixed and validated macOS arm64 desktop bundling so `pnpm desktop:build` produces an unsigned `.app`/`.dmg` containing the Bun sidecar under `Contents/Resources/sidecars/quorum-sidecar`.
+
+9. `773bdee fix: improve shared session mobile web ui`
+   - Files: `packages/client-web/src/main.tsx`, `packages/client-web/src/styles.css`.
+   - Work: improved mobile usability for the shared-session Web UI: operations are easier to reach, debug surfaces are less intrusive, and the composer remains usable on small screens.
+
+10. `64d0a42 feat: persist shared session projections`
+    - Files: `packages/core/src/session-state.ts`, `packages/core/src/session-manager.ts`, `packages/daemon/src/persistence/sqlite-store.ts`, `packages/daemon/src/shared-session-host.test.ts`, tests/docs.
+    - Work: added replay projection persistence and SQLite-derived tables for sessions, turns, bids, and snapshots while keeping the append-only event log as the source of truth. Also handled legacy event-table migration.
+
+11. `9a56849 feat: show arbitration score components`
+    - Files: `packages/client-web/src/main.tsx`, `packages/client-web/src/styles.css`.
+    - Work: surfaced arbitration score components in the Web UI so speaker selection can be debugged rather than treated as a black box.
+
+12. `5260a1f feat: wire shared session tool approvals`
+    - Files: `packages/core/src/session-manager.ts`, `packages/core/src/session-manager.test.ts`, `packages/daemon/src/gateway/ws-server.ts`, `packages/daemon/src/shared-session-host.ts`, docs.
+    - Work: wired `AgentRuntime.callTool()` to the human approval loop. The WebSocket `approve_tool` command now resolves requested/granted/denied approval state for shared-session turns.
+
+13. `e09977b feat: execute approved shared room tools`
+    - Files: `packages/core/src/session-manager.ts`, `packages/core/src/session-manager.test.ts`, docs.
+    - Work: after approval, safe room tools (`read_room`, `post_note`, `request_review`, `hand_off`, `raise_hand`) execute through `runRoomTool()` and emit `tool_call` / `tool_result` plus any room events.
+
+14. `6dd1fe8 feat: add shared session replay projection`
+    - Files: `packages/daemon/src/gateway/ws-server.ts`, `packages/daemon/src/gateway/ws-server.test.ts`, `packages/client-web/src/main.tsx`, `packages/client-web/src/styles.css`, `packages/protocol/src/schema.ts`, docs.
+    - Work: added WebSocket `replay_projection` and a Web UI Replay panel to rebuild phase/speaker/bid state from an arbitrary event sequence.
+
+15. `0603b32 feat: add working memory compaction`
+    - Files: `packages/core/src/memory.ts`, `packages/core/src/memory.test.ts`, `packages/core/src/event-log.ts`, `packages/core/src/in-memory-store.ts`, `packages/core/src/session-manager.ts`, `packages/daemon/src/persistence/sqlite-store.ts`, `packages/daemon/src/gateway/ws-server.ts`, `packages/client-web/src/main.tsx`, `packages/client-web/src/styles.css`, protocol schema, tests/docs.
+    - Work: implemented deterministic working-memory summaries, persistence in memory/SQLite stores, `SessionManager.compactWorkingMemory()`, WebSocket `compact_memory`, and a Web UI Memory panel.
+
+16. `7abb9f3 feat: auto compact working memory`
+    - Files: `packages/core/src/session-manager.ts`, `packages/core/src/session-manager.test.ts`, `README.md`, `HANDOFF.md`, `HANDOFF.zh.md`.
+    - Work: added automatic working-memory compaction after turns once configured thresholds are reached (`minSeqGap`, `minEvents`, `keepRecentEvents`, `autoCompact`). Auto summaries are persisted and marked with `auto: true`.
+
+17. `ac788aa feat: execute approved external tools in sandbox`
+    - Files: `packages/core/src/tool-executor.ts`, `packages/core/src/session-manager.ts`, `packages/core/src/session-manager.test.ts`, `packages/daemon/src/tools/local-sandbox-executor.ts`, `packages/daemon/src/tools/local-sandbox-executor.test.ts`, `packages/daemon/src/shared-session-host.ts`, `packages/daemon/src/index.ts`, `README.md`, `HANDOFF.md`, `HANDOFF.zh.md`.
+    - Work: added a core `ToolExecutor` injection point and a daemon local sandbox executor for approved external command tools such as `Bash`. Current safeguards: workspace cwd containment, timeout, stdout/stderr truncation, tool allowlist, and common dangerous-command blocking. Remaining gap: adapter-native Claude/Codex tool events still need bridging so every native tool call goes through the same approval/sandbox path.
 
 What is already implemented:
 
