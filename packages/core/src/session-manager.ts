@@ -19,6 +19,7 @@ import { ulid } from "./ids.js";
 import { CommandMailbox } from "./command-mailbox.js";
 import { Arbiter, type ArbitrationDecision } from "./arbiter.js";
 import { assertTransition } from "./session-state.js";
+import { isRoomTool, normalizeToolName, runRoomTool } from "./room-tools.js";
 
 export interface SessionManagerOptions {
   sessionId: string;
@@ -367,6 +368,9 @@ export class SessionManager {
 
   private async requestToolApproval(req: ToolCallRequest): Promise<ToolCallResult> {
     const callId = req.callId ?? ulid();
+    await this.mailbox.enqueue("toolCall", () =>
+      this.append("tool_call", { tool: req.tool, args: req.args, callId }, "participant", this.activeAuthorOptions()),
+    );
     const allow = await new Promise<boolean>((resolve) => {
       this.pendingToolApprovals.set(callId, { tool: req.tool, resolve });
       void this.mailbox.enqueue("requestToolApproval", () =>
@@ -380,9 +384,52 @@ export class SessionManager {
         resolve(false);
       });
     });
-    return allow
-      ? { callId, ok: true, stdout: "approved", exitCode: 0 }
+    const result = allow
+      ? await this.executeApprovedTool(callId, req)
       : { callId, ok: false, stderr: "denied by human", exitCode: 1 };
+    await this.mailbox.enqueue("toolResult", () =>
+      this.append("tool_result", result, "participant", this.activeAuthorOptions()),
+    ).catch(() => undefined);
+    return result;
+  }
+
+  private async executeApprovedTool(callId: string, req: ToolCallRequest): Promise<ToolCallResult> {
+    const name = normalizeToolName(req.tool);
+    if (!isRoomTool(name)) {
+      return {
+        callId,
+        ok: false,
+        stderr: `tool execution backend not wired for ${req.tool}`,
+        exitCode: 1,
+      };
+    }
+
+    const args = req.args && typeof req.args === "object" ? req.args as Record<string, unknown> : {};
+    const out = runRoomTool(name, args, { readRoom: (sinceSeq) => this.opts.log.replay(sinceSeq) });
+    for (const event of out.events) {
+      await this.mailbox.enqueue("roomToolEvent", () =>
+        this.append(event.type, event.body, event.visibility ?? "participant", {
+          ...this.activeAuthorOptions(),
+          addressedTo: event.addressedTo,
+          replyTo: event.replyTo,
+        }),
+      );
+    }
+    return { callId, ok: true, stdout: out.reply, exitCode: 0 };
+  }
+
+  private activeAuthorOptions(): Partial<Pick<RoomEvent, "author" | "turnId">> {
+    const active = this.active;
+    if (!active) return {};
+    const agent = this.byId.get(active.speakerId);
+    return {
+      author: {
+        kind: "agent",
+        id: active.speakerId,
+        display: agent?.descriptor.display ?? active.speakerId,
+      },
+      turnId: active.turnId,
+    };
   }
 
   private participants(): ParticipantDescriptor[] {

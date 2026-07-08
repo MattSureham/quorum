@@ -98,8 +98,8 @@ class ToolSpeaker implements ISpeakerAgent {
   }
 
   async *speak(_turn: TurnContext, runtime: AgentRuntime): AsyncGenerator<AgentDelta> {
-    const result = await runtime.callTool({ callId: "tool-call-1", tool: "Bash", args: { cmd: "pwd" } });
-    yield { type: "text", text: result.ok ? "tool approved" : "tool denied" };
+    const result = await runtime.callTool({ callId: "tool-call-1", tool: "read_room", args: { sinceSeq: 0 } });
+    yield { type: "text", text: result.ok && result.stdout?.includes("use a tool") ? "room tool executed" : "tool failed" };
     yield { type: "done" };
   }
 }
@@ -217,7 +217,7 @@ describe("SessionManager", () => {
     }
   });
 
-  it("gates AgentRuntime tool calls on approval", async () => {
+  it("gates AgentRuntime room tools on approval and executes them", async () => {
     const log = new EventLog("room", new InMemoryStore());
     const events: RoomEvent[] = [];
     log.on((event) => events.push(event));
@@ -236,9 +236,11 @@ describe("SessionManager", () => {
       await waitFor(() => events.some((event) => (event.body as any).approval?.callId === "tool-call-1" && (event.body as any).approval?.state === "requested"));
 
       session.approveTool("tool-call-1", true);
-      await waitFor(() => events.some((event) => event.type === "message" && (event.body as any).text === "tool approved"));
+      await waitFor(() => events.some((event) => event.type === "message" && (event.body as any).text === "room tool executed"));
 
       expect(events.some((event) => (event.body as any).approval?.callId === "tool-call-1" && (event.body as any).approval?.state === "granted")).toBe(true);
+      expect(events.some((event) => event.type === "tool_call" && (event.body as any).tool === "read_room")).toBe(true);
+      expect(events.some((event) => event.type === "tool_result" && (event.body as any).callId === "tool-call-1" && (event.body as any).ok)).toBe(true);
     } finally {
       await session.stop();
     }

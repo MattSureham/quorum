@@ -45,7 +45,7 @@ What is already implemented:
 - `apps/desktop` is a Tauri 2 shell. Its Rust layer manages the sidecar process, parses the stdout handshake, and exposes `get_sidecar_connection()` to the Web UI.
 - The Web UI detects Tauri at startup and replaces the default `ws://127.0.0.1:8787` connection with the sidecar URL returned by `get_sidecar_connection()`.
 - Tests now cover SQLite projection tables, legacy event-table migration, replay projection, and a three-agent shared-session open discussion through queued bids.
-- Shared-session `AgentRuntime.callTool()` now has a human approval loop wired through `approve_tool`; it emits requested/granted/denied approval signals and returns an approved/denied `ToolCallResult`.
+- Shared-session `AgentRuntime.callTool()` now has a human approval loop wired through `approve_tool`; it emits requested/granted/denied approval signals, executes approved safe room tools (`read_room`, `post_note`, `request_review`, `hand_off`, `raise_hand`), and records `tool_call` / `tool_result` events. External tools such as `Bash` are still denied after approval because the sandboxed execution backend is not wired yet.
 - Verification: `pnpm typecheck`, `pnpm test`, `pnpm --filter @quorum/client-web build`, `pnpm smoke:shared`, `pnpm smoke:sidecar`, `pnpm sidecar:node:smoke`, `pnpm sidecar:bun:smoke`, `pnpm desktop:check`, and `pnpm desktop:build` pass on macOS arm64.
 
 What is not implemented yet:
@@ -57,7 +57,7 @@ What is not implemented yet:
 - **Node-runtime fallback exists.** It is not a single binary, but `pnpm sidecar:node:build` creates a smoke-tested fallback artifact. Keep it as the fallback route if Bun compile regresses on another platform.
 - **Rust/Cargo exists only in the project-local toolchain.** Source `.tools/packaging-env.sh` before running direct Cargo/Tauri commands, or use `pnpm desktop:check`.
 - The Web UI now exposes the new shared-session phase and bid queue, but it is still a minimal projection. It does not yet provide full replay controls, policy tuning, rich arbitration score inspection, or memory inspection.
-- The real tool execution backend, memory compaction, replay UI, signed installer pipeline, updater, and cross-platform desktop validation remain follow-up work.
+- The sandboxed external tool execution backend, memory compaction, replay UI, signed installer pipeline, updater, and cross-platform desktop validation remain follow-up work.
 
 Recommended next task for the new agent:
 
