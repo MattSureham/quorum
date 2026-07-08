@@ -22,6 +22,7 @@ import { Arbiter, type ArbitrationDecision } from "./arbiter.js";
 import { assertTransition } from "./session-state.js";
 import { isRoomTool, normalizeToolName, runRoomTool } from "./room-tools.js";
 import { createWorkingMemorySummary } from "./memory.js";
+import type { ToolExecutor } from "./tool-executor.js";
 
 export interface SessionManagerOptions {
   sessionId: string;
@@ -33,6 +34,8 @@ export interface SessionManagerOptions {
   settlingWindowMs?: number;
   turnTimeoutMs?: number;
   arbiter?: Arbiter;
+  workspacePath?: string;
+  toolExecutor?: ToolExecutor;
   memory?: {
     autoCompact?: boolean;
     minEvents?: number;
@@ -449,6 +452,14 @@ export class SessionManager {
   private async executeApprovedTool(callId: string, req: ToolCallRequest): Promise<ToolCallResult> {
     const name = normalizeToolName(req.tool);
     if (!isRoomTool(name)) {
+      if (this.opts.toolExecutor) {
+        return this.opts.toolExecutor.execute({ ...req, callId }, {
+          sessionId: this.opts.sessionId,
+          turnId: this.active?.turnId,
+          speakerId: this.active?.speakerId,
+          workspacePath: this.opts.workspacePath,
+        });
+      }
       return {
         callId,
         ok: false,

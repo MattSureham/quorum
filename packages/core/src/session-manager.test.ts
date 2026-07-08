@@ -104,6 +104,36 @@ class ToolSpeaker implements ISpeakerAgent {
   }
 }
 
+class ExternalToolSpeaker implements ISpeakerAgent {
+  readonly descriptor: ParticipantDescriptor = { id: "external-tool-agent", kind: "agent", display: "external-tool-agent", adapter: "stub", status: "idle" };
+  readonly id = "external-tool-agent";
+
+  async health(): Promise<AgentHealth> {
+    return { ok: true };
+  }
+
+  async shutdown(): Promise<void> {}
+
+  async bid(ctx: BidContext): Promise<Bid> {
+    return {
+      bidId: ulid(),
+      agentId: this.id,
+      epoch: ctx.epoch,
+      kind: "answer",
+      confidence: 1,
+      createdAtSeq: ctx.transcript.at(-1)?.seq ?? 0,
+      expiresAfterRound: ctx.epoch + 1,
+      revision: 0,
+    };
+  }
+
+  async *speak(_turn: TurnContext, runtime: AgentRuntime): AsyncGenerator<AgentDelta> {
+    const result = await runtime.callTool({ callId: "external-call-1", tool: "Bash", args: { command: "printf ok" } });
+    yield { type: "text", text: result.ok ? `external:${result.stdout}` : "external failed" };
+    yield { type: "done" };
+  }
+}
+
 describe("SessionManager", () => {
   it("queues bids during speaking and selects the next speaker only after turn completion", async () => {
     const log = new EventLog("room", new InMemoryStore());
@@ -241,6 +271,42 @@ describe("SessionManager", () => {
       expect(events.some((event) => (event.body as any).approval?.callId === "tool-call-1" && (event.body as any).approval?.state === "granted")).toBe(true);
       expect(events.some((event) => event.type === "tool_call" && (event.body as any).tool === "read_room")).toBe(true);
       expect(events.some((event) => event.type === "tool_result" && (event.body as any).callId === "tool-call-1" && (event.body as any).ok)).toBe(true);
+    } finally {
+      await session.stop();
+    }
+  });
+
+  it("routes approved external tools to the configured executor", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const events: RoomEvent[] = [];
+    log.on((event) => events.push(event));
+    const session = new SessionManager({
+      sessionId: "room",
+      title: "External tool test",
+      log,
+      agents: [new ExternalToolSpeaker()],
+      settlingWindowMs: 20,
+      turnTimeoutMs: 1_000,
+      workspacePath: "/tmp/quorum-test-workspace",
+      toolExecutor: {
+        async execute(req, ctx) {
+          expect(req.tool).toBe("Bash");
+          expect(req.callId).toBe("external-call-1");
+          expect(ctx.workspacePath).toBe("/tmp/quorum-test-workspace");
+          return { callId: req.callId, ok: true, stdout: "ok", exitCode: 0 };
+        },
+      },
+    });
+
+    session.start();
+    try {
+      await session.submitUserPrompt("use an external tool");
+      await waitFor(() => events.some((event) => (event.body as any).approval?.callId === "external-call-1" && (event.body as any).approval?.state === "requested"));
+
+      session.approveTool("external-call-1", true);
+      await waitFor(() => events.some((event) => event.type === "message" && (event.body as any).text === "external:ok"));
+
+      expect(events.some((event) => event.type === "tool_result" && (event.body as any).callId === "external-call-1" && (event.body as any).ok)).toBe(true);
     } finally {
       await session.stop();
     }

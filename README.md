@@ -66,7 +66,9 @@ queued bids can drive an open discussion across three agents.
 
 Shared-session tool calls now have the approval loop wired through WebSocket
 `approve_tool`. Approved safe room tools execute and emit `tool_call` /
-`tool_result`; external sandboxed execution is still a follow-up.
+`tool_result`. Approved external command tools such as `Bash` now route through
+a daemon-provided local sandbox executor with workspace cwd isolation, timeout,
+output truncation, allowlisted tool names, and dangerous-command blocking.
 
 The WebSocket gateway also exposes `replay_projection`, and the Web UI includes
 a Replay panel that rebuilds shared-session phase/speaker/bid state from a chosen

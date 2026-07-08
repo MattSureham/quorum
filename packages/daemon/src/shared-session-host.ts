@@ -3,6 +3,7 @@ import type { Room } from "@quorum/protocol";
 import { createParticipant } from "./adapters/registry.js";
 import { Gateway } from "./gateway/ws-server.js";
 import { SqliteStore } from "./persistence/sqlite-store.js";
+import { createLocalSandboxToolExecutor } from "./tools/local-sandbox-executor.js";
 
 export interface SharedSessionHost {
   log: EventLog;
@@ -33,6 +34,8 @@ export async function startSharedSessionRoom(
     log,
     agents,
     humans,
+    workspacePath: room.workspacePath,
+    toolExecutor: room.workspacePath ? createLocalSandboxToolExecutor({ workspacePath: room.workspacePath }) : undefined,
     settlingWindowMs: 400,
     turnTimeoutMs: room.policy.turnDeadlineMs,
   });

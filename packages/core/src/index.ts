@@ -6,6 +6,7 @@ export { Conductor, type ConductorOptions } from "./conductor.js";
 export { LegacyAgentAdapter } from "./legacy-agent-adapter.js";
 export { createWorkingMemorySummary, type WorkingMemorySummaryOptions } from "./memory.js";
 export { SessionManager, type SessionManagerOptions, type SessionSnapshot } from "./session-manager.js";
+export type { ToolExecutor, ToolExecutionContext } from "./tool-executor.js";
 export { assertTransition, canTransition, projectSessionState, type ProjectedSessionState } from "./session-state.js";
 export { freeForAll, directed, makeModerated, type Moderator } from "./policies/index.js";
 export { renderProjection, buildProtocol } from "./projection.js";
