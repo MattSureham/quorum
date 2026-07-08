@@ -55,6 +55,15 @@ To run the daemon against the new kernel during migration:
 QUORUM_SESSION_KERNEL=shared pnpm dev
 ```
 
+To test the Web UI without Claude/Codex credentials, run the shared kernel with
+the deterministic echo config:
+
+```bash
+QUORUM_SESSION_KERNEL=shared QUORUM_CONFIG=quorum.webui-smoke.config.json QUORUM_DB_PATH=.quorum/webui-smoke.sqlite pnpm dev
+```
+
+Then open `http://127.0.0.1:5173`, type into "Message the room", and press Send.
+
 To run a fast shared-session smoke test without opening the browser:
 
 ```bash

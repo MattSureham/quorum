@@ -57,7 +57,7 @@ const room: Room = {
 const port = Number(process.env.QUORUM_PORT ?? 8787);
 const sharedSession = process.env.QUORUM_SESSION_KERNEL === "shared";
 const host = sharedSession
-  ? await startSharedSessionRoom(room, { port })
+  ? await startSharedSessionRoom(room, { port, dbPath: process.env.QUORUM_DB_PATH })
   : await startRoom(room, { port });
 console.log(`Quorum daemon on ws://127.0.0.1:${port}  (room "${room.id}", workspace ${room.workspacePath})`);
 console.log(`  session kernel: ${sharedSession ? "shared-session" : "legacy-conductor"}`);

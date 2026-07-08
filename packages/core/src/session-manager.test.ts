@@ -134,6 +134,21 @@ class ExternalToolSpeaker implements ISpeakerAgent {
   }
 }
 
+class InterruptibleSpeaker extends StubSpeaker {
+  async *speak(_turn: TurnContext, _runtime: AgentRuntime, signal: AbortSignal): AsyncGenerator<AgentDelta> {
+    await new Promise<void>((resolve) => {
+      if (signal.aborted) {
+        resolve();
+        return;
+      }
+      signal.addEventListener("abort", () => resolve(), { once: true });
+    });
+    if (signal.aborted) return;
+    yield { type: "text", text: "should not emit" };
+    yield { type: "done" };
+  }
+}
+
 describe("SessionManager", () => {
   it("queues bids during speaking and selects the next speaker only after turn completion", async () => {
     const log = new EventLog("room", new InMemoryStore());
@@ -307,6 +322,35 @@ describe("SessionManager", () => {
       await waitFor(() => events.some((event) => event.type === "message" && (event.body as any).text === "external:ok"));
 
       expect(events.some((event) => event.type === "tool_result" && (event.body as any).callId === "external-call-1" && (event.body as any).ok)).toBe(true);
+    } finally {
+      await session.stop();
+    }
+  });
+
+  it("interrupts the active shared-session turn", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const events: RoomEvent[] = [];
+    log.on((event) => events.push(event));
+    const slow = new InterruptibleSpeaker("slow", { confidence: 1 });
+    const session = new SessionManager({
+      sessionId: "room",
+      title: "Interrupt test",
+      log,
+      agents: [slow],
+      settlingWindowMs: 20,
+      turnTimeoutMs: 5_000,
+    });
+
+    session.start();
+    try {
+      await session.submitUserPrompt("please answer");
+      await waitFor(() => events.some((event) => event.type === "turn_started"));
+
+      await session.interrupt("human", true);
+      await waitFor(() => events.some((event) => event.type === "turn_cancelled"));
+
+      expect(events.some((event) => event.type === "interrupt" && (event.body as any).hard === true)).toBe(true);
+      expect(session.snapshot().activeTurn).toBeUndefined();
     } finally {
       await session.stop();
     }

@@ -1,0 +1,24 @@
+{
+  "id": "main",
+  "title": "Quorum Web UI Smoke",
+  "primary": "echo",
+  "policy": {
+    "name": "free-for-all",
+    "maxTurnsPerTopic": 6,
+    "noConsecutive": true,
+    "turnDeadlineMs": 30000
+  },
+  "participants": [
+    { "id": "human", "kind": "human", "display": "You", "status": "idle" },
+    {
+      "id": "echo",
+      "kind": "agent",
+      "display": "Echo",
+      "adapter": "echo",
+      "adapterConfig": {
+        "text": "Echo received your message. The Web UI, WebSocket gateway, shared-session bid flow, and turn completion path are working."
+      },
+      "status": "idle"
+    }
+  ]
+}

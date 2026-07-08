@@ -48,6 +48,7 @@ export async function startSharedSessionRoom(
       humanId: humans[0]?.id,
       authToken: opts.authToken,
       postMessage: (text, addressedTo) => session.submitUserPrompt(text, addressedTo),
+      interrupt: (hard) => session.interrupt("human", hard),
       approveTool: (callId, allow) => session.approveTool(callId, allow),
       compactMemory: (fromSeq, toSeq) => session.compactWorkingMemory(fromSeq, toSeq),
       setPolicy: () => {

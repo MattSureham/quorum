@@ -16,6 +16,7 @@ export interface GatewayDeps {
   /** Resolve a pending tool-approval request (approve_tool). */
   approveTool?: (callId: string, allow: boolean) => void;
   compactMemory?: (fromSeq?: number, toSeq?: number) => Promise<MemorySummary | undefined> | MemorySummary | undefined;
+  interrupt?: (hard: boolean) => Promise<void> | void;
   /** Let the human take the write floor to edit files directly (take_write_floor). */
   takeWriteFloor?: () => Promise<void> | void;
   /** Roll the workspace back to a prior head (rollback); destructive git reset. */
@@ -98,7 +99,10 @@ export class Gateway {
         else void this.deps.log.append({ author: this.human(), type: "message", body: { text: m.text }, addressedTo: m.addressedTo });
         break;
       case "interrupt":
-        void this.deps.log.append({ author: this.human(), type: "interrupt", body: { by: "human", hard: !!m.hard } });
+        if (this.deps.interrupt) void Promise.resolve(this.deps.interrupt(!!m.hard)).catch((err) =>
+          ws.send(JSON.stringify({ t: "error", text: `interrupt failed: ${err instanceof Error ? err.message : String(err)}` })),
+        );
+        else void this.deps.log.append({ author: this.human(), type: "interrupt", body: { by: "human", hard: !!m.hard } });
         break;
       case "set_policy":
         this.deps.setPolicy(m.policy);

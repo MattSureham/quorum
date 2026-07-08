@@ -202,6 +202,19 @@ export class SessionManager {
     ).catch(() => undefined);
   }
 
+  async interrupt(by = "human", hard = true): Promise<void> {
+    await this.mailbox.enqueue("interrupt", async () => {
+      await this.append("interrupt", { by, hard }, "room", {
+        author: { kind: by === "human" ? "human" : "system", id: by, display: by === "human" ? "Human" : by },
+        turnId: this.active?.turnId,
+      });
+      if (!this.active) return;
+      this.active.ac.abort();
+      for (const pending of this.pendingToolApprovals.values()) pending.resolve(false);
+      this.pendingToolApprovals.clear();
+    });
+  }
+
   private async collectAndMaybeArbitrate(prompt: string): Promise<void> {
     await this.collectAgentBids(prompt);
     await this.mailbox.enqueue("postBidArbitrate", () => this.arbitrateIfPossible());
@@ -324,6 +337,7 @@ export class SessionManager {
       outcome = ac.signal.aborted ? "cancelled" : "failed";
     } finally {
       clearTimeout(timeout);
+      if (ac.signal.aborted && outcome === "done") outcome = "cancelled";
       await this.mailbox.enqueue("finishTurn", async () => {
         if (!this.active || this.active.turnId !== turnId || this.active.generation !== generation) return;
         this.lastTurnId = turnId;
