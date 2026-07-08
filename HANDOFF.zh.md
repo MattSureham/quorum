@@ -16,6 +16,9 @@
 - `apps/desktop` 已新增 Tauri 2 桌面壳；Rust 层启动 Bun sidecar，读取 handshake，并通过 `get_sidecar_connection()` 把认证后的 WebSocket URL 交给 React。
 - Web UI 在 Tauri 环境启动时会自动连接 sidecar URL，不需要手填端口。
 - `pnpm packaging:env` 会把 Bun/Rust/Cargo 安装在项目本地 `.tools/`，不改全局 shell 配置。
+- SQLite 现在会初始化共享 Session 需要的 sessions、turns、bids、snapshots、memory、agent/provider configs 和 schema_migrations 表，同时保留 append-only event log 作为唯一真相来源。
+- `projectSessionState()` 已能从 replayed events 重建当前共享 Session 投影。
+- 测试已覆盖 SQLite 派生表、旧 events 单表迁移、replay projection、三个 agent 通过 queued bids 进行开放讨论。
 
 还没完成：
 - 发布级“一键安装”还没完成：没有签名/公证、没有 Windows installer 验证、没有 updater。

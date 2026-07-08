@@ -36,6 +36,11 @@ implemented in `@quorum/core` as a parallel kernel:
 - `Arbiter` — service-side bid scoring with capped rebuttal bonus.
 - `LegacyAgentAdapter` — bridge from the old `Participant.takeTurn()` contract to
   the new `ISpeakerAgent.bid()/speak()` contract.
+- `SqliteStore` now bootstraps the shared-session tables for sessions, turns,
+  bids, snapshots, memory, agent configs, provider configs, and migrations while
+  preserving the append-only event log as the source of truth.
+- `projectSessionState()` rebuilds the live shared-session projection from replayed
+  events.
 - `@quorum/client-web` now projects shared-session events into a phase display,
   active speaker status, bid queue, selected speaker, and debug timeline.
 
@@ -53,6 +58,9 @@ To run a fast shared-session smoke test without opening the browser:
 ```bash
 pnpm smoke:shared
 ```
+
+The test suite includes a three-agent shared-session integration test that verifies
+queued bids can drive an open discussion across three agents.
 
 Packaging status: developer one-command launch exists, and a local sidecar entry
 now exists at `packages/daemon/src/sidecar.ts`. It binds a random loopback port,

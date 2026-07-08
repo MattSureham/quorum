@@ -15,6 +15,7 @@ import { InMemoryStore } from "./in-memory-store.js";
 import { SessionManager } from "./session-manager.js";
 import { Arbiter } from "./arbiter.js";
 import { ulid } from "./ids.js";
+import { projectSessionState } from "./session-state.js";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -154,5 +155,35 @@ describe("SessionManager", () => {
 
     const rebuttal = decision.candidates.find((candidate) => candidate.bid.agentId === "a");
     expect(rebuttal?.components.rebuttalBonus).toBeLessThanOrEqual(rebuttal!.components.base * 0.2);
+  });
+
+  it("rebuilds the current projected state from replayed events", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const agent = new StubSpeaker("agent", { confidence: 1, text: "answer" });
+    const session = new SessionManager({
+      sessionId: "room",
+      title: "Replay test",
+      log,
+      agents: [agent],
+      settlingWindowMs: 20,
+      turnTimeoutMs: 1_000,
+    });
+
+    session.start();
+    try {
+      await session.submitUserPrompt("hello");
+      await waitFor(() => log.replay(0).some((event) => event.type === "turn_completed"));
+      await waitFor(() => session.snapshot().phase === "idle");
+
+      const projected = projectSessionState(log.replay(0));
+      const snapshot = session.snapshot();
+      expect(projected.phase).toBe(snapshot.phase);
+      expect(projected.epoch).toBe(snapshot.epoch);
+      expect(projected.activeTurn).toEqual(snapshot.activeTurn);
+      expect(projected.lastTurnId).toBe(snapshot.lastTurnId);
+      expect(projected.pendingBids).toEqual(snapshot.pendingBids);
+    } finally {
+      await session.stop();
+    }
   });
 });

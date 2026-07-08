@@ -1,9 +1,21 @@
 import { mkdtemp } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, expect } from "vitest";
 import { EventLog } from "@quorum/core";
 import { SqliteStore } from "./sqlite-store.js";
+
+const require = createRequire(import.meta.url);
+const Database = require("better-sqlite3") as new (path: string) => {
+  exec(source: string): unknown;
+  prepare(source: string): {
+    run(...args: unknown[]): unknown;
+    all(...args: unknown[]): unknown[];
+    get(...args: unknown[]): unknown;
+  };
+  close(): void;
+};
 
 const human = {
   author: { kind: "human" as const, id: "human", display: "Human" },
@@ -28,5 +40,104 @@ describe("SqliteStore", () => {
     expect(log2.replay(0).map((event) => event.seq)).toEqual([1, 2]);
     expect(log2.replay(1).map((event) => (event.body as any).text)).toEqual(["two"]);
     store2.close();
+  });
+
+  it("maintains shared-session projection tables in the same append path", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "quorum-sqlite-projection-"));
+    const dbPath = join(dir, "quorum.sqlite");
+    const store = new SqliteStore(dbPath);
+    const log = new EventLog("session-a", store);
+
+    await log.append({
+      author: { kind: "system", id: "session", display: "SessionManager" },
+      type: "phase_changed",
+      body: { from: "idle", to: "collecting_bids", epoch: 1 },
+      visibility: "system",
+    });
+    await log.append({
+      author: { kind: "agent", id: "codex", display: "Codex" },
+      type: "bid_submitted",
+      body: {
+        bid: {
+          bidId: "bid-1",
+          agentId: "codex",
+          epoch: 1,
+          kind: "answer",
+          confidence: 0.8,
+          createdAtSeq: 1,
+          expiresAfterRound: 2,
+          revision: 0,
+        },
+      },
+      visibility: "debug",
+    });
+    await log.append({
+      author: { kind: "system", id: "session", display: "SessionManager" },
+      type: "turn_started",
+      body: { turnId: "turn-1", speakerId: "codex", generation: 7 },
+      visibility: "system",
+    });
+    await log.append({
+      author: { kind: "agent", id: "codex", display: "Codex" },
+      type: "turn_output_chunk",
+      body: { turnId: "turn-1", generation: 7, offset: 3, text: "hello" },
+      turnId: "turn-1",
+      visibility: "participant",
+    });
+    await log.append({
+      author: { kind: "system", id: "session", display: "SessionManager" },
+      type: "turn_completed",
+      body: { turnId: "turn-1", speakerId: "codex", generation: 7, offset: 8 },
+      visibility: "system",
+    });
+    store.close();
+
+    const db = new Database(dbPath);
+    try {
+      const session = db.prepare("SELECT phase, epoch, head_seq, active_turn_id FROM sessions WHERE session_id=?").get("session-a") as any;
+      const turn = db.prepare("SELECT speaker_id, status, output_offset FROM turns WHERE session_id=? AND turn_id=?").get("session-a", "turn-1") as any;
+      const bid = db.prepare("SELECT agent_id, kind, confidence, status FROM bids WHERE session_id=? AND bid_id=?").get("session-a", "bid-1") as any;
+      const snapshotCount = db.prepare("SELECT COUNT(*) AS count FROM session_snapshots WHERE session_id=?").get("session-a") as any;
+      const event = db.prepare("SELECT type, visibility, author_id FROM events WHERE room_id=? AND seq=?").get("session-a", 2) as any;
+
+      expect(session).toMatchObject({ phase: "collecting_bids", epoch: 1, head_seq: 5, active_turn_id: null });
+      expect(turn).toMatchObject({ speaker_id: "codex", status: "completed", output_offset: 8 });
+      expect(bid).toMatchObject({ agent_id: "codex", kind: "answer", confidence: 0.8, status: "submitted" });
+      expect(snapshotCount.count).toBe(1);
+      expect(event).toMatchObject({ type: "bid_submitted", visibility: "debug", author_id: "codex" });
+    } finally {
+      db.close();
+    }
+  });
+
+  it("migrates an existing legacy events table without losing replay", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "quorum-sqlite-legacy-"));
+    const dbPath = join(dir, "legacy.sqlite");
+    const db = new Database(dbPath);
+    db.exec(`
+      CREATE TABLE events (
+        id TEXT PRIMARY KEY, room_id TEXT, seq INTEGER, ts INTEGER, data TEXT NOT NULL
+      );
+      INSERT INTO events (id, room_id, seq, ts, data)
+      VALUES ('old-1', 'room', 1, 100, '{"id":"old-1","roomId":"room","seq":1,"ts":100,"author":{"kind":"human","id":"human","display":"Human"},"type":"message","body":{"text":"old"},"visibility":"room"}');
+    `);
+    db.close();
+
+    const store = new SqliteStore(dbPath);
+    const log = new EventLog("room", store);
+    const next = await log.append({ ...human, body: { text: "new" } });
+    store.close();
+
+    const reopened = new Database(dbPath);
+    try {
+      const columns = reopened.prepare("PRAGMA table_info(events)").all().map((column: any) => column.name);
+      const session = reopened.prepare("SELECT head_seq FROM sessions WHERE session_id=?").get("room") as any;
+      expect(columns).toContain("type");
+      expect(columns).toContain("visibility");
+      expect(next.seq).toBe(2);
+      expect(session.head_seq).toBe(2);
+    } finally {
+      reopened.close();
+    }
   });
 });

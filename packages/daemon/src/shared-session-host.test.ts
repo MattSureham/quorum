@@ -53,4 +53,50 @@ describe("SharedSessionHost", () => {
       await host.stop();
     }
   });
+
+  it("runs a three-agent open discussion through queued bids", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "quorum-shared-session-three-agent-"));
+    const room: Room = {
+      id: "three-agent-room",
+      title: "Three agent room",
+      branch: "main",
+      policy: { name: "free-for-all", maxTurnsPerTopic: 6, noConsecutive: true, turnDeadlineMs: 1_000 },
+      participants: [
+        { id: "human", kind: "human", display: "Human", status: "idle" },
+        { id: "alpha", kind: "agent", display: "Alpha", adapter: "echo", adapterConfig: { text: "alpha response" }, status: "idle" },
+        { id: "bravo", kind: "agent", display: "Bravo", adapter: "echo", adapterConfig: { text: "bravo response" }, status: "idle" },
+        { id: "charlie", kind: "agent", display: "Charlie", adapter: "echo", adapterConfig: { text: "charlie response" }, status: "idle" },
+      ],
+      createdAt: Date.now(),
+    };
+    const host = await startSharedSessionRoom(room, { dbPath: join(dir, "room.sqlite"), port: 0 });
+    const events: RoomEvent[] = [];
+    const off = host.log.on((event) => events.push(event));
+
+    try {
+      await host.session.submitUserPrompt("open discussion");
+      await waitFor(() => {
+        const speakers = new Set(
+          events
+            .filter((event) => event.type === "turn_completed")
+            .map((event) => (event.body as any).speakerId),
+        );
+        return speakers.has("alpha") && speakers.has("bravo") && speakers.has("charlie");
+      }, 2_000);
+
+      const bidAgents = new Set(
+        events
+          .filter((event) => event.type === "bid_submitted")
+          .map((event) => (event.body as any).bid.agentId),
+      );
+      expect(bidAgents).toEqual(new Set(["alpha", "bravo", "charlie"]));
+      expect(events.filter((event) => event.type === "speaker_selected")).toHaveLength(3);
+      expect(events.some((event) => event.type === "message" && event.author.id === "alpha" && (event.body as any).text === "alpha response")).toBe(true);
+      expect(events.some((event) => event.type === "message" && event.author.id === "bravo" && (event.body as any).text === "bravo response")).toBe(true);
+      expect(events.some((event) => event.type === "message" && event.author.id === "charlie" && (event.body as any).text === "charlie response")).toBe(true);
+    } finally {
+      off();
+      await host.stop();
+    }
+  });
 });
