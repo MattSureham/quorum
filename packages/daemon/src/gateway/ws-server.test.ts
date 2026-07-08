@@ -2,6 +2,7 @@ import WebSocket from "ws";
 import { describe, it, expect } from "vitest";
 import { EventLog, InMemoryStore } from "@quorum/core";
 import type { ConductorPolicyConfig, Room } from "@quorum/protocol";
+import type { MemorySummary } from "@quorum/protocol";
 import { Gateway } from "./ws-server.js";
 
 const room: Room = {
@@ -120,6 +121,47 @@ describe("Gateway", () => {
       expect(message.eventCount).toBe(1);
       expect(message.projection.phase).toBe("collecting_bids");
       expect(message.projection.epoch).toBe(1);
+    } finally {
+      ws.close();
+      await gateway.close();
+    }
+  });
+
+  it("routes compact_memory and returns working-memory summaries", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const summary: MemorySummary = {
+      summaryId: "summary-1",
+      sessionId: "room",
+      sourceFromSeq: 1,
+      sourceToSeq: 2,
+      sourceHash: "hash",
+      model: "extractive-v1",
+      promptVersion: "working-memory-v1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      content: "memory",
+    };
+    let requested: { fromSeq?: number; toSeq?: number } | undefined;
+    const gateway = new Gateway({
+      log,
+      room,
+      humanId: "human",
+      setPolicy: () => {},
+      compactMemory: (fromSeq, toSeq) => {
+        requested = { fromSeq, toSeq };
+        log.persistWorkingMemorySummary(summary);
+        return summary;
+      },
+    }, 0);
+    await gateway.ready;
+    const ws = await connect(gateway.url());
+
+    try {
+      ws.send(JSON.stringify({ t: "compact_memory", roomId: "room", fromSeq: 1, toSeq: 2 }));
+      const message = await nextMessage(ws);
+      expect(requested).toEqual({ fromSeq: 1, toSeq: 2 });
+      expect(message.t).toBe("memory_compacted");
+      expect(message.summary.summaryId).toBe("summary-1");
+      expect(message.summaries).toHaveLength(1);
     } finally {
       ws.close();
       await gateway.close();

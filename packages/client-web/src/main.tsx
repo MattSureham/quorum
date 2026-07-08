@@ -11,6 +11,7 @@ import {
   GitCommitHorizontal,
   Hand,
   MessageSquare,
+  NotebookText,
   PauseCircle,
   PenLine,
   Plug,
@@ -35,6 +36,7 @@ import type {
   FloorReleaseBody,
   FloorRequestBody,
   MessageBody,
+  MemorySummary,
   ParticipantDescriptor,
   Room,
   RoomEvent,
@@ -51,6 +53,7 @@ type ServerMessage =
   | { t: "snapshot"; room: Room; events: RoomEvent[] }
   | { t: "event"; event: RoomEvent }
   | { t: "replay_projection"; afterSeq: number; headSeq: number; eventCount: number; projection: SharedSessionProjectionResult }
+  | { t: "memory_compacted"; summary?: MemorySummary; summaries: MemorySummary[] }
   | { t: "error"; text: string };
 
 interface SharedSessionProjectionResult {
@@ -277,6 +280,9 @@ function App() {
   const [composer, setComposer] = useState("");
   const [replayAfterSeq, setReplayAfterSeq] = useState("0");
   const [replayResult, setReplayResult] = useState<ServerMessage & { t: "replay_projection" }>();
+  const [memoryFromSeq, setMemoryFromSeq] = useState("0");
+  const [memoryToSeq, setMemoryToSeq] = useState("");
+  const [memorySummaries, setMemorySummaries] = useState<MemorySummary[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const lastSeqRef = useRef(0);
   const attemptRef = useRef(0);
@@ -367,6 +373,8 @@ function App() {
           setEvents((current) => ingest(mergeEvents(current, [message.event])));
         } else if (message.t === "replay_projection") {
           setReplayResult(message);
+        } else if (message.t === "memory_compacted") {
+          setMemorySummaries(message.summaries);
         } else if (message.t === "error") {
           setError(message.text);
         }
@@ -453,6 +461,14 @@ function App() {
     const afterSeq = Math.max(0, Number.parseInt(replayAfterSeq, 10) || 0);
     setReplayAfterSeq(String(afterSeq));
     send({ t: "replay_projection", afterSeq });
+  }
+
+  function compactMemory() {
+    const fromSeq = Math.max(0, Number.parseInt(memoryFromSeq, 10) || 0);
+    const parsedToSeq = Number.parseInt(memoryToSeq, 10);
+    const toSeq = Number.isFinite(parsedToSeq) && parsedToSeq >= 0 ? parsedToSeq : undefined;
+    setMemoryFromSeq(String(fromSeq));
+    send({ t: "compact_memory", fromSeq, toSeq });
   }
 
   function rollback(toHead: string) {
@@ -572,6 +588,17 @@ function App() {
                 disabled={!connected}
                 onAfterSeq={setReplayAfterSeq}
                 onReplay={replayProjection}
+              />
+            ) : null}
+            {shared.enabled ? (
+              <MemoryPanel
+                fromSeq={memoryFromSeq}
+                toSeq={memoryToSeq}
+                summaries={memorySummaries}
+                disabled={!connected}
+                onFromSeq={setMemoryFromSeq}
+                onToSeq={setMemoryToSeq}
+                onCompact={compactMemory}
               />
             ) : null}
             {approvals.length ? (
@@ -835,6 +862,58 @@ function ReplayPanel({
           <div><span>last</span><strong>{result.projection.lastTurnId?.slice(0, 8) ?? "none"}</strong></div>
         </div>
       ) : null}
+    </section>
+  );
+}
+
+function MemoryPanel({
+  fromSeq,
+  toSeq,
+  summaries,
+  disabled,
+  onFromSeq,
+  onToSeq,
+  onCompact,
+}: {
+  fromSeq: string;
+  toSeq: string;
+  summaries: MemorySummary[];
+  disabled: boolean;
+  onFromSeq: (value: string) => void;
+  onToSeq: (value: string) => void;
+  onCompact: () => void;
+}) {
+  const latest = summaries.at(-1);
+  return (
+    <section className="memory-panel">
+      <div className="memory-head">
+        <NotebookText size={15} />
+        <strong>Memory</strong>
+        <span>{summaries.length}</span>
+      </div>
+      <div className="memory-controls">
+        <label>
+          <span>from</span>
+          <input inputMode="numeric" value={fromSeq} onChange={(input) => onFromSeq(input.currentTarget.value)} />
+        </label>
+        <label>
+          <span>to</span>
+          <input inputMode="numeric" placeholder="head" value={toSeq} onChange={(input) => onToSeq(input.currentTarget.value)} />
+        </label>
+        <button type="button" disabled={disabled} onClick={onCompact}>
+          <NotebookText size={14} />
+          <span>Compact</span>
+        </button>
+      </div>
+      {latest ? (
+        <div className="memory-summary">
+          <div className="memory-meta">
+            <span>#{latest.sourceFromSeq}-#{latest.sourceToSeq}</span>
+            <strong>{latest.sourceHash.slice(0, 8)}</strong>
+          </div>
+          <pre>{latest.content}</pre>
+        </div>
+      ) : <div className="empty-row">No memory summaries</div>}
     </section>
   );
 }

@@ -2,6 +2,7 @@ import { createRequire } from "node:module";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { RoomEvent } from "@quorum/protocol";
+import type { MemorySummary } from "@quorum/protocol";
 import type { EventStore } from "@quorum/core";
 
 const require = createRequire(import.meta.url);
@@ -229,6 +230,32 @@ export class SqliteStore implements EventStore {
 
   close(): void {
     this.db.close();
+  }
+
+  persistWorkingMemorySummary(summary: MemorySummary): void {
+    this.db
+      .prepare(`
+        INSERT OR REPLACE INTO working_memory_summaries
+          (session_id, summary_id, from_seq, to_seq, hash, model, summary, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      .run(
+        summary.sessionId,
+        summary.summaryId,
+        summary.sourceFromSeq,
+        summary.sourceToSeq,
+        summary.sourceHash,
+        summary.model,
+        JSON.stringify(summary),
+        Date.parse(summary.createdAt) || Date.now(),
+      );
+  }
+
+  readWorkingMemorySummaries(sessionId: string): MemorySummary[] {
+    return this.db
+      .prepare("SELECT summary FROM working_memory_summaries WHERE session_id=? ORDER BY to_seq, summary_id")
+      .all(sessionId)
+      .map((row: any) => JSON.parse(row.summary) as MemorySummary);
   }
 
   private ensureSession(e: RoomEvent): void {

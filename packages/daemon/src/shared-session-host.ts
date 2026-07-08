@@ -46,6 +46,7 @@ export async function startSharedSessionRoom(
       authToken: opts.authToken,
       postMessage: (text, addressedTo) => session.submitUserPrompt(text, addressedTo),
       approveTool: (callId, allow) => session.approveTool(callId, allow),
+      compactMemory: (fromSeq, toSeq) => session.compactWorkingMemory(fromSeq, toSeq),
       setPolicy: () => {
         void log.append({
           author: { kind: "system", id: "session", display: "SessionManager" },

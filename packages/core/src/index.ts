@@ -4,6 +4,7 @@ export { Arbiter, type ArbitrationContext, type ArbitrationDecision, type Scored
 export { CommandMailbox } from "./command-mailbox.js";
 export { Conductor, type ConductorOptions } from "./conductor.js";
 export { LegacyAgentAdapter } from "./legacy-agent-adapter.js";
+export { createWorkingMemorySummary, type WorkingMemorySummaryOptions } from "./memory.js";
 export { SessionManager, type SessionManagerOptions, type SessionSnapshot } from "./session-manager.js";
 export { assertTransition, canTransition, projectSessionState, type ProjectedSessionState } from "./session-state.js";
 export { freeForAll, directed, makeModerated, type Moderator } from "./policies/index.js";

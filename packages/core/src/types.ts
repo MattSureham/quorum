@@ -1,5 +1,5 @@
 import type {
-  RoomEvent, EventType, EventAuthor, ParticipantDescriptor,
+  RoomEvent, EventType, EventAuthor, ParticipantDescriptor, MemorySummary,
   Capabilities, ConductorPolicyConfig, DiffStat,
 } from "@quorum/protocol";
 
@@ -9,6 +9,8 @@ export interface EventStore {
   persist(e: RoomEvent): void;
   read(roomId: string, sinceSeq?: number): RoomEvent[];
   maxSeq(roomId: string): number;
+  persistWorkingMemorySummary?(summary: MemorySummary): void;
+  readWorkingMemorySummaries?(sessionId: string): MemorySummary[];
 }
 
 // What callers hand to EventLog.append (seq/id/ts filled in by the log).

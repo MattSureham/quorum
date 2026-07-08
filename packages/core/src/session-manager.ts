@@ -5,6 +5,7 @@ import type {
   BidContext,
   ContextSnapshot,
   ISpeakerAgent,
+  MemorySummary,
   ParticipantDescriptor,
   RoomEvent,
   SessionPhase,
@@ -20,6 +21,7 @@ import { CommandMailbox } from "./command-mailbox.js";
 import { Arbiter, type ArbitrationDecision } from "./arbiter.js";
 import { assertTransition } from "./session-state.js";
 import { isRoomTool, normalizeToolName, runRoomTool } from "./room-tools.js";
+import { createWorkingMemorySummary } from "./memory.js";
 
 export interface SessionManagerOptions {
   sessionId: string;
@@ -131,6 +133,20 @@ export class SessionManager {
 
   async drain(): Promise<void> {
     await this.mailbox.drain();
+  }
+
+  async compactWorkingMemory(fromSeq = 0, toSeq = this.opts.log.headSeq): Promise<MemorySummary> {
+    return this.mailbox.enqueue("compactWorkingMemory", async () => {
+      const events = this.opts.log.replay(fromSeq).filter((event) => event.seq <= toSeq);
+      const summary = createWorkingMemorySummary({ sessionId: this.opts.sessionId, events });
+      this.opts.log.persistWorkingMemorySummary(summary);
+      await this.append("system", {
+        level: "info",
+        text: `working memory compacted: #${summary.sourceFromSeq}-#${summary.sourceToSeq}`,
+        memorySummary: summary,
+      }, "debug");
+      return summary;
+    });
   }
 
   approveTool(callId: string, allow: boolean): void {

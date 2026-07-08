@@ -41,6 +41,8 @@ implemented in `@quorum/core` as a parallel kernel:
   preserving the append-only event log as the source of truth.
 - `projectSessionState()` rebuilds the live shared-session projection from replayed
   events.
+- `createWorkingMemorySummary()` and `SessionManager.compactWorkingMemory()` provide
+  deterministic working-memory compaction, persisted through `SqliteStore`.
 - `@quorum/client-web` now projects shared-session events into a phase display,
   active speaker status, bid queue, selected speaker, and debug timeline.
 
@@ -69,6 +71,10 @@ Shared-session tool calls now have the approval loop wired through WebSocket
 The WebSocket gateway also exposes `replay_projection`, and the Web UI includes
 a Replay panel that rebuilds shared-session phase/speaker/bid state from a chosen
 event sequence.
+
+Working-memory summaries are now generated, persisted, triggerable through
+WebSocket `compact_memory`, and exposed in the Web UI Memory panel. Automatic
+compaction policy is still pending.
 
 Packaging status: developer one-command launch exists, and a local sidecar entry
 now exists at `packages/daemon/src/sidecar.ts`. It binds a random loopback port,

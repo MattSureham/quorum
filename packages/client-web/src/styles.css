@@ -749,6 +749,103 @@ h1 {
   background: #fbfcfc;
 }
 
+.memory-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #d8e1de;
+  border-radius: 8px;
+  background: #fbfcfc;
+}
+
+.memory-head,
+.memory-controls,
+.memory-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.memory-head strong {
+  color: #26322f;
+  font-size: 13px;
+  font-weight: 780;
+}
+
+.memory-head span {
+  margin-left: auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: #31554a;
+  background: #dcece6;
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.memory-controls {
+  align-items: end;
+}
+
+.memory-controls label {
+  min-width: 0;
+  flex: 1;
+}
+
+.memory-controls input {
+  height: 32px;
+}
+
+.memory-controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 96px;
+  min-height: 32px;
+  border-radius: 7px;
+  color: #ffffff;
+  background: #2f6f5b;
+  font-size: 12px;
+  font-weight: 740;
+  cursor: pointer;
+}
+
+.memory-controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.memory-summary {
+  padding: 8px;
+  border: 1px solid #e0e7e4;
+  border-radius: 7px;
+  background: #ffffff;
+}
+
+.memory-meta {
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.memory-meta span,
+.memory-meta strong {
+  color: #5e6f75;
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.memory-summary pre {
+  overflow: auto;
+  max-height: 120px;
+  margin: 0;
+  color: #26322f;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
 .replay-head,
 .replay-controls {
   display: flex;
@@ -1044,7 +1141,8 @@ h1 {
   }
 
   .debug-heading,
-  .debug-list {
+  .debug-list,
+  .memory-panel {
     display: none;
   }
 

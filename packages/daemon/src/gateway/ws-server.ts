@@ -3,6 +3,7 @@ import type { AddressInfo } from "node:net";
 import { ClientMessageSchema } from "@quorum/protocol/schema";
 import type { Room, ConductorPolicyConfig } from "@quorum/protocol";
 import { projectSessionState, type EventLog } from "@quorum/core";
+import type { MemorySummary } from "@quorum/protocol";
 
 export interface GatewayDeps {
   log: EventLog;
@@ -14,6 +15,7 @@ export interface GatewayDeps {
   postMessage?: (text: string, addressedTo?: string[]) => Promise<void> | void;
   /** Resolve a pending tool-approval request (approve_tool). */
   approveTool?: (callId: string, allow: boolean) => void;
+  compactMemory?: (fromSeq?: number, toSeq?: number) => Promise<MemorySummary | undefined> | MemorySummary | undefined;
   /** Let the human take the write floor to edit files directly (take_write_floor). */
   takeWriteFloor?: () => Promise<void> | void;
   /** Roll the workspace back to a prior head (rollback); destructive git reset. */
@@ -116,6 +118,21 @@ export class Gateway {
         }));
         break;
       }
+      case "compact_memory":
+        if (this.deps.compactMemory) {
+          void Promise.resolve(this.deps.compactMemory(m.fromSeq, m.toSeq)).then((summary) => {
+            ws.send(JSON.stringify({
+              t: "memory_compacted",
+              summary,
+              summaries: this.deps.log.readWorkingMemorySummaries(),
+            }));
+          }).catch((err) =>
+            ws.send(JSON.stringify({ t: "error", text: `compact_memory failed: ${err instanceof Error ? err.message : String(err)}` })),
+          );
+        } else {
+          ws.send(JSON.stringify({ t: "memory_compacted", summaries: this.deps.log.readWorkingMemorySummaries() }));
+        }
+        break;
       case "take_write_floor":
         void Promise.resolve(this.deps.takeWriteFloor?.()).catch(() => {});
         break;

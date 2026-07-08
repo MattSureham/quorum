@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import type { RoomEvent } from "@quorum/protocol";
+import type { MemorySummary, RoomEvent } from "@quorum/protocol";
 import { type EventStore, type AppendInput } from "./types.js";
 import { ulid } from "./ids.js";
 
@@ -59,5 +59,13 @@ export class EventLog {
 
   get headSeq(): number {
     return this.seq;
+  }
+
+  persistWorkingMemorySummary(summary: MemorySummary): void {
+    this.store.persistWorkingMemorySummary?.(summary);
+  }
+
+  readWorkingMemorySummaries(): MemorySummary[] {
+    return this.store.readWorkingMemorySummaries?.(this.roomId) ?? [];
   }
 }

@@ -245,4 +245,30 @@ describe("SessionManager", () => {
       await session.stop();
     }
   });
+
+  it("compacts replayed events into a persisted working-memory summary", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const session = new SessionManager({
+      sessionId: "room",
+      title: "Memory test",
+      log,
+      agents: [new StubSpeaker("agent", { confidence: 1, text: "answer" })],
+      settlingWindowMs: 20,
+      turnTimeoutMs: 1_000,
+    });
+
+    session.start();
+    try {
+      await session.submitUserPrompt("remember this");
+      await waitFor(() => log.replay(0).some((event) => event.type === "turn_completed"));
+      await session.compactWorkingMemory(0);
+
+      const summaries = log.readWorkingMemorySummaries();
+      expect(summaries).toHaveLength(1);
+      expect(summaries[0]?.content).toContain("remember this");
+      expect(log.replay(0).some((event) => event.type === "system" && (event.body as any).memorySummary?.summaryId === summaries[0]?.summaryId)).toBe(true);
+    } finally {
+      await session.stop();
+    }
+  });
 });

@@ -140,4 +140,31 @@ describe("SqliteStore", () => {
       reopened.close();
     }
   });
+
+  it("persists and reads working-memory summaries", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "quorum-sqlite-memory-"));
+    const dbPath = join(dir, "memory.sqlite");
+    const store = new SqliteStore(dbPath);
+    store.persistWorkingMemorySummary({
+      summaryId: "summary-1",
+      sessionId: "room",
+      sourceFromSeq: 1,
+      sourceToSeq: 3,
+      sourceHash: "abc",
+      model: "extractive-v1",
+      promptVersion: "working-memory-v1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      content: "summary",
+    });
+    store.close();
+
+    const reopened = new SqliteStore(dbPath);
+    try {
+      const summaries = reopened.readWorkingMemorySummaries("room");
+      expect(summaries).toHaveLength(1);
+      expect(summaries[0]).toMatchObject({ summaryId: "summary-1", content: "summary" });
+    } finally {
+      reopened.close();
+    }
+  });
 });
