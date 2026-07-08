@@ -48,7 +48,7 @@ What is already implemented:
 - Tests now cover SQLite projection tables, legacy event-table migration, replay projection, and a three-agent shared-session open discussion through queued bids.
 - Shared-session `AgentRuntime.callTool()` now has a human approval loop wired through `approve_tool`; it emits requested/granted/denied approval signals, executes approved safe room tools (`read_room`, `post_note`, `request_review`, `hand_off`, `raise_hand`), and records `tool_call` / `tool_result` events. External tools such as `Bash` are still denied after approval because the sandboxed execution backend is not wired yet.
 - WebSocket `replay_projection` returns a projected shared-session state from `afterSeq`, and the Web UI has a Replay panel for phase/speaker/bid-state checks.
-- Working-memory summaries can be created, persisted through `SqliteStore`, triggered through WebSocket `compact_memory`, and inspected in the Web UI Memory panel; automatic compaction policy is still pending.
+- Working-memory summaries can be created, persisted through `SqliteStore`, triggered through WebSocket `compact_memory`, inspected in the Web UI Memory panel, and automatically compacted after turns once configured event thresholds are reached.
 - Verification: `pnpm typecheck`, `pnpm test`, `pnpm --filter @quorum/client-web build`, `pnpm smoke:shared`, `pnpm smoke:sidecar`, `pnpm sidecar:node:smoke`, `pnpm sidecar:bun:smoke`, `pnpm desktop:check`, and `pnpm desktop:build` pass on macOS arm64.
 
 What is not implemented yet:
@@ -60,7 +60,7 @@ What is not implemented yet:
 - **Node-runtime fallback exists.** It is not a single binary, but `pnpm sidecar:node:build` creates a smoke-tested fallback artifact. Keep it as the fallback route if Bun compile regresses on another platform.
 - **Rust/Cargo exists only in the project-local toolchain.** Source `.tools/packaging-env.sh` before running direct Cargo/Tauri commands, or use `pnpm desktop:check`.
 - The Web UI now exposes the new shared-session phase and bid queue, but it is still a minimal projection. It does not yet provide full replay controls, policy tuning, rich arbitration score inspection, or memory inspection.
-- The sandboxed external tool execution backend, automatic memory compaction policy, full timeline replay UI, signed installer pipeline, updater, and cross-platform desktop validation remain follow-up work.
+- The sandboxed external tool execution backend, richer memory policy tuning UI, full timeline replay UI, signed installer pipeline, updater, and cross-platform desktop validation remain follow-up work.
 
 Recommended next task for the new agent:
 

@@ -271,4 +271,28 @@ describe("SessionManager", () => {
       await session.stop();
     }
   });
+
+  it("auto-compacts working memory after a turn crosses configured thresholds", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const session = new SessionManager({
+      sessionId: "room",
+      title: "Auto memory test",
+      log,
+      agents: [new StubSpeaker("agent", { confidence: 1, text: "auto answer" })],
+      settlingWindowMs: 20,
+      turnTimeoutMs: 1_000,
+      memory: { minSeqGap: 2, minEvents: 1, keepRecentEvents: 1 },
+    });
+
+    session.start();
+    try {
+      await session.submitUserPrompt("auto compact this");
+      await waitFor(() => log.readWorkingMemorySummaries().length === 1);
+      const summary = log.readWorkingMemorySummaries()[0]!;
+      expect(summary.content).toContain("auto compact this");
+      expect(log.replay(0).some((event) => event.type === "system" && (event.body as any).auto === true)).toBe(true);
+    } finally {
+      await session.stop();
+    }
+  });
 });

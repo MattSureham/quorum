@@ -21,12 +21,12 @@
 - 测试已覆盖 SQLite 派生表、旧 events 单表迁移、replay projection、三个 agent 通过 queued bids 进行开放讨论。
 - shared-session 的 `AgentRuntime.callTool()` 已接入人工审批闭环：会发出 requested/granted/denied approval signal，并通过 WebSocket `approve_tool` 返回结果。审批通过后已支持安全 room tools（`read_room`、`post_note`、`request_review`、`hand_off`、`raise_hand`），并记录 `tool_call` / `tool_result` 事件；`Bash` 等外部工具仍不会执行，因为沙箱执行后端还没接。
 - WebSocket 已提供 `replay_projection`，可从指定 `afterSeq` 重建 shared-session 投影；Web UI 已有 Replay 面板用于检查 phase/speaker/bid 状态。
-- 已实现 deterministic working-memory summary，可通过 `SessionManager.compactWorkingMemory()` 写入 `SqliteStore`，可通过 WebSocket `compact_memory` 触发，并可在 Web UI Memory 面板查看；自动压缩策略还没做。
+- 已实现 deterministic working-memory summary，可通过 `SessionManager.compactWorkingMemory()` 写入 `SqliteStore`，可通过 WebSocket `compact_memory` 触发，可在 Web UI Memory 面板查看，并会在 turn 结束后达到配置阈值时自动压缩。
 
 还没完成：
 - 发布级“一键安装”还没完成：没有签名/公证、没有 Windows installer 验证、没有 updater。
 - `pnpm desktop:build` 已能生成未签名的 macOS arm64 `.app` 和 `.dmg`；`.app` 内包含 `Contents/Resources/sidecars/quorum-sidecar`。
-- 沙箱化外部工具执行器、自动记忆压缩策略、完整 timeline replay UI、跨平台桌面验证仍是后续任务。
+- 沙箱化外部工具执行器、更完整的记忆策略调参 UI、完整 timeline replay UI、跨平台桌面验证仍是后续任务。
 
 当前建议验证命令：
 

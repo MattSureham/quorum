@@ -33,6 +33,12 @@ export interface SessionManagerOptions {
   settlingWindowMs?: number;
   turnTimeoutMs?: number;
   arbiter?: Arbiter;
+  memory?: {
+    autoCompact?: boolean;
+    minEvents?: number;
+    minSeqGap?: number;
+    keepRecentEvents?: number;
+  };
 }
 
 export interface SessionSnapshot {
@@ -64,6 +70,7 @@ export class SessionManager {
   private lastPrompt = "";
   private running = false;
   private readonly pendingToolApprovals = new Map<string, { tool: string; resolve: (allow: boolean) => void }>();
+  private lastCompactedSeq = 0;
 
   constructor(private readonly opts: SessionManagerOptions) {
     for (const agent of opts.agents) this.byId.set(agent.id, agent);
@@ -137,9 +144,7 @@ export class SessionManager {
 
   async compactWorkingMemory(fromSeq = 0, toSeq = this.opts.log.headSeq): Promise<MemorySummary> {
     return this.mailbox.enqueue("compactWorkingMemory", async () => {
-      const events = this.opts.log.replay(fromSeq).filter((event) => event.seq <= toSeq);
-      const summary = createWorkingMemorySummary({ sessionId: this.opts.sessionId, events });
-      this.opts.log.persistWorkingMemorySummary(summary);
+      const summary = this.createAndPersistWorkingMemorySummary(fromSeq, toSeq);
       await this.append("system", {
         level: "info",
         text: `working memory compacted: #${summary.sourceFromSeq}-#${summary.sourceToSeq}`,
@@ -147,6 +152,37 @@ export class SessionManager {
       }, "debug");
       return summary;
     });
+  }
+
+  private async maybeAutoCompactWorkingMemory(): Promise<void> {
+    if (this.opts.memory?.autoCompact === false) return;
+    const headSeq = this.opts.log.headSeq;
+    const minSeqGap = this.opts.memory?.minSeqGap ?? 80;
+    const minEvents = this.opts.memory?.minEvents ?? 40;
+    if (headSeq - this.lastCompactedSeq < minSeqGap) return;
+
+    const keepRecent = this.opts.memory?.keepRecentEvents ?? 20;
+    const toSeq = Math.max(0, headSeq - keepRecent);
+    if (toSeq <= this.lastCompactedSeq) return;
+
+    const events = this.opts.log.replay(this.lastCompactedSeq).filter((event) => event.seq <= toSeq);
+    if (events.length < minEvents) return;
+
+    const summary = this.createAndPersistWorkingMemorySummary(this.lastCompactedSeq, toSeq);
+    await this.append("system", {
+      level: "info",
+      text: `working memory auto-compacted: #${summary.sourceFromSeq}-#${summary.sourceToSeq}`,
+      memorySummary: summary,
+      auto: true,
+    }, "debug");
+  }
+
+  private createAndPersistWorkingMemorySummary(fromSeq: number, toSeq: number): MemorySummary {
+    const events = this.opts.log.replay(fromSeq).filter((event) => event.seq <= toSeq);
+    const summary = createWorkingMemorySummary({ sessionId: this.opts.sessionId, events });
+    this.opts.log.persistWorkingMemorySummary(summary);
+    this.lastCompactedSeq = Math.max(this.lastCompactedSeq, summary.sourceToSeq);
+    return summary;
   }
 
   approveTool(callId: string, allow: boolean): void {
@@ -293,6 +329,7 @@ export class SessionManager {
         const eventType = outcome === "done" ? "turn_completed" : outcome === "cancelled" ? "turn_cancelled" : "turn_failed";
         await this.append(eventType, { turnId, speakerId: agent.id, generation, offset });
         await this.append("floor_release", { turnId, reason: outcome === "done" ? "done" : outcome });
+        await this.maybeAutoCompactWorkingMemory();
         await this.transition("settling", { turnId, settlingWindowMs: this.opts.settlingWindowMs ?? 400 });
         void this.settleAndArbitrate();
       });

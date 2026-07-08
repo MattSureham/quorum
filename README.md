@@ -73,8 +73,8 @@ a Replay panel that rebuilds shared-session phase/speaker/bid state from a chose
 event sequence.
 
 Working-memory summaries are now generated, persisted, triggerable through
-WebSocket `compact_memory`, and exposed in the Web UI Memory panel. Automatic
-compaction policy is still pending.
+WebSocket `compact_memory`, exposed in the Web UI Memory panel, and automatically
+created after turns once the configured event thresholds are reached.
 
 Packaging status: developer one-command launch exists, and a local sidecar entry
 now exists at `packages/daemon/src/sidecar.ts`. It binds a random loopback port,
