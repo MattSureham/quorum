@@ -742,6 +742,7 @@ h1 {
 .shared-panel-head,
 .shared-kv,
 .bid-row,
+.score-row,
 .debug-row {
   display: flex;
   align-items: center;
@@ -771,6 +772,7 @@ h1 {
 }
 
 .shared-kv span,
+.score-row span,
 .bid-row span,
 .debug-row span,
 .empty-row {
@@ -797,13 +799,20 @@ h1 {
 }
 
 .bid-list,
+.score-grid,
 .debug-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
+.score-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .bid-row,
+.score-row,
 .debug-row,
 .empty-row {
   min-height: 34px;
@@ -811,6 +820,24 @@ h1 {
   border: 1px solid #d6e4e7;
   border-radius: 7px;
   background: #ffffff;
+}
+
+.score-row {
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.score-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.score-row strong {
+  color: #21333a;
+  font-size: 12px;
+  font-weight: 760;
+  font-variant-numeric: tabular-nums;
 }
 
 .bid-row {

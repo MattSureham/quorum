@@ -103,7 +103,7 @@ interface SharedSessionProjection {
   activeSpeaker?: string;
   activeTurnId?: string;
   pendingBids: Bid[];
-  selected?: { agentId?: string; score?: number; kind?: string };
+  selected?: { agentId?: string; score?: number; kind?: string; components?: Record<string, number> };
   lastCompleted?: string;
   debugEvents: RoomEvent[];
 }
@@ -198,7 +198,12 @@ function projectSharedSession(events: RoomEvent[]): SharedSessionProjection {
       const bid = winner?.bid as Bid | undefined;
       if (bid) {
         pending.delete(bid.bidId);
-        selected = { agentId: bid.agentId, score: winner.score, kind: bid.kind };
+        selected = {
+          agentId: bid.agentId,
+          score: typeof winner.score === "number" ? winner.score : undefined,
+          kind: bid.kind,
+          components: winner.components,
+        };
       }
     } else if (item.type === "turn_started") {
       const body = item.body as any;
@@ -703,6 +708,8 @@ function Metric({ icon, label, value }: { icon: React.ReactNode; label: string; 
 }
 
 function SharedSessionPanel({ shared }: { shared: SharedSessionProjection }) {
+  const scoreComponents = Object.entries(shared.selected?.components ?? {})
+    .filter(([, value]) => Number.isFinite(value));
   return (
     <section className="shared-panel shared-session-panel">
       <div className="shared-panel-head">
@@ -718,6 +725,19 @@ function SharedSessionPanel({ shared }: { shared: SharedSessionProjection }) {
         <span>selected</span>
         <strong>{shared.selected?.agentId ? `${shared.selected.agentId} · ${shared.selected.kind} · ${shared.selected.score?.toFixed(3) ?? "n/a"}` : "none"}</strong>
       </div>
+      {scoreComponents.length ? (
+        <>
+          <div className="mini-heading score-heading">Score components</div>
+          <div className="score-grid">
+            {scoreComponents.map(([name, value]) => (
+              <div key={name} className="score-row">
+                <span>{name}</span>
+                <strong>{value.toFixed(3)}</strong>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : null}
       <div className="mini-heading bid-heading">Bid queue</div>
       <div className="bid-list">
         {shared.pendingBids.length ? shared.pendingBids.map((bid) => (
