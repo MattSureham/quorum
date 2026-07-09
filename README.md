@@ -239,6 +239,11 @@ event stream. It reports submitted/waiting, bid collection, speaker selection,
 speaking, settling, completion, and stalled waits, so a silent session is visible
 as a specific phase rather than looking like the Send button did nothing.
 
+The central **Chat** transcript is intentionally message-only: it shows human
+prompts and agent/model replies. Floor grants, bids, thinking updates, tool
+events, checkpoints, and other operational records stay in the less prominent
+diagnostics/checkpoint panels so the primary surface does not read like a log.
+
 Direct API model agents also report configuration failures in the chat stream.
 For example, selecting DeepSeek without `DEEPSEEK_API_KEY` produces a visible
 agent message explaining the missing key instead of completing with no reply.

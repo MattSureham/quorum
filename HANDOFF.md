@@ -143,6 +143,10 @@ The following is the implementation trail from this session. It is written for t
     - Files: `packages/client-web/src/main.tsx`, `packages/cli/src/index.ts`, `quorum.config.json`, `README.md`, `HANDOFF.md`.
     - Work: renamed the built-in `claude-code` adapter participant from generic `Claude` to `Claude Code` in preview data, default config, and CLI fallback. This avoids presenting a local Claude Code agent as if it were an Anthropic API model. Future Anthropic API participants should use explicit model-facing names such as `Claude Sonnet` / `Claude Opus` and the `api-model` adapter.
 
+32. this change `fix: keep chat transcript message-only`
+    - Files: `packages/client-web/src/main.tsx`, `packages/client-web/src/styles.css`, `README.md`, `HANDOFF.md`.
+    - Work: changed the central Chat transcript to render only `message` events as clean chat bubbles for human prompts and agent/model replies. Operational events such as thinking, floor grants, bids, tool calls/results, phases, and checkpoints now stay in diagnostics/recent activity/checkpoint panels instead of cluttering the conversation.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:
@@ -269,6 +273,7 @@ SPEC.md       full design (Chinese): data model, Conductor state machine, adapte
 - **Session creation**: the Web UI Session setup modal calls `create_session`; the shared-session host keeps an in-memory multi-session registry and the gateway routes snapshots/events by room id. Remaining gaps: persist dynamically-created sessions across daemon restarts, add `delete/archive_session`, and implement a strict scheduler for `round-robin` / `按序陈述` instead of mapping it onto the current shared bid kernel.
 - **Session setup form state**: keep editable form state local to `SessionSetupModal`. Do not pass React event objects into function-style state updaters; copy `input.currentTarget.value` first, then update state with the plain value. Otherwise React can null `currentTarget` before the updater runs and the modal can crash while typing.
 - **Run visibility**: message sends should never appear silent. `packages/client-web/src/main.tsx` derives `RunStatus` from local submit time and room events; keep this banner updated when adding new phases or schedulers.
+- **Chat vs log**: the central Chat transcript should remain message-only. Keep non-message room/session events in diagnostics, recent activity, tool activity, memory, replay, or checkpoint panels; do not reintroduce raw event rows into the primary chat stream.
 - **API-model failures**: `packages/daemon/src/adapters/api-model.ts` must never silently complete on missing keys, HTTP errors, or empty model responses. It should emit a visible message so the run-status banner and transcript explain what happened.
 - **The room (agents, policy, workspace)**: still defined in `quorum.config.json` at the repo root (or `QUORUM_CONFIG=<path>`). `packages/cli/src/index.ts` loads it via `loadConfig()` and falls back to built-in defaults if the file is missing.
 - **Add an agent**: currently still add a `ParticipantDescriptor` to `participants[]` with an `adapter` + `adapterConfig`. `claude-code` needs the Agent SDK + Claude Code auth; `codex` needs the `codex` CLI on PATH; `api-model` is any OpenAI-compatible endpoint; `echo` is the built-in fake.

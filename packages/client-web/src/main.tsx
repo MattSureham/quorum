@@ -462,6 +462,8 @@ function App() {
   const displayRoom = room ?? previewRoom;
   const isPreview = status !== "connected";
   const displayEvents = isPreview ? previewEvents : events;
+  const chatEvents = displayEvents.filter((item) => item.type === "message");
+  const activityEvents = displayEvents.filter((item) => item.type !== "message");
   const participants = displayRoom.participants;
   const agents = participants.filter((participant) => participant.kind === "agent");
   const checkpoints = displayEvents.filter((item) => item.type === "checkpoint");
@@ -477,17 +479,6 @@ function App() {
     [connected, displayEvents, shared, lastSubmittedAt, now],
   );
 
-  const groupedTurns = useMemo(() => {
-    const turns = new Map<string, RoomEvent[]>();
-    for (const item of displayEvents) {
-      const key = item.turnId ?? "room";
-      const group = turns.get(key) ?? [];
-      group.push(item);
-      turns.set(key, group);
-    }
-    return turns;
-  }, [displayEvents]);
-
   useEffect(() => {
     saveSettings(settings);
   }, [settings]);
@@ -502,7 +493,7 @@ function App() {
   useEffect(() => {
     const el = feedRef.current;
     if (el && stickRef.current) el.scrollTop = el.scrollHeight;
-  }, [displayEvents.length]);
+  }, [chatEvents.length]);
 
   function onFeedScroll() {
     const el = feedRef.current;
@@ -884,12 +875,17 @@ function App() {
           <div className="section-heading">
             <MessageSquare size={17} />
             <span>Chat</span>
-            <small>{groupedTurns.size} groups</small>
+            <small>{chatEvents.length} messages</small>
           </div>
           <div className="event-feed" ref={feedRef} onScroll={onFeedScroll}>
-            {displayEvents.map((item) => (
-              <EventRow key={item.id} event={item} />
-            ))}
+            {chatEvents.length ? (
+              chatEvents.map((item) => <ChatMessageRow key={item.id} event={item} />)
+            ) : (
+              <div className="empty-chat">
+                <MessageSquare size={18} />
+                <span>No messages in this session yet.</span>
+              </div>
+            )}
           </div>
         </section>
 
@@ -1011,6 +1007,16 @@ function App() {
             <div className="tool-list">
               {displayEvents.filter((item) => item.type === "tool_call" || item.type === "tool_result" || item.type === "thinking").slice(-6).map((item) => (
                 <ToolRow key={item.id} event={item} />
+              ))}
+            </div>
+            <div className="section-heading compact">
+              <Activity size={16} />
+              <span>Recent Activity</span>
+              <ChevronDown size={15} />
+            </div>
+            <div className="activity-list">
+              {activityEvents.slice(-10).map((item) => (
+                <EventRow key={item.id} event={item} compact />
               ))}
             </div>
           </div>
@@ -1651,10 +1657,23 @@ function MemoryPanel({
   );
 }
 
-function EventRow({ event }: { event: RoomEvent }) {
+function ChatMessageRow({ event }: { event: RoomEvent }) {
+  const body = event.body as MessageBody;
+  return (
+    <article className={`chat-message-row ${event.author.kind}`}>
+      <div className="chat-message-meta">
+        <strong>{event.author.display}</strong>
+        <time>{new Date(event.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
+      </div>
+      <div className="chat-message-body">{body.text}</div>
+    </article>
+  );
+}
+
+function EventRow({ event, compact = false }: { event: RoomEvent; compact?: boolean }) {
   const Icon = iconFor(event.type);
   return (
-    <article className={`event-row ${event.author.kind} ${event.type}`}>
+    <article className={`event-row ${event.author.kind} ${event.type}${compact ? " compact" : ""}`}>
       <div className="event-icon"><Icon size={17} /></div>
       <div className="event-content">
         <div className="event-meta">
