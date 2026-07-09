@@ -87,6 +87,49 @@ describe("RoomHost", () => {
     expect((events[0]?.body as any).text).toBe("hello");
   });
 
+  it("reports missing API-model credentials as a visible message", async () => {
+    const oldKey = process.env.TEST_MISSING_MODEL_KEY;
+    delete process.env.TEST_MISSING_MODEL_KEY;
+    const participant = createParticipant({
+      id: "deepseek-v4-pro",
+      kind: "agent",
+      display: "DeepSeek V4 Pro",
+      adapter: "api-model",
+      adapterConfig: { model: "deepseek-chat", apiKeyEnv: "TEST_MISSING_MODEL_KEY", baseUrl: "https://api.deepseek.com/v1" },
+      status: "idle",
+    });
+
+    const events: RoomEvent[] = [];
+    try {
+      for await (const event of participant.takeTurn({
+        turnId: "turn",
+        roomTitle: "Room",
+        self: participant.descriptor,
+        participants: [participant.descriptor],
+        projection: [],
+        protocol: "",
+        signal: new AbortController().signal,
+      })) {
+        events.push({
+          id: "event",
+          roomId: "room",
+          seq: events.length + 1,
+          ts: 1,
+          author: participant.descriptor,
+          visibility: "room",
+          ...event,
+        });
+      }
+    } finally {
+      if (oldKey === undefined) delete process.env.TEST_MISSING_MODEL_KEY;
+      else process.env.TEST_MISSING_MODEL_KEY = oldKey;
+    }
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.type).toBe("message");
+    expect((events[0]?.body as any).text).toContain("missing API key env var TEST_MISSING_MODEL_KEY");
+  });
+
   it("runs an echo agent from room configuration", async () => {
     const dir = await mkdtemp(join(tmpdir(), "quorum-room-"));
     const room = testRoom(dir);

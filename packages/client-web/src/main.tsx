@@ -926,6 +926,10 @@ function App() {
 
         <section className="chat-composer">
           <RunStatusBanner status={runStatus} />
+          <div className="session-participant-summary">
+            <Bot size={14} />
+            <span>{agents.length ? `This session includes ${agents.map((agent) => agent.display).join(", ")}` : "No agents in this session"}</span>
+          </div>
           <div className="agent-targets">
             {agents.map((agent) => (
               <button
@@ -935,7 +939,8 @@ function App() {
                 onClick={() => toggleTarget(agent.id)}
               >
                 <Bot size={14} />
-                <span>{agent.id}</span>
+                <span>{agent.display}</span>
+                <small>{agent.id}</small>
               </button>
             ))}
           </div>

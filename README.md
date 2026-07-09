@@ -229,6 +229,10 @@ event stream. It reports submitted/waiting, bid collection, speaker selection,
 speaking, settling, completion, and stalled waits, so a silent session is visible
 as a specific phase rather than looking like the Send button did nothing.
 
+Direct API model agents also report configuration failures in the chat stream.
+For example, selecting DeepSeek without `DEEPSEEK_API_KEY` produces a visible
+agent message explaining the missing key instead of completing with no reply.
+
 ## Layout
 
 ```

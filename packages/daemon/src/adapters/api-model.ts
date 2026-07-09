@@ -31,6 +31,10 @@ export class ApiModelAdapter extends BaseAgentAdapter {
       const base = this.opts.baseUrl ?? process.env[`${envPrefix}_BASE_URL`] ?? "https://api.openai.com/v1";
       const model = this.opts.model ?? process.env[`${envPrefix}_MODEL`] ?? "gpt-4o-mini";
       const key = process.env[apiKeyEnv] ?? "";
+      if (!key) {
+        yield this.msg(`Cannot call ${this.descriptor.display}: missing API key env var ${apiKeyEnv}. Configure it in API keys, then start or retry the session.`);
+        return;
+      }
       const res = await fetch(`${base}/chat/completions`, {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
@@ -44,8 +48,13 @@ export class ApiModelAdapter extends BaseAgentAdapter {
         signal: ac.signal,
       });
       const data = (await res.json()) as any;
+      if (!res.ok) {
+        const detail = typeof data?.error?.message === "string" ? data.error.message : `HTTP ${res.status}`;
+        yield this.msg(`Cannot call ${this.descriptor.display}: ${detail}`);
+        return;
+      }
       const text: string = data?.choices?.[0]?.message?.content ?? "";
-      if (text) yield this.msg(text);
+      yield this.msg(text || `${this.descriptor.display} returned no text. Check the configured model/base URL for ${apiKeyEnv}.`);
     } finally {
       input.signal.removeEventListener("abort", onAbort);
     }

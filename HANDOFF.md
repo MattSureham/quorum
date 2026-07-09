@@ -131,6 +131,10 @@ The following is the implementation trail from this session. It is written for t
     - Files: `packages/client-web/src/main.tsx`, `packages/client-web/src/styles.css`, `README.md`, `HANDOFF.md`.
     - Work: added a run-status derivation from the current event stream plus local send timestamp. The Web UI now shows an Activity metric and composer banner for submitted, collecting bids, selecting speaker, speaking, settling, completed, failed, and stalled-wait states.
 
+29. this change `fix: show api model config failures`
+    - Files: `packages/daemon/src/adapters/api-model.ts`, `packages/daemon/src/room-host.test.ts`, `packages/client-web/src/main.tsx`, `packages/client-web/src/styles.css`, docs.
+    - Work: API-model agents now emit visible chat messages for missing API keys, HTTP errors, and empty provider responses instead of completing silently. Composer target chips now show agent display names plus ids, and the composer shows a session participant summary so users can confirm DeepSeek/MiniMax/etc. are actually in the active session.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:
@@ -256,6 +260,7 @@ SPEC.md       full design (Chinese): data model, Conductor state machine, adapte
 - **Agent/model config**: the Web UI right sidebar should be agent/model oriented. Users select or configure participants such as `codex`, `claude-code`, OpenClaw-style adapters, or direct API model agents such as DeepSeek/GLM/MiniMax. Provider credentials are only hidden credential sources for API-model agents; do not put API key inputs directly in the persistent sidebar. The credential modal has built-in presets for OpenAI, DeepSeek, Zhipu, MiniMax, and Anthropic, and must support custom providers beyond presets. Credentials are persisted locally in SQLite and applied to daemon `process.env`; the browser only receives masked previews.
 - **Session creation**: the Web UI Session setup modal calls `create_session`; the shared-session host keeps an in-memory multi-session registry and the gateway routes snapshots/events by room id. Remaining gaps: persist dynamically-created sessions across daemon restarts, add `delete/archive_session`, and implement a strict scheduler for `round-robin` / `按序陈述` instead of mapping it onto the current shared bid kernel.
 - **Run visibility**: message sends should never appear silent. `packages/client-web/src/main.tsx` derives `RunStatus` from local submit time and room events; keep this banner updated when adding new phases or schedulers.
+- **API-model failures**: `packages/daemon/src/adapters/api-model.ts` must never silently complete on missing keys, HTTP errors, or empty model responses. It should emit a visible message so the run-status banner and transcript explain what happened.
 - **The room (agents, policy, workspace)**: still defined in `quorum.config.json` at the repo root (or `QUORUM_CONFIG=<path>`). `packages/cli/src/index.ts` loads it via `loadConfig()` and falls back to built-in defaults if the file is missing.
 - **Add an agent**: currently still add a `ParticipantDescriptor` to `participants[]` with an `adapter` + `adapterConfig`. `claude-code` needs the Agent SDK + Claude Code auth; `codex` needs the `codex` CLI on PATH; `api-model` is any OpenAI-compatible endpoint; `echo` is the built-in fake.
 - **Moderator model**: `packages/daemon/src/moderator.ts`. Configured via `policy.moderatorModel` / `QUORUM_MODERATOR_MODEL` (default `gpt-4o-mini`) / `QUORUM_MODERATOR_BASE_URL`, key from `OPENAI_API_KEY`. Degrades to "yield to human" on any failure.

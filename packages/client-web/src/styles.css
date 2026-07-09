@@ -1141,6 +1141,20 @@ h1 {
   gap: 7px;
 }
 
+.session-participant-summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
+  color: #53635e;
+  font-size: 12px;
+  font-weight: 680;
+}
+
+.session-participant-summary svg {
+  color: #3b7f68;
+}
+
 .composer-panel {
   position: sticky;
   top: 0;
@@ -1166,6 +1180,12 @@ h1 {
   color: #3e4b47;
   background: #ffffff;
   cursor: pointer;
+}
+
+.target-chip small {
+  color: #66746f;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .target-chip.selected {
