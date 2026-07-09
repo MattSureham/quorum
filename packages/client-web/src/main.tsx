@@ -55,6 +55,8 @@ type SessionMode = "open-discussion" | "raise-hand" | "round-robin";
 type ServerMessage =
   | { t: "snapshot"; room: Room; events: RoomEvent[] }
   | { t: "event"; event: RoomEvent }
+  | { t: "sessions"; rooms: Room[] }
+  | { t: "session_created"; room: Room; rooms: Room[] }
   | { t: "replay_projection"; afterSeq: number; headSeq: number; eventCount: number; projection: SharedSessionProjectionResult }
   | { t: "memory_compacted"; summary?: MemorySummary; summaries: MemorySummary[] }
   | { t: "credentials"; providers: ProviderConfigView[] }
@@ -216,6 +218,44 @@ function mergeEvents(current: RoomEvent[], incoming: RoomEvent[]): RoomEvent[] {
   return [...byId.values()].sort((a, b) => a.seq - b.seq);
 }
 
+function upsertRoom(current: Room[], room: Room): Room[] {
+  const next = current.filter((item) => item.id !== room.id);
+  next.push(room);
+  return next.sort((a, b) => a.createdAt - b.createdAt);
+}
+
+function participantFromPreset(id: string): ParticipantDescriptor | undefined {
+  const preset = agentModelPresets.find((item) => item.id === id);
+  if (!preset) return undefined;
+  const credential = preset.providerId ? credentialPresets.find((item) => item.providerId === preset.providerId) : undefined;
+  const adapterConfig: Record<string, unknown> = {};
+  if (preset.id === "codex") adapterConfig.sandbox = "workspace-write";
+  if (preset.id === "claude-code") adapterConfig.permissionMode = "bypassPermissions";
+  if (preset.adapter === "api-model") {
+    if (credential?.model) adapterConfig.model = credential.model;
+    if (credential?.envVar) adapterConfig.apiKeyEnv = credential.envVar;
+    if (credential?.baseUrl) adapterConfig.baseUrl = credential.baseUrl;
+  }
+  return {
+    id,
+    kind: "agent",
+    display: preset.display,
+    adapter: preset.adapter,
+    adapterConfig,
+    status: "idle",
+  };
+}
+
+function buildSessionParticipants(draft: SessionDraft, currentRoom: Room): ParticipantDescriptor[] {
+  const participants: ParticipantDescriptor[] = [{ id: "human", kind: "human", display: "You", status: "idle" }];
+  for (const id of draft.participantIds) {
+    const existing = currentRoom.participants.find((participant) => participant.id === id && participant.kind === "agent");
+    const participant = existing ?? participantFromPreset(id);
+    if (participant && !participants.some((item) => item.id === participant.id)) participants.push({ ...participant, status: "idle" });
+  }
+  return participants;
+}
+
 // Latest approval state per callId; the UI shows a prompt for any still "requested".
 function pendingApprovals(events: RoomEvent[]): ApprovalSignal[] {
   const latest = new Map<string, ApprovalSignal>();
@@ -341,6 +381,7 @@ function App() {
   const [status, setStatus] = useState<ConnectionState>("idle");
   const [error, setError] = useState<string>("");
   const [room, setRoom] = useState<Room | undefined>();
+  const [rooms, setRooms] = useState<Room[]>([]);
   const [events, setEvents] = useState<RoomEvent[]>([]);
   const [selectedTargets, setSelectedTargets] = useState<string[]>([]);
   const [composer, setComposer] = useState("");
@@ -434,6 +475,7 @@ function App() {
         attemptRef.current = 0;
         setStatus("connected");
         setError(""); // clear any stale failure from a prior attempt
+        socket.send(JSON.stringify({ t: "list_sessions", roomId: next.roomId }));
         socket.send(JSON.stringify({ t: "subscribe", roomId: next.roomId, sinceSeq: lastSeqRef.current }));
         socket.send(JSON.stringify({ t: "get_credentials", roomId: next.roomId }));
       });
@@ -441,9 +483,21 @@ function App() {
         const message = JSON.parse(String(raw.data)) as ServerMessage;
         if (message.t === "snapshot") {
           setRoom(message.room);
+          setRooms((current) => upsertRoom(current, message.room));
           setEvents((current) => ingest(mergeEvents(current, message.events)));
         } else if (message.t === "event") {
           setEvents((current) => ingest(mergeEvents(current, [message.event])));
+        } else if (message.t === "sessions") {
+          setRooms(message.rooms);
+        } else if (message.t === "session_created") {
+          setRooms(message.rooms);
+          setRoom(message.room);
+          setEvents([]);
+          lastSeqRef.current = 0;
+          const nextSettings = { ...next, roomId: message.room.id };
+          setSettings(nextSettings);
+          setDraftSettings(nextSettings);
+          socket.send(JSON.stringify({ t: "subscribe", roomId: message.room.id, sinceSeq: 0 }));
         } else if (message.t === "replay_projection") {
           setReplayResult(message);
         } else if (message.t === "memory_compacted") {
@@ -507,10 +561,44 @@ function App() {
     connect(draftSettings, false);
   }
 
+  function switchSession(roomId: string) {
+    const next = { ...settings, roomId };
+    setSettings(next);
+    setDraftSettings(next);
+    setEvents([]);
+    setSelectedTargets([]);
+    lastSeqRef.current = 0;
+    send({ t: "subscribe", roomId, sinceSeq: 0 });
+  }
+
   function send(payload: Record<string, unknown>): boolean {
     if (status !== "connected" || !wsRef.current) return false;
     wsRef.current.send(JSON.stringify({ roomId: settings.roomId, ...payload }));
     return true;
+  }
+
+  function createSessionFromDraft() {
+    const id = sessionDraft.roomId.trim();
+    if (!id) {
+      setError("Session id is required");
+      return;
+    }
+    const participants = buildSessionParticipants(sessionDraft, displayRoom);
+    if (!participants.some((participant) => participant.kind === "agent")) {
+      setError("Select at least one agent/model");
+      return;
+    }
+    if (send({
+      t: "create_session",
+      session: {
+        id,
+        title: sessionDraft.title.trim() || id,
+        mode: sessionDraft.mode,
+        participants,
+      },
+    })) {
+      setSessionSetupOpen(false);
+    }
   }
 
   function sendMessage() {
@@ -638,6 +726,17 @@ function App() {
     }));
   }
 
+  function openSessionSetup() {
+    const nextId = `session-${Date.now().toString(36)}`;
+    setSessionDraft({
+      roomId: nextId,
+      title: "New session",
+      mode: "open-discussion",
+      participantIds: agents.map((agent) => agent.id),
+    });
+    setSessionSetupOpen(true);
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar session-sidebar">
@@ -654,15 +753,22 @@ function App() {
             <MessageSquare size={16} />
             <span>Sessions</span>
           </div>
-          <button className="room-list-item active" type="button">
-            <span>{displayRoom.title}</span>
-            <strong>{displayRoom.id}</strong>
-          </button>
-          <button className="secondary-action full-width-action" type="button" onClick={() => setSessionSetupOpen(true)}>
+          {(rooms.length ? rooms : [displayRoom]).map((item) => (
+            <button
+              key={item.id}
+              className={item.id === displayRoom.id ? "room-list-item active" : "room-list-item"}
+              type="button"
+              disabled={item.id === displayRoom.id}
+              onClick={() => switchSession(item.id)}
+            >
+              <span>{item.title}</span>
+              <strong>{item.id}</strong>
+            </button>
+          ))}
+          <button className="secondary-action full-width-action" type="button" onClick={openSessionSetup}>
             <Plus size={15} />
             <span>New session</span>
           </button>
-          <div className="muted-note">Creating real sessions needs the next backend SessionRegistry step.</div>
         </section>
 
         <section className="panel connection-panel">
@@ -874,6 +980,8 @@ function App() {
           currentRoom={displayRoom}
           onChange={setSessionDraft}
           onToggleParticipant={toggleSessionDraftParticipant}
+          onStart={createSessionFromDraft}
+          connected={connected}
           onClose={() => setSessionSetupOpen(false)}
         />
       ) : null}
@@ -1083,14 +1191,18 @@ function CredentialsModal({
 function SessionSetupModal({
   draft,
   currentRoom,
+  connected,
   onChange,
   onToggleParticipant,
+  onStart,
   onClose,
 }: {
   draft: SessionDraft;
   currentRoom: Room;
+  connected: boolean;
   onChange: React.Dispatch<React.SetStateAction<SessionDraft>>;
   onToggleParticipant: (id: string) => void;
+  onStart: () => void;
   onClose: () => void;
 }) {
   const currentAgentIds = new Set(currentRoom.participants.filter((participant) => participant.kind === "agent").map((participant) => participant.id));
@@ -1129,7 +1241,7 @@ function SessionSetupModal({
               <MessageSquare size={16} />
               <span>Session setup</span>
             </div>
-            <p>Use this flow to define the intended session. Starting it from the UI requires the backend SessionRegistry work listed below.</p>
+            <p>Choose participants and a discussion mode, then start a new shared session.</p>
           </div>
           <button type="button" className="icon-action" onClick={onClose} aria-label="Close session setup">
             <XCircle size={18} />
@@ -1187,13 +1299,15 @@ function SessionSetupModal({
           </section>
         </div>
 
-        <div className="inline-alert session-setup-alert">
-          <AlertTriangle size={14} />
-          <span>Not wired yet: the daemon still hosts one config-backed room. Next backend step is a SessionRegistry that can create rooms, persist rosters, and route events by room id.</span>
-        </div>
+        {draft.mode === "round-robin" ? (
+          <div className="inline-alert session-setup-alert">
+            <AlertTriangle size={14} />
+            <span>Round-robin sessions can be created now, but strict ordered speaking still needs a dedicated scheduler. Current execution uses the shared-session bid kernel.</span>
+          </div>
+        ) : null}
         <div className="credential-modal-actions">
           <button type="button" className="secondary-action" onClick={onClose}>Close</button>
-          <button type="button" className="primary-action" disabled title="Requires backend SessionRegistry">Start session</button>
+          <button type="button" className="primary-action" disabled={!connected} onClick={onStart}>Start session</button>
         </div>
       </section>
     </div>

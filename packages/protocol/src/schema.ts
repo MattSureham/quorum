@@ -3,6 +3,16 @@
 // stays dependency-free. Requires `zod` (install before use).
 import { z } from "zod";
 
+const ParticipantDescriptorSchema = z.object({
+  id: z.string(),
+  kind: z.enum(["human", "agent", "system"]),
+  display: z.string(),
+  adapter: z.string().optional(),
+  adapterConfig: z.record(z.unknown()).optional(),
+  persona: z.string().optional(),
+  status: z.enum(["idle", "thinking", "active", "offline"]),
+});
+
 export const SessionPhaseSchema = z.enum([
   "idle",
   "collecting_bids",
@@ -53,6 +63,17 @@ export const SessionEventSchema = z.object({
 });
 
 export const ClientMessageSchema = z.discriminatedUnion("t", [
+  z.object({ t: z.literal("list_sessions"), roomId: z.string().optional() }),
+  z.object({
+    t: z.literal("create_session"),
+    roomId: z.string().optional(),
+    session: z.object({
+      id: z.string(),
+      title: z.string(),
+      mode: z.enum(["open-discussion", "raise-hand", "round-robin"]),
+      participants: z.array(ParticipantDescriptorSchema),
+    }),
+  }),
   z.object({ t: z.literal("subscribe"), roomId: z.string(), sinceSeq: z.number().optional() }),
   z.object({ t: z.literal("post_message"), roomId: z.string(), text: z.string(), addressedTo: z.array(z.string()).optional() }),
   z.object({ t: z.literal("interrupt"), roomId: z.string(), hard: z.boolean().optional() }),

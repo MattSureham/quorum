@@ -121,7 +121,11 @@ The following is the implementation trail from this session. It is written for t
 
 26. this change `feat: surface session setup flow`
     - Files: `packages/client-web/src/main.tsx`, `packages/client-web/src/styles.css`, `README.md`, `HANDOFF.md`.
-    - Work: added a left-sidebar New session entry and Session setup modal. The modal exposes participant selection, session id/title fields, and three intended modes: open discussion, raise-hand/抢麦, and round-robin/按序陈述. Start is intentionally disabled because the backend is still a single config-backed room.
+    - Work: added a left-sidebar New session entry and Session setup modal. The modal exposes participant selection, session id/title fields, and three intended modes: open discussion, raise-hand/抢麦, and round-robin/按序陈述. In the initial UI-only step Start was disabled; the next entry wires it to the backend.
+
+27. this change `feat: create sessions from web ui`
+    - Files: `packages/protocol/src/types.ts`, `packages/protocol/src/schema.ts`, `packages/daemon/src/gateway/ws-server.ts`, `packages/daemon/src/shared-session-host.ts`, `packages/daemon/src/shared-session-host.test.ts`, `packages/client-web/src/main.tsx`, docs.
+    - Work: added `list_sessions` and `create_session`, changed the gateway to register and route multiple session deps by room id, added an in-memory shared-session registry that creates a new `SessionManager` per requested room, and wired the Web UI Start session button to create and subscribe to the new session.
 
 What is already implemented:
 
@@ -246,7 +250,7 @@ SPEC.md       full design (Chinese): data model, Conductor state machine, adapte
 
 ## Where to change common things
 - **Agent/model config**: the Web UI right sidebar should be agent/model oriented. Users select or configure participants such as `codex`, `claude-code`, OpenClaw-style adapters, or direct API model agents such as DeepSeek/GLM/MiniMax. Provider credentials are only hidden credential sources for API-model agents; do not put API key inputs directly in the persistent sidebar. The credential modal has built-in presets for OpenAI, DeepSeek, Zhipu, MiniMax, and Anthropic, and must support custom providers beyond presets. Credentials are persisted locally in SQLite and applied to daemon `process.env`; the browser only receives masked previews.
-- **Session creation gap**: the Web UI now has a Session setup modal, but Start is disabled. The daemon/gateway still host one `Room` loaded from config; `subscribe(roomId)` does not switch hosts. Next backend task is a `SessionRegistry`/multi-room host: create a room from selected participant ids + mode, persist it, expose `list_sessions/create_session`, and route snapshots/events per session id.
+- **Session creation**: the Web UI Session setup modal calls `create_session`; the shared-session host keeps an in-memory multi-session registry and the gateway routes snapshots/events by room id. Remaining gaps: persist dynamically-created sessions across daemon restarts, add `delete/archive_session`, and implement a strict scheduler for `round-robin` / `按序陈述` instead of mapping it onto the current shared bid kernel.
 - **The room (agents, policy, workspace)**: still defined in `quorum.config.json` at the repo root (or `QUORUM_CONFIG=<path>`). `packages/cli/src/index.ts` loads it via `loadConfig()` and falls back to built-in defaults if the file is missing.
 - **Add an agent**: currently still add a `ParticipantDescriptor` to `participants[]` with an `adapter` + `adapterConfig`. `claude-code` needs the Agent SDK + Claude Code auth; `codex` needs the `codex` CLI on PATH; `api-model` is any OpenAI-compatible endpoint; `echo` is the built-in fake.
 - **Moderator model**: `packages/daemon/src/moderator.ts`. Configured via `policy.moderatorModel` / `QUORUM_MODERATOR_MODEL` (default `gpt-4o-mini`) / `QUORUM_MODERATOR_BASE_URL`, key from `OPENAI_API_KEY`. Degrades to "yield to human" on any failure.

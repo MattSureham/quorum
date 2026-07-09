@@ -1,7 +1,7 @@
 import { EventLog, LegacyAgentAdapter, SessionManager } from "@quorum/core";
-import type { Room } from "@quorum/protocol";
+import type { CreateSessionInput, ParticipantDescriptor, Room, SessionMode } from "@quorum/protocol";
 import { createParticipant } from "./adapters/registry.js";
-import { Gateway } from "./gateway/ws-server.js";
+import { Gateway, type GatewaySessionDeps } from "./gateway/ws-server.js";
 import { SqliteStore } from "./persistence/sqlite-store.js";
 import { createLocalSandboxToolExecutor } from "./tools/local-sandbox-executor.js";
 
@@ -10,6 +10,25 @@ export interface SharedSessionHost {
   session: SessionManager;
   gateway: Gateway;
   stop(): Promise<void>;
+}
+
+interface ManagedSharedSession {
+  room: Room;
+  log: EventLog;
+  session: SessionManager;
+  gatewayDeps: GatewaySessionDeps;
+}
+
+function policyForMode(mode: SessionMode, base: Room["policy"]): Room["policy"] {
+  if (mode === "raise-hand") return { ...base, name: "free-for-all", noConsecutive: true };
+  if (mode === "round-robin") return { ...base, name: "directed", noConsecutive: true };
+  return { ...base, name: "free-for-all" };
+}
+
+function ensureHuman(participants: ParticipantDescriptor[]): ParticipantDescriptor[] {
+  return participants.some((participant) => participant.kind === "human")
+    ? participants
+    : [{ id: "human", kind: "human", display: "You", status: "idle" }, ...participants];
 }
 
 /**
@@ -22,32 +41,34 @@ export async function startSharedSessionRoom(
 ): Promise<SharedSessionHost> {
   const store = new SqliteStore(opts.dbPath);
   store.applyProviderConfigsToEnv();
-  const log = new EventLog(room.id, store);
-  const participants = room.participants
-    .filter((participant) => participant.kind === "agent")
-    .map(createParticipant);
-  const agents = participants.map((participant) => new LegacyAgentAdapter(participant));
-  const humans = room.participants.filter((participant) => participant.kind === "human");
+  const managed = new Map<string, ManagedSharedSession>();
 
-  const session = new SessionManager({
-    sessionId: room.id,
-    title: room.title,
-    log,
-    agents,
-    humans,
-    workspacePath: room.workspacePath,
-    toolExecutor: room.workspacePath ? createLocalSandboxToolExecutor({ workspacePath: room.workspacePath }) : undefined,
-    settlingWindowMs: 400,
-    turnTimeoutMs: room.policy.turnDeadlineMs,
-  });
-  session.start();
+  function createManaged(nextRoom: Room): ManagedSharedSession {
+    const existing = managed.get(nextRoom.id);
+    if (existing) return existing;
+    const log = new EventLog(nextRoom.id, store);
+    const participants = nextRoom.participants
+      .filter((participant) => participant.kind === "agent")
+      .map(createParticipant);
+    const agents = participants.map((participant) => new LegacyAgentAdapter(participant));
+    const humans = nextRoom.participants.filter((participant) => participant.kind === "human");
 
-  const gateway = new Gateway(
-    {
+    const session = new SessionManager({
+      sessionId: nextRoom.id,
+      title: nextRoom.title,
       log,
-      room,
+      agents,
+      humans,
+      workspacePath: nextRoom.workspacePath,
+      toolExecutor: nextRoom.workspacePath ? createLocalSandboxToolExecutor({ workspacePath: nextRoom.workspacePath }) : undefined,
+      settlingWindowMs: 400,
+      turnTimeoutMs: nextRoom.policy.turnDeadlineMs,
+    });
+    session.start();
+    const gatewayDeps: GatewaySessionDeps = {
+      log,
+      room: nextRoom,
       humanId: humans[0]?.id,
-      authToken: opts.authToken,
       postMessage: (text, addressedTo) => session.submitUserPrompt(text, addressedTo),
       interrupt: (hard) => session.interrupt("human", hard),
       approveTool: (callId, allow) => session.approveTool(callId, allow),
@@ -62,17 +83,46 @@ export async function startSharedSessionRoom(
           visibility: "system",
         });
       },
+    };
+    const created = { room: nextRoom, log, session, gatewayDeps };
+    managed.set(nextRoom.id, created);
+    return created;
+  }
+
+  const primary = createManaged(room);
+
+  const gateway = new Gateway(
+    {
+      ...primary.gatewayDeps,
+      authToken: opts.authToken,
+      listCredentials: () => store.readProviderConfigViews(),
+      setCredential: (input) => store.upsertProviderConfig(input),
+      listSessions: () => [...managed.values()].map((item) => item.room),
+      createSession: (input: CreateSessionInput) => {
+        if (managed.has(input.id)) throw new Error(`session already exists: ${input.id}`);
+        const nextRoom: Room = {
+          id: input.id,
+          title: input.title || input.id,
+          workspacePath: room.workspacePath,
+          branch: room.branch,
+          primary: input.participants.find((participant) => participant.kind === "agent")?.id,
+          policy: policyForMode(input.mode, room.policy),
+          participants: ensureHuman(input.participants),
+          createdAt: Date.now(),
+        };
+        return createManaged(nextRoom).gatewayDeps;
+      },
     },
     opts.port,
   );
   await gateway.ready;
 
   return {
-    log,
-    session,
+    log: primary.log,
+    session: primary.session,
     gateway,
     async stop() {
-      await session.stop();
+      await Promise.all([...managed.values()].map((item) => item.session.stop()));
       await gateway.close();
       store.close();
     },

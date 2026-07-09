@@ -207,25 +207,22 @@ QUORUM_SESSION_KERNEL=shared pnpm dev
 Then open `http://127.0.0.1:5173`, use **Configure API keys** only if direct API
 model agents need credentials, and send a room message.
 
-Current limitation: the Web UI surfaces agent/model choices, but the actual room
-roster is still loaded from config. Dynamic add/remove of agents from the UI
-needs a backend room-config route before it should be considered complete.
-
 ## Sessions and Modes
 
-The Web UI now exposes the intended session setup flow from the left **Sessions**
-panel via **New session**. The setup modal shows:
+The Web UI exposes session setup from the left **Sessions** panel via **New
+session**. The setup modal supports:
 
 - participant selection by agent/model, including current room agents and
   available model-agent presets
 - session creation fields (`Session id`, `Title`)
 - mode selection for `自由讨论`, `抢麦/举手`, and `按序陈述`
 
-This is a visible planning surface, not a live backend operation yet. The daemon
-still runs a single config-backed room, and `subscribe(roomId)` is served by the
-current host. To make **Start session** real, implement a backend
-`SessionRegistry` that can create rooms, persist selected participants/mode, and
-route gateway events by session id.
+`Start session` now calls the daemon `create_session` route. The shared-session
+host keeps an in-memory multi-session registry, creates a new `SessionManager`
+for the selected roster, and the gateway routes `subscribe/post_message` by
+session id. Current limitation: dynamically-created sessions are not persisted
+across daemon restarts yet, and `按序陈述` currently creates a session but still
+executes on the shared bid kernel until a strict round-robin scheduler is added.
 
 ## Layout
 

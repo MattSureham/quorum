@@ -100,6 +100,15 @@ export interface Room {
   createdAt: number;
 }
 
+export type SessionMode = "open-discussion" | "raise-hand" | "round-robin";
+
+export interface CreateSessionInput {
+  id: string;
+  title: string;
+  mode: SessionMode;
+  participants: ParticipantDescriptor[];
+}
+
 export interface Turn {
   id: string;
   roomId: string;
