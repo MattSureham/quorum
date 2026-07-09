@@ -87,10 +87,16 @@ The Web UI is organized around the primary workflow: session selection on the
 left, the chat/session stream in the center, and participant plus agent/model
 configuration on the right. The right panel is agent/model-oriented: Codex,
 Claude Code, OpenClaw-style adapters, and direct API model agents such as
-DeepSeek/GLM are the user-facing units. Provider credentials are only hidden
+DeepSeek/GLM/MiniMax are the user-facing units. Provider credentials are only hidden
 credential sources for API-model agents; they are not webchat sessions and are
 not shown as the primary selection surface. Diagnostics such as replay, memory,
 tools, and checkpoints are collapsed so they do not dominate normal use.
+
+The built-in Claude-family local agent is named **Claude Code** because it uses
+the `claude-code` adapter and local Claude Code auth/session. Anthropic API
+models should be added as explicit API-model participants, for example a
+`Claude Sonnet` or `Claude Opus` preset, not as a generic `Claude` participant
+that secretly maps to the Claude Code adapter.
 
 Working-memory summaries are now generated, persisted, triggerable through
 WebSocket `compact_memory`, exposed in the Web UI Memory panel, and automatically

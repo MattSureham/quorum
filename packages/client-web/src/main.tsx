@@ -152,11 +152,11 @@ const previewRoom: Room = {
   title: "Quorum",
   workspacePath: "/Users/matthew/Projects/quorum",
   branch: "main",
-  primary: "claude",
+  primary: "claude-code",
   policy: { name: "free-for-all", maxTurnsPerTopic: 6, noConsecutive: true, turnDeadlineMs: 180_000 },
   participants: [
     { id: "matt", kind: "human", display: "You", status: "idle" },
-    { id: "claude", kind: "agent", display: "Claude", adapter: "claude-code", status: "active" },
+    { id: "claude-code", kind: "agent", display: "Claude Code", adapter: "claude-code", status: "active" },
     { id: "codex", kind: "agent", display: "Codex", adapter: "codex", status: "idle" },
     { id: "echo", kind: "agent", display: "Echo", adapter: "echo", status: "idle" },
   ],
@@ -165,9 +165,9 @@ const previewRoom: Room = {
 
 const previewEvents: RoomEvent[] = [
   event(1, "matt", "You", "human", "message", { text: "Review the daemon and make the UI easier to run." }),
-  event(2, "conductor", "Conductor", "system", "floor_grant", { participantId: "claude", turnId: "turn-1", reason: "open floor" }),
-  event(3, "claude", "Claude", "agent", "thinking", { text: "Checking workspace state and packaging path", partial: true }, "turn-1"),
-  event(4, "claude", "Claude", "agent", "message", { text: "The current backend is healthy. I would add a desktop shell after the web client is usable." }, "turn-1"),
+  event(2, "conductor", "Conductor", "system", "floor_grant", { participantId: "claude-code", turnId: "turn-1", reason: "open floor" }),
+  event(3, "claude-code", "Claude Code", "agent", "thinking", { text: "Checking workspace state and packaging path", partial: true }, "turn-1"),
+  event(4, "claude-code", "Claude Code", "agent", "message", { text: "The current backend is healthy. I would add a desktop shell after the web client is usable." }, "turn-1"),
   event(5, "workspace", "Workspace", "system", "checkpoint", {
     preHead: "b41aef8",
     postHead: "ddd40f3",

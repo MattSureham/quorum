@@ -17,11 +17,11 @@ interface RoomConfig {
 const DEFAULT_CONFIG: RoomConfig = {
   id: "main",
   title: "Quorum",
-  primary: "claude",
+  primary: "claude-code",
   policy: { name: "free-for-all", maxTurnsPerTopic: 6, noConsecutive: true, turnDeadlineMs: 180_000 },
   participants: [
     { id: "matt",   kind: "human", display: "You",    status: "idle" },
-    { id: "claude", kind: "agent", display: "Claude", adapter: "claude-code", adapterConfig: { permissionMode: "bypassPermissions" }, status: "idle" },
+    { id: "claude-code", kind: "agent", display: "Claude Code", adapter: "claude-code", adapterConfig: { permissionMode: "bypassPermissions" }, status: "idle" },
     { id: "codex",  kind: "agent", display: "Codex",  adapter: "codex",        adapterConfig: { sandbox: "workspace-write" },        status: "idle" },
   ],
 };
