@@ -66,6 +66,16 @@ export const ClientMessageSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("approve_tool"), roomId: z.string(), callId: z.string(), allow: z.boolean() }),
   z.object({ t: z.literal("replay_projection"), roomId: z.string(), afterSeq: z.number().int().min(0).optional() }),
   z.object({ t: z.literal("compact_memory"), roomId: z.string(), fromSeq: z.number().int().min(0).optional(), toSeq: z.number().int().min(0).optional() }),
+  z.object({ t: z.literal("get_credentials"), roomId: z.string() }),
+  z.object({
+    t: z.literal("set_credential"),
+    roomId: z.string(),
+    providerId: z.string(),
+    envVar: z.string().optional(),
+    apiKey: z.string().optional(),
+    baseUrl: z.string().optional(),
+    model: z.string().optional(),
+  }),
   z.object({ t: z.literal("take_write_floor"), roomId: z.string() }),
   z.object({ t: z.literal("rollback"), roomId: z.string(), toHead: z.string() }),
 ]);

@@ -10,6 +10,7 @@ import {
   CircleDot,
   GitCommitHorizontal,
   Hand,
+  KeyRound,
   MessageSquare,
   NotebookText,
   PauseCircle,
@@ -54,6 +55,8 @@ type ServerMessage =
   | { t: "event"; event: RoomEvent }
   | { t: "replay_projection"; afterSeq: number; headSeq: number; eventCount: number; projection: SharedSessionProjectionResult }
   | { t: "memory_compacted"; summary?: MemorySummary; summaries: MemorySummary[] }
+  | { t: "credentials"; providers: ProviderConfigView[] }
+  | { t: "credential_saved"; provider: ProviderConfigView; providers: ProviderConfigView[] }
   | { t: "error"; text: string };
 
 interface SharedSessionProjectionResult {
@@ -73,6 +76,30 @@ interface ClientSettings {
 interface DesktopSidecarConnection {
   url: string;
 }
+
+interface ProviderConfigView {
+  providerId: string;
+  envVar?: string;
+  configured: boolean;
+  apiKeyPreview?: string;
+  baseUrl?: string;
+  model?: string;
+  updatedAt: number;
+}
+
+interface CredentialDraft {
+  providerId: string;
+  envVar: string;
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+}
+
+const credentialPresets: CredentialDraft[] = [
+  { providerId: "openai", envVar: "OPENAI_API_KEY", apiKey: "", baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini" },
+  { providerId: "deepseek", envVar: "DEEPSEEK_API_KEY", apiKey: "", baseUrl: "https://api.deepseek.com/v1", model: "deepseek-chat" },
+  { providerId: "anthropic", envVar: "ANTHROPIC_API_KEY", apiKey: "", baseUrl: "", model: "claude-sonnet-4-20250514" },
+];
 
 const defaultSettings: ClientSettings = {
   url: "ws://127.0.0.1:8787",
@@ -283,6 +310,9 @@ function App() {
   const [memoryFromSeq, setMemoryFromSeq] = useState("0");
   const [memoryToSeq, setMemoryToSeq] = useState("");
   const [memorySummaries, setMemorySummaries] = useState<MemorySummary[]>([]);
+  const [credentialViews, setCredentialViews] = useState<ProviderConfigView[]>([]);
+  const [credentialDrafts, setCredentialDrafts] = useState<CredentialDraft[]>(credentialPresets);
+  const [credentialStatus, setCredentialStatus] = useState("");
   const wsRef = useRef<WebSocket | null>(null);
   const lastSeqRef = useRef(0);
   const attemptRef = useRef(0);
@@ -292,8 +322,8 @@ function App() {
   const stickRef = useRef(true); // keep pinned to newest unless the user scrolls up
 
   const displayRoom = room ?? previewRoom;
-  const displayEvents = events.length ? events : previewEvents;
-  const isPreview = !events.length || status !== "connected";
+  const isPreview = status !== "connected";
+  const displayEvents = isPreview ? previewEvents : events;
   const participants = displayRoom.participants;
   const agents = participants.filter((participant) => participant.kind === "agent");
   const checkpoints = displayEvents.filter((item) => item.type === "checkpoint");
@@ -363,6 +393,7 @@ function App() {
         setStatus("connected");
         setError(""); // clear any stale failure from a prior attempt
         socket.send(JSON.stringify({ t: "subscribe", roomId: next.roomId, sinceSeq: lastSeqRef.current }));
+        socket.send(JSON.stringify({ t: "get_credentials", roomId: next.roomId }));
       });
       socket.addEventListener("message", (raw) => {
         const message = JSON.parse(String(raw.data)) as ServerMessage;
@@ -375,6 +406,13 @@ function App() {
           setReplayResult(message);
         } else if (message.t === "memory_compacted") {
           setMemorySummaries(message.summaries);
+        } else if (message.t === "credentials") {
+          setCredentialViews(message.providers);
+          mergeCredentialViews(message.providers);
+        } else if (message.t === "credential_saved") {
+          setCredentialStatus(`${message.provider.providerId} saved`);
+          setCredentialViews(message.providers);
+          mergeCredentialViews(message.providers);
         } else if (message.t === "error") {
           setError(message.text);
         }
@@ -471,6 +509,37 @@ function App() {
     send({ t: "compact_memory", fromSeq, toSeq });
   }
 
+  function mergeCredentialViews(providers: ProviderConfigView[]) {
+    setCredentialDrafts((current) => current.map((draft) => {
+      const view = providers.find((provider) => provider.providerId === draft.providerId);
+      if (!view) return draft;
+      return {
+        ...draft,
+        envVar: view.envVar ?? draft.envVar,
+        baseUrl: view.baseUrl ?? draft.baseUrl,
+        model: view.model ?? draft.model,
+        apiKey: "",
+      };
+    }));
+  }
+
+  function updateCredentialDraft(providerId: string, patch: Partial<CredentialDraft>) {
+    setCredentialStatus("");
+    setCredentialDrafts((current) => current.map((draft) => draft.providerId === providerId ? { ...draft, ...patch } : draft));
+  }
+
+  function saveCredential(draft: CredentialDraft) {
+    const payload: Record<string, unknown> = {
+      t: "set_credential",
+      providerId: draft.providerId,
+      envVar: draft.envVar.trim() || undefined,
+      baseUrl: draft.baseUrl.trim() || undefined,
+      model: draft.model.trim() || undefined,
+    };
+    if (draft.apiKey.trim()) payload.apiKey = draft.apiKey.trim();
+    if (send(payload)) setCredentialStatus(`Saving ${draft.providerId}...`);
+  }
+
   function rollback(toHead: string) {
     if (!window.confirm(`Roll the workspace back to ${toHead.slice(0, 7)}?\nThis is a hard git reset — commits after it are discarded.`)) return;
     send({ t: "rollback", toHead });
@@ -519,6 +588,15 @@ function App() {
           </button>
           {error ? <div className="inline-alert"><AlertTriangle size={14} />{error}</div> : null}
         </section>
+
+        <CredentialsPanel
+          connected={connected}
+          drafts={credentialDrafts}
+          views={credentialViews}
+          status={credentialStatus}
+          onChange={updateCredentialDraft}
+          onSave={saveCredential}
+        />
 
         <section className="panel">
           <div className="panel-title"><Bot size={16} /><span>Participants</span></div>
@@ -673,6 +751,80 @@ function App() {
         </section>
       </section>
     </main>
+  );
+}
+
+function CredentialsPanel({
+  connected,
+  drafts,
+  views,
+  status,
+  onChange,
+  onSave,
+}: {
+  connected: boolean;
+  drafts: CredentialDraft[];
+  views: ProviderConfigView[];
+  status: string;
+  onChange: (providerId: string, patch: Partial<CredentialDraft>) => void;
+  onSave: (draft: CredentialDraft) => void;
+}) {
+  return (
+    <section className="panel credentials-panel">
+      <div className="panel-title">
+        <KeyRound size={16} />
+        <span>Credentials</span>
+      </div>
+      {drafts.map((draft) => {
+        const view = views.find((provider) => provider.providerId === draft.providerId);
+        return (
+          <div key={draft.providerId} className="credential-card">
+            <div className="credential-card-head">
+              <strong>{draft.providerId}</strong>
+              <span className={view?.configured ? "credential-state configured" : "credential-state"}>
+                {view?.configured ? `set ${view.apiKeyPreview ?? ""}` : "not set"}
+              </span>
+            </div>
+            <label>
+              <span>API key</span>
+              <input
+                type="password"
+                placeholder={view?.configured ? "Leave blank to keep existing key" : "Paste API key"}
+                value={draft.apiKey}
+                onChange={(input) => onChange(draft.providerId, { apiKey: input.currentTarget.value })}
+              />
+            </label>
+            <label>
+              <span>Env var</span>
+              <input
+                value={draft.envVar}
+                onChange={(input) => onChange(draft.providerId, { envVar: input.currentTarget.value })}
+              />
+            </label>
+            <label>
+              <span>Base URL</span>
+              <input
+                placeholder="Provider default"
+                value={draft.baseUrl}
+                onChange={(input) => onChange(draft.providerId, { baseUrl: input.currentTarget.value })}
+              />
+            </label>
+            <label>
+              <span>Default model</span>
+              <input
+                value={draft.model}
+                onChange={(input) => onChange(draft.providerId, { model: input.currentTarget.value })}
+              />
+            </label>
+            <button type="button" className="secondary-action" disabled={!connected} onClick={() => onSave(draft)}>
+              <Check size={14} />
+              <span>Save</span>
+            </button>
+          </div>
+        );
+      })}
+      {status ? <div className="credential-status">{status}</div> : null}
+    </section>
   );
 }
 

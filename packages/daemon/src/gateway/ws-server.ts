@@ -4,6 +4,7 @@ import { ClientMessageSchema } from "@quorum/protocol/schema";
 import type { Room, ConductorPolicyConfig } from "@quorum/protocol";
 import { projectSessionState, type EventLog } from "@quorum/core";
 import type { MemorySummary } from "@quorum/protocol";
+import type { ProviderConfigView } from "../persistence/sqlite-store.js";
 
 export interface GatewayDeps {
   log: EventLog;
@@ -16,6 +17,8 @@ export interface GatewayDeps {
   /** Resolve a pending tool-approval request (approve_tool). */
   approveTool?: (callId: string, allow: boolean) => void;
   compactMemory?: (fromSeq?: number, toSeq?: number) => Promise<MemorySummary | undefined> | MemorySummary | undefined;
+  listCredentials?: () => ProviderConfigView[];
+  setCredential?: (input: { providerId: string; envVar?: string; apiKey?: string; baseUrl?: string; model?: string }) => ProviderConfigView;
   interrupt?: (hard: boolean) => Promise<void> | void;
   /** Let the human take the write floor to edit files directly (take_write_floor). */
   takeWriteFloor?: () => Promise<void> | void;
@@ -135,6 +138,27 @@ export class Gateway {
           );
         } else {
           ws.send(JSON.stringify({ t: "memory_compacted", summaries: this.deps.log.readWorkingMemorySummaries() }));
+        }
+        break;
+      case "get_credentials":
+        ws.send(JSON.stringify({ t: "credentials", providers: this.deps.listCredentials?.() ?? [] }));
+        break;
+      case "set_credential":
+        if (!this.deps.setCredential) {
+          ws.send(JSON.stringify({ t: "error", text: "credential storage is not available" }));
+          break;
+        }
+        try {
+          const provider = this.deps.setCredential({
+            providerId: m.providerId,
+            envVar: m.envVar,
+            apiKey: m.apiKey,
+            baseUrl: m.baseUrl,
+            model: m.model,
+          });
+          ws.send(JSON.stringify({ t: "credential_saved", provider, providers: this.deps.listCredentials?.() ?? [provider] }));
+        } catch (err) {
+          ws.send(JSON.stringify({ t: "error", text: `set_credential failed: ${err instanceof Error ? err.message : String(err)}` }));
         }
         break;
       case "take_write_floor":

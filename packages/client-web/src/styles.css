@@ -199,6 +199,7 @@ textarea:focus {
 }
 
 .primary-action,
+.secondary-action,
 .danger-action,
 .send-action {
   display: inline-flex;
@@ -216,6 +217,16 @@ textarea:focus {
   background: #2f6f5b;
 }
 
+.secondary-action {
+  min-height: 34px;
+  color: #2c5e4f;
+  background: #dcece6;
+}
+
+.secondary-action:hover:not(:disabled) {
+  background: #cce4da;
+}
+
 .primary-action:hover,
 .send-action:hover {
   background: #255c4b;
@@ -228,6 +239,7 @@ textarea:focus {
 }
 
 .danger-action:disabled,
+.secondary-action:disabled,
 .send-action:disabled,
 .segmented-control button:disabled {
   cursor: not-allowed;
@@ -253,6 +265,65 @@ textarea:focus {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.credentials-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 44vh;
+  overflow: auto;
+}
+
+.credential-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #e0e7e4;
+  border-radius: 8px;
+  background: #fbfcfc;
+}
+
+.credential-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.credential-card-head strong {
+  color: #202a27;
+  font-size: 13px;
+  font-weight: 780;
+}
+
+.credential-state {
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: #6d5b24;
+  background: #f5e7bd;
+  font-size: 11px;
+  font-weight: 740;
+}
+
+.credential-state.configured {
+  color: #14533f;
+  background: #bfe8d7;
+}
+
+.credential-card input {
+  height: 32px;
+}
+
+.credential-status {
+  min-height: 28px;
+  padding: 7px 8px;
+  border-radius: 7px;
+  color: #14533f;
+  background: #e5f4ee;
+  font-size: 12px;
+  font-weight: 720;
 }
 
 .participant-row,

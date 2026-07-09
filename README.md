@@ -174,9 +174,14 @@ pnpm typecheck      # tsc -b (needs deps installed)
 
 ## Wire real agents
 
-Edit the room in `quorum.config.json` (or point `QUORUM_CONFIG` at another path;
-`packages/cli/src/index.ts` falls back to built-in defaults if the file is missing).
-Each agent is a `ParticipantDescriptor` with an `adapter`:
+Start the daemon + Web UI, then use the **Credentials** panel in the left sidebar
+to save provider API keys, base URLs, and default models. Credentials are stored
+locally in the Quorum SQLite database, applied to the daemon process immediately,
+and only returned to the browser as masked previews.
+
+The agent roster still comes from the room config for now: `quorum.config.json`
+or `QUORUM_CONFIG=<path>`. Each agent is a `ParticipantDescriptor` with an
+`adapter`:
 
 - `claude-code` → needs `@anthropic-ai/claude-agent-sdk` + Claude Code auth
 - `codex` → needs the `codex` CLI on PATH (runs `codex exec --json`)
@@ -184,11 +189,10 @@ Each agent is a `ParticipantDescriptor` with an `adapter`:
 - `echo` → the built-in fake agent
 
 ```bash
-pnpm --filter @quorum/cli start    # starts the daemon on ws://127.0.0.1:8787
+QUORUM_SESSION_KERNEL=shared pnpm dev
 ```
 
-Then point a client (or `websocat`) at it: `subscribe`, `post_message`,
-`interrupt`, `set_policy`.
+Then open `http://127.0.0.1:5173`, save credentials, and send a room message.
 
 ## Layout
 

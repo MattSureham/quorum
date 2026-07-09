@@ -5,6 +5,25 @@ import type { RoomEvent } from "@quorum/protocol";
 import type { MemorySummary } from "@quorum/protocol";
 import type { EventStore } from "@quorum/core";
 
+export interface ProviderConfig {
+  providerId: string;
+  envVar?: string;
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+  updatedAt: number;
+}
+
+export interface ProviderConfigView {
+  providerId: string;
+  envVar?: string;
+  configured: boolean;
+  apiKeyPreview?: string;
+  baseUrl?: string;
+  model?: string;
+  updatedAt: number;
+}
+
 const require = createRequire(import.meta.url);
 
 interface SqliteDb {
@@ -256,6 +275,63 @@ export class SqliteStore implements EventStore {
       .prepare("SELECT summary FROM working_memory_summaries WHERE session_id=? ORDER BY to_seq, summary_id")
       .all(sessionId)
       .map((row: any) => JSON.parse(row.summary) as MemorySummary);
+  }
+
+  upsertProviderConfig(input: Omit<ProviderConfig, "updatedAt">): ProviderConfigView {
+    const existing = this.readProviderConfig(input.providerId);
+    const next: ProviderConfig = {
+      providerId: input.providerId,
+      envVar: input.envVar || existing?.envVar,
+      apiKey: input.apiKey || existing?.apiKey,
+      baseUrl: input.baseUrl ?? existing?.baseUrl,
+      model: input.model ?? existing?.model,
+      updatedAt: Date.now(),
+    };
+    this.db
+      .prepare("INSERT OR REPLACE INTO provider_configs (provider_id, config, updated_at) VALUES (?, ?, ?)")
+      .run(next.providerId, JSON.stringify(next), next.updatedAt);
+    this.applyProviderEnv(next);
+    return this.maskProviderConfig(next);
+  }
+
+  readProviderConfig(providerId: string): ProviderConfig | undefined {
+    const row = this.db.prepare("SELECT config FROM provider_configs WHERE provider_id=?").get(providerId) as any;
+    if (!row?.config) return undefined;
+    return JSON.parse(row.config) as ProviderConfig;
+  }
+
+  readProviderConfigViews(): ProviderConfigView[] {
+    return this.db
+      .prepare("SELECT config FROM provider_configs ORDER BY provider_id")
+      .all()
+      .map((row: any) => this.maskProviderConfig(JSON.parse(row.config) as ProviderConfig));
+  }
+
+  applyProviderConfigsToEnv(): void {
+    for (const row of this.db.prepare("SELECT config FROM provider_configs").all() as any[]) {
+      this.applyProviderEnv(JSON.parse(row.config) as ProviderConfig);
+    }
+  }
+
+  private applyProviderEnv(config: ProviderConfig): void {
+    if (!config.envVar) return;
+    if (config.apiKey) process.env[config.envVar] = config.apiKey;
+    const prefix = config.envVar.replace(/_API_KEY$/i, "");
+    if (config.baseUrl) process.env[`${prefix}_BASE_URL`] = config.baseUrl;
+    if (config.model) process.env[`${prefix}_MODEL`] = config.model;
+  }
+
+  private maskProviderConfig(config: ProviderConfig): ProviderConfigView {
+    const key = config.apiKey ?? "";
+    return {
+      providerId: config.providerId,
+      envVar: config.envVar,
+      configured: key.length > 0,
+      apiKeyPreview: key ? `...${key.slice(-4)}` : undefined,
+      baseUrl: config.baseUrl,
+      model: config.model,
+      updatedAt: config.updatedAt,
+    };
   }
 
   private ensureSession(e: RoomEvent): void {

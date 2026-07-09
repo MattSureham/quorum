@@ -21,6 +21,7 @@ export async function startSharedSessionRoom(
   opts: { dbPath?: string; port?: number; authToken?: string } = {},
 ): Promise<SharedSessionHost> {
   const store = new SqliteStore(opts.dbPath);
+  store.applyProviderConfigsToEnv();
   const log = new EventLog(room.id, store);
   const participants = room.participants
     .filter((participant) => participant.kind === "agent")
@@ -51,6 +52,8 @@ export async function startSharedSessionRoom(
       interrupt: (hard) => session.interrupt("human", hard),
       approveTool: (callId, allow) => session.approveTool(callId, allow),
       compactMemory: (fromSeq, toSeq) => session.compactWorkingMemory(fromSeq, toSeq),
+      listCredentials: () => store.readProviderConfigViews(),
+      setCredential: (input) => store.upsertProviderConfig(input),
       setPolicy: () => {
         void log.append({
           author: { kind: "system", id: "session", display: "SessionManager" },

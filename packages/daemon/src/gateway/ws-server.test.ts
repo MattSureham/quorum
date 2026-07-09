@@ -167,4 +167,59 @@ describe("Gateway", () => {
       await gateway.close();
     }
   });
+
+  it("saves credentials without echoing secret values", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const providers: any[] = [];
+    const gateway = new Gateway({
+      log,
+      room,
+      humanId: "human",
+      setPolicy: () => {},
+      listCredentials: () => providers,
+      setCredential: (input) => {
+        const provider = {
+          providerId: input.providerId,
+          envVar: input.envVar,
+          configured: !!input.apiKey,
+          apiKeyPreview: input.apiKey ? `...${input.apiKey.slice(-4)}` : undefined,
+          baseUrl: input.baseUrl,
+          model: input.model,
+          updatedAt: 1,
+        };
+        providers.splice(0, providers.length, provider);
+        return provider;
+      },
+    }, 0);
+    await gateway.ready;
+    const ws = await connect(gateway.url());
+
+    try {
+      ws.send(JSON.stringify({
+        t: "set_credential",
+        roomId: "room",
+        providerId: "deepseek",
+        envVar: "DEEPSEEK_API_KEY",
+        apiKey: "sk-secret-1234",
+        baseUrl: "https://api.deepseek.com/v1",
+        model: "deepseek-chat",
+      }));
+      const saved = await nextMessage(ws);
+      expect(saved.t).toBe("credential_saved");
+      expect(JSON.stringify(saved)).not.toContain("sk-secret-1234");
+      expect(saved.provider).toMatchObject({
+        providerId: "deepseek",
+        configured: true,
+        apiKeyPreview: "...1234",
+      });
+
+      ws.send(JSON.stringify({ t: "get_credentials", roomId: "room" }));
+      const listed = await nextMessage(ws);
+      expect(listed.t).toBe("credentials");
+      expect(listed.providers).toHaveLength(1);
+    } finally {
+      ws.close();
+      await gateway.close();
+    }
+  });
 });

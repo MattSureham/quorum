@@ -3,7 +3,7 @@ import type { TurnInput, PartialRoomEvent } from "@quorum/core";
 import type { ParticipantDescriptor, Capabilities } from "@quorum/protocol";
 
 export interface ApiModelOptions {
-  model: string;
+  model?: string;
   baseUrl?: string;     // OpenAI-compatible /chat/completions endpoint base
   apiKeyEnv?: string;   // env var holding the key
 }
@@ -26,13 +26,16 @@ export class ApiModelAdapter extends BaseAgentAdapter {
     const onAbort = () => ac.abort();
     input.signal.addEventListener("abort", onAbort, { once: true });
     try {
-      const base = this.opts.baseUrl ?? "https://api.openai.com/v1";
-      const key = process.env[this.opts.apiKeyEnv ?? "OPENAI_API_KEY"] ?? "";
+      const apiKeyEnv = this.opts.apiKeyEnv ?? "OPENAI_API_KEY";
+      const envPrefix = apiKeyEnv.replace(/_API_KEY$/i, "");
+      const base = this.opts.baseUrl ?? process.env[`${envPrefix}_BASE_URL`] ?? "https://api.openai.com/v1";
+      const model = this.opts.model ?? process.env[`${envPrefix}_MODEL`] ?? "gpt-4o-mini";
+      const key = process.env[apiKeyEnv] ?? "";
       const res = await fetch(`${base}/chat/completions`, {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
         body: JSON.stringify({
-          model: this.opts.model,
+          model,
           messages: [
             { role: "system", content: input.protocol },
             { role: "user", content: this.prompt(input) },

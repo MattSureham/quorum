@@ -1,4 +1,4 @@
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -165,6 +165,59 @@ describe("SqliteStore", () => {
       expect(summaries[0]).toMatchObject({ summaryId: "summary-1", content: "summary" });
     } finally {
       reopened.close();
+    }
+  });
+
+  it("persists provider credentials as masked views and applies env vars", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "quorum-sqlite-credentials-"));
+    const dbPath = join(dir, "credentials.sqlite");
+    const previous = process.env.TEST_QUORUM_API_KEY;
+    const previousBaseUrl = process.env.TEST_QUORUM_BASE_URL;
+    const previousModel = process.env.TEST_QUORUM_MODEL;
+    try {
+      delete process.env.TEST_QUORUM_API_KEY;
+      delete process.env.TEST_QUORUM_BASE_URL;
+      delete process.env.TEST_QUORUM_MODEL;
+      const store = new SqliteStore(dbPath);
+      const view = store.upsertProviderConfig({
+        providerId: "test-provider",
+        envVar: "TEST_QUORUM_API_KEY",
+        apiKey: "secret-value-9999",
+        baseUrl: "https://example.test/v1",
+        model: "test-model",
+      });
+
+      expect(view).toMatchObject({
+        providerId: "test-provider",
+        configured: true,
+        apiKeyPreview: "...9999",
+        baseUrl: "https://example.test/v1",
+        model: "test-model",
+      });
+      expect(JSON.stringify(view)).not.toContain("secret-value-9999");
+      expect(process.env.TEST_QUORUM_API_KEY).toBe("secret-value-9999");
+      expect(process.env.TEST_QUORUM_BASE_URL).toBe("https://example.test/v1");
+      expect(process.env.TEST_QUORUM_MODEL).toBe("test-model");
+      expect(store.readProviderConfigViews()).toHaveLength(1);
+      store.close();
+
+      delete process.env.TEST_QUORUM_API_KEY;
+      delete process.env.TEST_QUORUM_BASE_URL;
+      delete process.env.TEST_QUORUM_MODEL;
+      const reopened = new SqliteStore(dbPath);
+      reopened.applyProviderConfigsToEnv();
+      expect(process.env.TEST_QUORUM_API_KEY).toBe("secret-value-9999");
+      expect(process.env.TEST_QUORUM_BASE_URL).toBe("https://example.test/v1");
+      expect(process.env.TEST_QUORUM_MODEL).toBe("test-model");
+      reopened.close();
+    } finally {
+      if (previous === undefined) delete process.env.TEST_QUORUM_API_KEY;
+      else process.env.TEST_QUORUM_API_KEY = previous;
+      if (previousBaseUrl === undefined) delete process.env.TEST_QUORUM_BASE_URL;
+      else process.env.TEST_QUORUM_BASE_URL = previousBaseUrl;
+      if (previousModel === undefined) delete process.env.TEST_QUORUM_MODEL;
+      else process.env.TEST_QUORUM_MODEL = previousModel;
+      await rm(dir, { recursive: true, force: true });
     }
   });
 });
