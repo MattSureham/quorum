@@ -553,7 +553,7 @@ function App() {
 
   return (
     <main className="app-shell">
-      <aside className="sidebar">
+      <aside className="sidebar session-sidebar">
         <div className="brand-block">
           <div className="brand-mark"><CircleDot size={18} /></div>
           <div>
@@ -561,6 +561,17 @@ function App() {
             <div className="brand-meta">{displayRoom.branch} / {displayRoom.id}</div>
           </div>
         </div>
+
+        <section className="panel room-list-panel">
+          <div className="panel-title">
+            <MessageSquare size={16} />
+            <span>Sessions</span>
+          </div>
+          <button className="room-list-item active" type="button">
+            <span>{displayRoom.title}</span>
+            <strong>{displayRoom.id}</strong>
+          </button>
+        </section>
 
         <section className="panel connection-panel">
           <div className="panel-title">
@@ -588,37 +599,10 @@ function App() {
           </button>
           {error ? <div className="inline-alert"><AlertTriangle size={14} />{error}</div> : null}
         </section>
-
-        <CredentialsPanel
-          connected={connected}
-          drafts={credentialDrafts}
-          views={credentialViews}
-          status={credentialStatus}
-          onChange={updateCredentialDraft}
-          onSave={saveCredential}
-        />
-
-        <section className="panel">
-          <div className="panel-title"><Bot size={16} /><span>Participants</span></div>
-          <div className="participant-list">
-            {participants.map((participant) => (
-              <ParticipantRow key={participant.id} participant={participant} active={activeTurn?.participantId === participant.id} />
-            ))}
-          </div>
-        </section>
-
-        <section className="panel">
-          <div className="panel-title"><GitCommitHorizontal size={16} /><span>Checkpoints</span></div>
-          <div className="checkpoint-list">
-            {checkpoints.slice(-4).reverse().map((item) => (
-              <CheckpointRow key={item.id} event={item} canRollback={connected} onRollback={rollback} />
-            ))}
-          </div>
-        </section>
       </aside>
 
-      <section className="workspace">
-        <header className="topbar">
+      <section className="workspace chat-shell">
+        <header className="topbar chat-topbar">
           <div>
             <h1>{displayRoom.title}</h1>
             <div className="workspace-path">{displayRoom.workspacePath ?? "No workspace selected"}</div>
@@ -632,69 +616,111 @@ function App() {
           </div>
         </header>
 
-        <section className="status-strip">
+        <section className="status-strip compact-status">
           <Metric icon={<Activity size={16} />} label="Events" value={String(displayEvents.length)} />
           <Metric icon={<Hand size={16} />} label={shared.enabled ? "Speaker" : "Floor"} value={shared.activeSpeaker ?? activeTurn?.participantId ?? "open"} />
           <Metric icon={<PauseCircle size={16} />} label={shared.enabled ? "Phase" : "Last turn"} value={shared.enabled ? shared.phase : latestRelease?.reason ?? "pending"} />
           <Metric icon={<Settings2 size={16} />} label="Kernel" value={shared.enabled ? "shared-session" : policy.name} />
         </section>
 
-        <section className="room-grid">
-          <section className="transcript">
-            <div className="section-heading">
-              <MessageSquare size={17} />
-              <span>Room Stream</span>
-              <small>{groupedTurns.size} groups</small>
-            </div>
-            <div className="event-feed" ref={feedRef} onScroll={onFeedScroll}>
-              {displayEvents.map((item) => (
-                <EventRow key={item.id} event={item} />
-              ))}
-            </div>
-          </section>
+        <section className="transcript chat-transcript">
+          <div className="section-heading">
+            <MessageSquare size={17} />
+            <span>Chat</span>
+            <small>{groupedTurns.size} groups</small>
+          </div>
+          <div className="event-feed" ref={feedRef} onScroll={onFeedScroll}>
+            {displayEvents.map((item) => (
+              <EventRow key={item.id} event={item} />
+            ))}
+          </div>
+        </section>
 
-          <aside className="activity-panel">
-            <div className="section-heading">
-              <SquareTerminal size={17} />
-              <span>Operations</span>
-            </div>
-            <section className="composer-panel">
-              <div className="agent-targets">
-                {agents.map((agent) => (
-                  <button
-                    key={agent.id}
-                    className={selectedTargets.includes(agent.id) ? "target-chip selected" : "target-chip"}
-                    type="button"
-                    onClick={() => toggleTarget(agent.id)}
-                  >
-                    <Bot size={14} />
-                    <span>{agent.id}</span>
+        {approvals.length ? (
+          <div className="approval-list chat-approvals">
+            {approvals.map((signal) => (
+              <div key={signal.callId} className="approval-card">
+                <div className="approval-head">
+                  <ShieldQuestion size={15} />
+                  <strong>{signal.tool}</strong>
+                  <span>{signal.callId}</span>
+                </div>
+                <div className="approval-actions">
+                  <button type="button" className="approve" disabled={!connected} onClick={() => approveTool(signal.callId, true)}>
+                    <Check size={14} /> Approve
                   </button>
-                ))}
+                  <button type="button" className="deny" disabled={!connected} onClick={() => approveTool(signal.callId, false)}>
+                    <XCircle size={14} /> Deny
+                  </button>
+                </div>
               </div>
-              <textarea
-                value={composer}
-                onChange={(input) => setComposer(input.currentTarget.value)}
-                onKeyDown={(key) => {
-                  if (key.key === "Enter" && (key.metaKey || key.ctrlKey)) sendMessage();
-                }}
-                placeholder="Message the room"
-              />
-              <button className="send-action" type="button" disabled={!connected || !composer.trim()} onClick={sendMessage}>
-                <Send size={16} />
-                <span>Send</span>
-              </button>
+            ))}
+          </div>
+        ) : null}
+
+        <section className="chat-composer">
+          <div className="agent-targets">
+            {agents.map((agent) => (
               <button
-                className={holdsWriteFloor ? "write-floor-action holding" : "write-floor-action"}
+                key={agent.id}
+                className={selectedTargets.includes(agent.id) ? "target-chip selected" : "target-chip"}
                 type="button"
-                disabled={!connected || holdsWriteFloor}
-                onClick={takeWriteFloor}
-                title="Pause agents and edit files directly. Sending a message hands the floor back."
+                onClick={() => toggleTarget(agent.id)}
               >
-                <PenLine size={16} />
-                <span>{holdsWriteFloor ? "You hold the write floor" : "Take write floor"}</span>
+                <Bot size={14} />
+                <span>{agent.id}</span>
               </button>
-            </section>
+            ))}
+          </div>
+          <textarea
+            value={composer}
+            onChange={(input) => setComposer(input.currentTarget.value)}
+            onKeyDown={(key) => {
+              if (key.key === "Enter" && (key.metaKey || key.ctrlKey)) sendMessage();
+            }}
+            placeholder="Message the session"
+          />
+          <div className="composer-actions">
+            <button className="send-action" type="button" disabled={!connected || !composer.trim()} onClick={sendMessage}>
+              <Send size={16} />
+              <span>Send</span>
+            </button>
+            <button
+              className={holdsWriteFloor ? "write-floor-action holding" : "write-floor-action"}
+              type="button"
+              disabled={!connected || holdsWriteFloor}
+              onClick={takeWriteFloor}
+              title="Pause agents and edit files directly. Sending a message hands the floor back."
+            >
+              <PenLine size={16} />
+              <span>{holdsWriteFloor ? "Write floor held" : "Take write floor"}</span>
+            </button>
+          </div>
+        </section>
+      </section>
+
+      <aside className="config-sidebar">
+        <section className="panel">
+          <div className="panel-title"><Bot size={16} /><span>Participants</span></div>
+          <div className="participant-list">
+            {participants.map((participant) => (
+              <ParticipantRow key={participant.id} participant={participant} active={activeTurn?.participantId === participant.id} />
+            ))}
+          </div>
+        </section>
+
+        <CredentialsPanel
+          connected={connected}
+          drafts={credentialDrafts}
+          views={credentialViews}
+          status={credentialStatus}
+          onChange={updateCredentialDraft}
+          onSave={saveCredential}
+        />
+
+        <details className="debug-details">
+          <summary><SquareTerminal size={16} /> Session diagnostics</summary>
+          <div className="diagnostics-stack">
             {shared.enabled ? <SharedSessionPanel shared={shared} /> : null}
             {shared.enabled ? (
               <ReplayPanel
@@ -716,27 +742,6 @@ function App() {
                 onCompact={compactMemory}
               />
             ) : null}
-            {approvals.length ? (
-              <div className="approval-list">
-                {approvals.map((signal) => (
-                  <div key={signal.callId} className="approval-card">
-                    <div className="approval-head">
-                      <ShieldQuestion size={15} />
-                      <strong>{signal.tool}</strong>
-                      <span>{signal.callId}</span>
-                    </div>
-                    <div className="approval-actions">
-                      <button type="button" className="approve" disabled={!connected} onClick={() => approveTool(signal.callId, true)}>
-                        <Check size={14} /> Approve
-                      </button>
-                      <button type="button" className="deny" disabled={!connected} onClick={() => approveTool(signal.callId, false)}>
-                        <XCircle size={14} /> Deny
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : null}
             <div className="section-heading compact">
               <Wrench size={16} />
               <span>Tool Activity</span>
@@ -747,9 +752,18 @@ function App() {
                 <ToolRow key={item.id} event={item} />
               ))}
             </div>
-          </aside>
-        </section>
-      </section>
+          </div>
+        </details>
+
+        <details className="debug-details">
+          <summary><GitCommitHorizontal size={16} /> Checkpoints</summary>
+          <div className="checkpoint-list diagnostics-stack">
+            {checkpoints.slice(-4).reverse().map((item) => (
+              <CheckpointRow key={item.id} event={item} canRollback={connected} onRollback={rollback} />
+            ))}
+          </div>
+        </details>
+      </aside>
     </main>
   );
 }
