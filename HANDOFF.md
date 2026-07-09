@@ -147,6 +147,10 @@ The following is the implementation trail from this session. It is written for t
     - Files: `packages/client-web/src/main.tsx`, `packages/client-web/src/styles.css`, `README.md`, `HANDOFF.md`.
     - Work: changed the central Chat transcript to render only `message` events as clean chat bubbles for human prompts and agent/model replies. Operational events such as thinking, floor grants, bids, tool calls/results, phases, and checkpoints now stay in diagnostics/recent activity/checkpoint panels instead of cluttering the conversation.
 
+33. this change `fix: use local claude code cli by default`
+    - Files: `packages/daemon/src/adapters/claude-code.ts`, `README.md`, `HANDOFF.md`.
+    - Work: changed `claude-code` from default Agent SDK execution to default local `claude` CLI subprocess execution using `claude -p --output-format stream-json`. This reuses the user's existing Claude Code local auth/keychain/session behavior instead of asking for an API key. The subprocess also strips `ANTHROPIC_API_KEY` by default so provider/API-model credentials cannot override local Claude Code login. The old SDK path remains available only when `adapterConfig.transport` is explicitly set to `"sdk"`.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:
@@ -265,7 +269,7 @@ SPEC.md       full design (Chinese): data model, Conductor state machine, adapte
 - **Floor policies** (`core/src/policies/`): `free-for-all` (agents raise hands), `directed` (only @-addressed agents), `moderated` (a model names the next speaker). Switch at runtime via the gateway's `set_policy`.
 - **GitWorkspace** (`daemon/src/workspace/git-workspace.ts`) — single branch, write-floor mutex (returns a `WriteLease`), per-turn checkpoint commit, and an **out-of-band watcher that runs `git add -A` + commit when files change while no turn holds the floor**. ⚠️ Because of this, **don't leave uncommitted junk in the tree while the daemon is running** — it can get auto-committed as a "human checkpoint."
 - **Adapters** (`daemon/src/adapters/`) — each agent keeps its **native tool-calling**; the framework only projects the transcript delta in and normalizes native events back onto the log. Heavy SDKs (`@anthropic-ai/claude-agent-sdk`, `zod`) are **imported lazily/dynamically** so the daemon loads even when they're absent.
-- **Room MCP tools** (`core/src/room-tools.ts`, SPEC §9): `raise_hand`, `read_room`, `request_review`, `hand_off`, `post_note` — translated into room events. Wired into the Claude Code in-process MCP server and Codex adapters.
+- **Room MCP tools** (`core/src/room-tools.ts`, SPEC §9): `raise_hand`, `read_room`, `request_review`, `hand_off`, `post_note` — translated into room events. Wired into Codex MCP calls and the optional Claude Code SDK transport's in-process MCP server; the default Claude Code CLI transport prioritizes local CLI auth/session reuse.
 - **WS gateway** (`daemon/src/gateway/ws-server.ts`, SPEC §10): client→server `subscribe/post_message/interrupt/set_policy/approve_tool/take_write_floor/rollback`; server→client `snapshot/event/error`. Binds 127.0.0.1:8787.
 
 ## Where to change common things
@@ -276,7 +280,7 @@ SPEC.md       full design (Chinese): data model, Conductor state machine, adapte
 - **Chat vs log**: the central Chat transcript should remain message-only. Keep non-message room/session events in diagnostics, recent activity, tool activity, memory, replay, or checkpoint panels; do not reintroduce raw event rows into the primary chat stream.
 - **API-model failures**: `packages/daemon/src/adapters/api-model.ts` must never silently complete on missing keys, HTTP errors, or empty model responses. It should emit a visible message so the run-status banner and transcript explain what happened.
 - **The room (agents, policy, workspace)**: still defined in `quorum.config.json` at the repo root (or `QUORUM_CONFIG=<path>`). `packages/cli/src/index.ts` loads it via `loadConfig()` and falls back to built-in defaults if the file is missing.
-- **Add an agent**: currently still add a `ParticipantDescriptor` to `participants[]` with an `adapter` + `adapterConfig`. `claude-code` needs the Agent SDK + Claude Code auth; `codex` needs the `codex` CLI on PATH; `api-model` is any OpenAI-compatible endpoint; `echo` is the built-in fake.
+- **Add an agent**: currently still add a `ParticipantDescriptor` to `participants[]` with an `adapter` + `adapterConfig`. `claude-code` runs the local `claude` CLI subprocess by default and should reuse Claude Code local auth; it strips `ANTHROPIC_API_KEY` unless `adapterConfig.inheritApiKeyEnv` is explicitly true. Set `adapterConfig.transport: "sdk"` only for the optional Agent SDK path. `codex` needs the `codex` CLI on PATH; `api-model` is any OpenAI-compatible endpoint; `echo` is the built-in fake.
 - **Moderator model**: `packages/daemon/src/moderator.ts`. Configured via `policy.moderatorModel` / `QUORUM_MODERATOR_MODEL` (default `gpt-4o-mini`) / `QUORUM_MODERATOR_BASE_URL`, key from `OPENAI_API_KEY`. Degrades to "yield to human" on any failure.
 
 ## Milestone status (SPEC §12)

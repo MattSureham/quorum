@@ -182,7 +182,7 @@ pnpm typecheck      # tsc -b (needs deps installed)
 
 > Note: the dependency-free path (`demo`, `smoke`) runs straight from TypeScript
 > source via `tsx`. The real adapters/gateway/store need their deps installed,
-> and the Claude Code / Codex adapters need those CLIs/SDK installed locally.
+> and the Claude Code / Codex adapters need those CLIs installed locally.
 
 ## Wire real agents
 
@@ -201,7 +201,11 @@ The agent roster still comes from the room config for now: `quorum.config.json`
 or `QUORUM_CONFIG=<path>`. Each agent is a `ParticipantDescriptor` with an
 `adapter`:
 
-- `claude-code` → needs `@anthropic-ai/claude-agent-sdk` + Claude Code auth
+- `claude-code` → runs the local `claude` CLI subprocess by default and reuses
+  Claude Code's local auth/session. It does not inherit `ANTHROPIC_API_KEY` by
+  default, so API-model credentials cannot accidentally override local Claude
+  Code login. Set `adapterConfig.transport: "sdk"` only if you explicitly want
+  the optional Agent SDK path.
 - `codex` → needs the `codex` CLI on PATH (runs `codex exec --json`)
 - `api-model` → any OpenAI-compatible endpoint (no file edits; good for moderator)
 - `echo` → the built-in fake agent
