@@ -167,6 +167,10 @@ The following is the implementation trail from this session. It is written for t
     - Files: `.github/workflows/windows-installer.yml`, `scripts/build-sidecar-bun.ts`, `scripts/bun-sidecar-smoke.ts`, `apps/desktop/src-tauri/src/lib.rs`, `apps/desktop/src-tauri/tauri.conf.json`, `package.json`, `README.md`, `HANDOFF.md`.
     - Work: added a manually-triggered Windows GitHub Actions workflow that builds an unsigned x64 NSIS `.exe` installer and uploads installer/bundle/sidecar artifacts. The Bun sidecar build is now cross-platform and emits both `quorum-sidecar` and `quorum-sidecar.exe` so Tauri resources resolve on macOS and Windows; the Rust desktop shell chooses the platform-appropriate sidecar filename at runtime.
 
+38. this change `fix: make claude code cli test windows-compatible`
+    - Files: `packages/daemon/src/room-host.test.ts`, `README.md`, `HANDOFF.md`.
+    - Work: fixed the local Claude Code CLI subprocess regression test for Windows runners by using a `.cmd` fake CLI on Windows and the existing shell fake on Unix-like hosts. This keeps the Windows installer workflow blocked on meaningful failures instead of a Unix-only test helper.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:

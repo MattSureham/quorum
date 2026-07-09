@@ -146,7 +146,8 @@ available for macOS and Windows:
 
 - macOS arm64: `pnpm desktop:build` produces an unsigned `.app` and `.dmg`.
 - Windows x64: manually run the **Windows Installer** GitHub Actions workflow.
-  It builds an unsigned NSIS installer and uploads these artifacts:
+  It runs typecheck/tests, builds the sidecar/Web UI, builds an unsigned NSIS
+  installer, and uploads these artifacts:
   - `quorum-windows-nsis-installer` — the one-click `.exe` installer
   - `quorum-windows-bundle-output` — the full Tauri bundle directory
   - `quorum-windows-sidecar` — the bundled `quorum-sidecar.exe` for debugging

@@ -132,8 +132,24 @@ describe("RoomHost", () => {
 
   it("runs Claude Code through a local CLI subprocess by default", async () => {
     const dir = await mkdtemp(join(tmpdir(), "quorum-claude-cli-"));
-    const fakeClaude = join(dir, "claude");
-await writeFile(fakeClaude, `#!/bin/sh
+    const fakeClaude = process.platform === "win32" ? join(dir, "claude.cmd") : join(dir, "claude");
+    if (process.platform === "win32") {
+      await writeFile(fakeClaude, `@echo off
+if not "%ANTHROPIC_API_KEY%"=="" (
+  echo unexpected ANTHROPIC_API_KEY 1>&2
+  exit /b 9
+)
+echo %* | findstr /C:"--verbose" >nul
+if errorlevel 1 (
+  echo missing --verbose 1>&2
+  exit /b 8
+)
+echo {"type":"system","session_id":"fake-session"}
+echo {"type":"assistant","message":{"content":[{"type":"text","text":"hello from local claude cli"}]}}
+echo {"type":"result","session_id":"fake-session"}
+`);
+    } else {
+      await writeFile(fakeClaude, `#!/bin/sh
 if [ -n "$ANTHROPIC_API_KEY" ]; then
   echo "unexpected ANTHROPIC_API_KEY" >&2
   exit 9
@@ -146,7 +162,8 @@ printf '%s\\n' '{"type":"system","session_id":"fake-session"}'
 printf '%s\\n' '{"type":"assistant","message":{"content":[{"type":"text","text":"hello from local claude cli"}]}}'
 printf '%s\\n' '{"type":"result","session_id":"fake-session"}'
 `);
-await chmod(fakeClaude, 0o755);
+      await chmod(fakeClaude, 0o755);
+    }
     const oldAnthropicKey = process.env.ANTHROPIC_API_KEY;
     process.env.ANTHROPIC_API_KEY = "invalid-project-key";
 
