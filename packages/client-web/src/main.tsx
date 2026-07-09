@@ -105,6 +105,7 @@ interface SessionDraft {
   roomId: string;
   title: string;
   mode: SessionMode;
+  workspacePath: string;
   participantIds: string[];
 }
 
@@ -144,6 +145,7 @@ const defaultSessionDraft: SessionDraft = {
   roomId: "new-session",
   title: "New session",
   mode: "open-discussion",
+  workspacePath: "",
   participantIds: ["codex", "claude-code"],
 };
 
@@ -651,6 +653,7 @@ function App() {
         id,
         title: draft.title.trim() || id,
         mode: draft.mode,
+        workspacePath: draft.workspacePath.trim() || undefined,
         participants,
       },
     })) {
@@ -781,6 +784,7 @@ function App() {
       roomId: nextId,
       title: "New session",
       mode: "open-discussion",
+      workspacePath: displayRoom.workspacePath ?? "",
       participantIds: agents.map((agent) => agent.id),
     });
     setSessionSetupOpen(true);
@@ -1343,6 +1347,17 @@ function SessionSetupModal({
                 onChange={(input) => {
                   const value = input.currentTarget.value;
                   setDraft((current) => ({ ...current, title: value }));
+                }}
+              />
+            </label>
+            <label>
+              <span>Workspace path</span>
+              <input
+                value={draft.workspacePath}
+                placeholder={currentRoom.workspacePath ?? "Optional absolute path for this session"}
+                onChange={(input) => {
+                  const value = input.currentTarget.value;
+                  setDraft((current) => ({ ...current, workspacePath: value }));
                 }}
               />
             </label>

@@ -209,7 +209,15 @@ or `QUORUM_CONFIG=<path>`. Each agent is a `ParticipantDescriptor` with an
   Agent SDK path.
 - `codex` → needs the `codex` CLI on PATH (runs `codex exec --json`)
 - `api-model` → any OpenAI-compatible endpoint (no file edits; good for moderator)
-- `echo` → the built-in fake agent
+- `echo` → the built-in fake/test agent; it returns a fixed response and is only
+  for smoke tests or UI verification
+
+Claude Code and Codex are subprocess agents, not generic API models. They run in
+the session workspace as their current working directory and retain their native
+tool/function-calling behavior. Claude Code is not launched with `--bare`, so its
+configured Claude Code skills, MCP servers, hooks, and local auth remain
+available. Codex runs through `codex exec --json` and keeps its own native tool
+events/MCP output.
 
 ```bash
 QUORUM_SESSION_KERNEL=shared pnpm dev
@@ -226,6 +234,8 @@ session**. The setup modal supports:
 - participant selection by agent/model, including current room agents and
   available model-agent presets
 - session creation fields (`Session id`, `Title`)
+- per-session `Workspace path`; CLI/subprocess agents run from that path, and
+  sandboxed tool execution is scoped there
 - mode selection for `自由讨论`, `抢麦/举手`, and `按序陈述`
 
 The setup form keeps its editable draft local to the modal. Field handlers copy

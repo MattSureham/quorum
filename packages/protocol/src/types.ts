@@ -106,6 +106,7 @@ export interface CreateSessionInput {
   id: string;
   title: string;
   mode: SessionMode;
+  workspacePath?: string;
   participants: ParticipantDescriptor[];
 }
 

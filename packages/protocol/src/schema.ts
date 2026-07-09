@@ -71,6 +71,7 @@ export const ClientMessageSchema = z.discriminatedUnion("t", [
       id: z.string(),
       title: z.string(),
       mode: z.enum(["open-discussion", "raise-hand", "round-robin"]),
+      workspacePath: z.string().optional(),
       participants: z.array(ParticipantDescriptorSchema),
     }),
   }),

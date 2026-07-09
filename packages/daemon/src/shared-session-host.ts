@@ -103,7 +103,7 @@ export async function startSharedSessionRoom(
         const nextRoom: Room = {
           id: input.id,
           title: input.title || input.id,
-          workspacePath: room.workspacePath,
+          workspacePath: input.workspacePath?.trim() || room.workspacePath,
           branch: room.branch,
           primary: input.participants.find((participant) => participant.kind === "agent")?.id,
           policy: policyForMode(input.mode, room.policy),

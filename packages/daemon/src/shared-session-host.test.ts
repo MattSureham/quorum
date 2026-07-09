@@ -144,6 +144,7 @@ describe("SharedSessionHost", () => {
           id: "second-room",
           title: "Second room",
           mode: "open-discussion",
+          workspacePath: join(dir, "second-workspace"),
           participants: [
             { id: "human", kind: "human", display: "Human", status: "idle" },
             { id: "echo2", kind: "agent", display: "Echo Two", adapter: "echo", adapterConfig: { text: "second response" }, status: "idle" },
@@ -153,12 +154,14 @@ describe("SharedSessionHost", () => {
       const created = await nextMessage(ws);
       expect(created.t).toBe("session_created");
       expect(created.room.id).toBe("second-room");
+      expect(created.room.workspacePath).toBe(join(dir, "second-workspace"));
       expect(created.rooms.map((item: Room) => item.id)).toEqual(["main-room", "second-room"]);
 
       ws.send(JSON.stringify({ t: "subscribe", roomId: "second-room", sinceSeq: 0 }));
       const snapshot = await nextMessage(ws);
       expect(snapshot.t).toBe("snapshot");
       expect(snapshot.room.id).toBe("second-room");
+      expect(snapshot.room.workspacePath).toBe(join(dir, "second-workspace"));
 
       const seen: RoomEvent[] = [];
       const collect = (data: WebSocket.RawData) => {
