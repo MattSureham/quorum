@@ -135,6 +135,10 @@ The following is the implementation trail from this session. It is written for t
     - Files: `packages/daemon/src/adapters/api-model.ts`, `packages/daemon/src/room-host.test.ts`, `packages/client-web/src/main.tsx`, `packages/client-web/src/styles.css`, docs.
     - Work: API-model agents now emit visible chat messages for missing API keys, HTTP errors, and empty provider responses instead of completing silently. Composer target chips now show agent display names plus ids, and the composer shows a session participant summary so users can confirm DeepSeek/MiniMax/etc. are actually in the active session.
 
+30. this change `fix: keep session setup form editable`
+    - Files: `packages/client-web/src/main.tsx`, `README.md`, `HANDOFF.md`.
+    - Work: moved Session setup edits into modal-local draft state and changed text field handlers to copy `currentTarget.value` before calling the state updater. This fixes the Start a new session modal blanking the app or losing focus while editing `Session id` / `Title`, and the modal now submits the completed draft to `create_session`.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:
@@ -259,6 +263,7 @@ SPEC.md       full design (Chinese): data model, Conductor state machine, adapte
 ## Where to change common things
 - **Agent/model config**: the Web UI right sidebar should be agent/model oriented. Users select or configure participants such as `codex`, `claude-code`, OpenClaw-style adapters, or direct API model agents such as DeepSeek/GLM/MiniMax. Provider credentials are only hidden credential sources for API-model agents; do not put API key inputs directly in the persistent sidebar. The credential modal has built-in presets for OpenAI, DeepSeek, Zhipu, MiniMax, and Anthropic, and must support custom providers beyond presets. Credentials are persisted locally in SQLite and applied to daemon `process.env`; the browser only receives masked previews.
 - **Session creation**: the Web UI Session setup modal calls `create_session`; the shared-session host keeps an in-memory multi-session registry and the gateway routes snapshots/events by room id. Remaining gaps: persist dynamically-created sessions across daemon restarts, add `delete/archive_session`, and implement a strict scheduler for `round-robin` / `按序陈述` instead of mapping it onto the current shared bid kernel.
+- **Session setup form state**: keep editable form state local to `SessionSetupModal`. Do not pass React event objects into function-style state updaters; copy `input.currentTarget.value` first, then update state with the plain value. Otherwise React can null `currentTarget` before the updater runs and the modal can crash while typing.
 - **Run visibility**: message sends should never appear silent. `packages/client-web/src/main.tsx` derives `RunStatus` from local submit time and room events; keep this banner updated when adding new phases or schedulers.
 - **API-model failures**: `packages/daemon/src/adapters/api-model.ts` must never silently complete on missing keys, HTTP errors, or empty model responses. It should emit a visible message so the run-status banner and transcript explain what happened.
 - **The room (agents, policy, workspace)**: still defined in `quorum.config.json` at the repo root (or `QUORUM_CONFIG=<path>`). `packages/cli/src/index.ts` loads it via `loadConfig()` and falls back to built-in defaults if the file is missing.

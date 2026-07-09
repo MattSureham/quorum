@@ -217,6 +217,10 @@ session**. The setup modal supports:
 - session creation fields (`Session id`, `Title`)
 - mode selection for `自由讨论`, `抢麦/举手`, and `按序陈述`
 
+The setup form keeps its editable draft local to the modal. Field handlers copy
+input values before updating state, so typing `Session id` / `Title`, switching
+modes, and toggling participants do not close the modal or blank the app.
+
 `Start session` now calls the daemon `create_session` route. The shared-session
 host keeps an in-memory multi-session registry, creates a new `SessionManager`
 for the selected roster, and the gateway routes `subscribe/post_message` by

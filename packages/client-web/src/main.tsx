@@ -450,7 +450,7 @@ function App() {
   const [credentialStatus, setCredentialStatus] = useState("");
   const [credentialsOpen, setCredentialsOpen] = useState(false);
   const [sessionSetupOpen, setSessionSetupOpen] = useState(false);
-  const [sessionDraft, setSessionDraft] = useState<SessionDraft>(defaultSessionDraft);
+  const [sessionDraftSeed, setSessionDraftSeed] = useState<SessionDraft>(defaultSessionDraft);
   const wsRef = useRef<WebSocket | null>(null);
   const lastSeqRef = useRef(0);
   const attemptRef = useRef(0);
@@ -643,13 +643,13 @@ function App() {
     return true;
   }
 
-  function createSessionFromDraft() {
-    const id = sessionDraft.roomId.trim();
+  function createSessionFromDraft(draft: SessionDraft) {
+    const id = draft.roomId.trim();
     if (!id) {
       setError("Session id is required");
       return;
     }
-    const participants = buildSessionParticipants(sessionDraft, displayRoom);
+    const participants = buildSessionParticipants(draft, displayRoom);
     if (!participants.some((participant) => participant.kind === "agent")) {
       setError("Select at least one agent/model");
       return;
@@ -658,8 +658,8 @@ function App() {
       t: "create_session",
       session: {
         id,
-        title: sessionDraft.title.trim() || id,
-        mode: sessionDraft.mode,
+        title: draft.title.trim() || id,
+        mode: draft.mode,
         participants,
       },
     })) {
@@ -784,18 +784,9 @@ function App() {
       : [...current, id]);
   }
 
-  function toggleSessionDraftParticipant(id: string) {
-    setSessionDraft((current) => ({
-      ...current,
-      participantIds: current.participantIds.includes(id)
-        ? current.participantIds.filter((participantId) => participantId !== id)
-        : [...current.participantIds, id],
-    }));
-  }
-
   function openSessionSetup() {
     const nextId = `session-${Date.now().toString(36)}`;
-    setSessionDraft({
+    setSessionDraftSeed({
       roomId: nextId,
       title: "New session",
       mode: "open-discussion",
@@ -1050,10 +1041,8 @@ function App() {
 
       {sessionSetupOpen ? (
         <SessionSetupModal
-          draft={sessionDraft}
+          initialDraft={sessionDraftSeed}
           currentRoom={displayRoom}
-          onChange={setSessionDraft}
-          onToggleParticipant={toggleSessionDraftParticipant}
           onStart={createSessionFromDraft}
           connected={connected}
           onClose={() => setSessionSetupOpen(false)}
@@ -1263,22 +1252,19 @@ function CredentialsModal({
 }
 
 function SessionSetupModal({
-  draft,
+  initialDraft,
   currentRoom,
   connected,
-  onChange,
-  onToggleParticipant,
   onStart,
   onClose,
 }: {
-  draft: SessionDraft;
+  initialDraft: SessionDraft;
   currentRoom: Room;
   connected: boolean;
-  onChange: React.Dispatch<React.SetStateAction<SessionDraft>>;
-  onToggleParticipant: (id: string) => void;
-  onStart: () => void;
+  onStart: (draft: SessionDraft) => void;
   onClose: () => void;
 }) {
+  const [draft, setDraft] = useState<SessionDraft>(initialDraft);
   const currentAgentIds = new Set(currentRoom.participants.filter((participant) => participant.kind === "agent").map((participant) => participant.id));
   const participantOptions = [
     ...currentRoom.participants.filter((participant) => participant.kind === "agent").map((participant) => ({
@@ -1299,6 +1285,15 @@ function SessionSetupModal({
     { id: "raise-hand", label: "抢麦/举手", detail: "Agents request the floor and must wait for the active speaker to finish." },
     { id: "round-robin", label: "按序陈述", detail: "A fixed speaking order; best for structured reports." },
   ];
+
+  function toggleParticipant(id: string) {
+    setDraft((current) => ({
+      ...current,
+      participantIds: current.participantIds.includes(id)
+        ? current.participantIds.filter((participantId) => participantId !== id)
+        : [...current.participantIds, id],
+    }));
+  }
 
   return (
     <div className="credential-modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -1327,11 +1322,23 @@ function SessionSetupModal({
             <div className="mini-heading">New session</div>
             <label>
               <span>Session id</span>
-              <input value={draft.roomId} onChange={(input) => onChange((current) => ({ ...current, roomId: input.currentTarget.value }))} />
+              <input
+                value={draft.roomId}
+                onChange={(input) => {
+                  const value = input.currentTarget.value;
+                  setDraft((current) => ({ ...current, roomId: value }));
+                }}
+              />
             </label>
             <label>
               <span>Title</span>
-              <input value={draft.title} onChange={(input) => onChange((current) => ({ ...current, title: input.currentTarget.value }))} />
+              <input
+                value={draft.title}
+                onChange={(input) => {
+                  const value = input.currentTarget.value;
+                  setDraft((current) => ({ ...current, title: value }));
+                }}
+              />
             </label>
           </section>
 
@@ -1343,7 +1350,7 @@ function SessionSetupModal({
                   key={mode.id}
                   className={draft.mode === mode.id ? "mode-option selected" : "mode-option"}
                   type="button"
-                  onClick={() => onChange((current) => ({ ...current, mode: mode.id }))}
+                  onClick={() => setDraft((current) => ({ ...current, mode: mode.id }))}
                 >
                   <strong>{mode.label}</strong>
                   <span>{mode.detail}</span>
@@ -1360,7 +1367,7 @@ function SessionSetupModal({
                   <input
                     type="checkbox"
                     checked={draft.participantIds.includes(participant.id)}
-                    onChange={() => onToggleParticipant(participant.id)}
+                    onChange={() => toggleParticipant(participant.id)}
                   />
                   <div>
                     <strong>{participant.display}</strong>
@@ -1381,7 +1388,7 @@ function SessionSetupModal({
         ) : null}
         <div className="credential-modal-actions">
           <button type="button" className="secondary-action" onClick={onClose}>Close</button>
-          <button type="button" className="primary-action" disabled={!connected} onClick={onStart}>Start session</button>
+          <button type="button" className="primary-action" disabled={!connected} onClick={() => onStart(draft)}>Start session</button>
         </div>
       </section>
     </div>
