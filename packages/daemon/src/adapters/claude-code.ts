@@ -82,7 +82,12 @@ export class ClaudeCodeAdapter extends BaseAgentAdapter {
 
     const env = { ...process.env };
     if (!this.opts.inheritApiKeyEnv) delete env.ANTHROPIC_API_KEY;
-    const child = spawn(bin, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(bin, args, {
+      cwd,
+      env,
+      shell: process.platform === "win32",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
     this.child = child;
     const onAbort = () => child.kill("SIGINT");
     input.signal.addEventListener("abort", onAbort, { once: true });

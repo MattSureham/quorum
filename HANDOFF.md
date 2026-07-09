@@ -171,6 +171,10 @@ The following is the implementation trail from this session. It is written for t
     - Files: `packages/daemon/src/room-host.test.ts`, `README.md`, `HANDOFF.md`.
     - Work: fixed the local Claude Code CLI subprocess regression test for Windows runners by using a `.cmd` fake CLI on Windows and the existing shell fake on Unix-like hosts. This keeps the Windows installer workflow blocked on meaningful failures instead of a Unix-only test helper.
 
+39. this change `fix: launch local cli agents through windows shell`
+    - Files: `packages/daemon/src/adapters/claude-code.ts`, `README.md`, `HANDOFF.md`.
+    - Work: changed the Claude Code CLI adapter to spawn through the Windows shell on Windows. This is required for `.cmd` launchers such as npm-installed Claude Code shims and fixes the `spawn EINVAL` failure surfaced by the Windows installer workflow.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:
@@ -207,6 +211,7 @@ What is already implemented:
 - WebSocket `replay_projection` returns a projected shared-session state from `afterSeq`, and the Web UI has a Replay panel for phase/speaker/bid-state checks.
 - WebSocket `get_credentials` / `set_credential` now back the Web UI provider credential modal. Provider API keys/base URLs/models are persisted in local SQLite `provider_configs`, immediately applied to `process.env`, and returned to the browser only as masked previews.
 - The Web UI now prioritizes the primary workflow: session/room selection on the left, chat/session stream and composer in the center, participants plus agent/model configuration on the right. Provider keys are hidden behind an API credential modal and framed as credential sources for API-model agents, not as selectable webchat sessions. Diagnostics such as replay, memory, tool activity, and checkpoints are collapsed by default. In shared-session mode, the legacy policy segmented control is disabled because `set_policy` is not implemented for the new kernel yet.
+- Local CLI agents such as Claude Code use shell launching on Windows so `.cmd` shims work.
 - Working-memory summaries can be created, persisted through `SqliteStore`, triggered through WebSocket `compact_memory`, inspected in the Web UI Memory panel, and automatically compacted after turns once configured event thresholds are reached.
 - Verification: `pnpm typecheck`, `pnpm test`, `pnpm --filter @quorum/client-web build`, `pnpm smoke:shared`, `pnpm smoke:sidecar`, `pnpm sidecar:node:smoke`, `pnpm sidecar:bun:smoke`, `pnpm desktop:check`, and `pnpm desktop:build` pass on macOS arm64. The **Windows Installer** GitHub Actions workflow now exists for Windows x64 NSIS artifact validation.
 
