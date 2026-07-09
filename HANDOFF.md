@@ -163,6 +163,10 @@ The following is the implementation trail from this session. It is written for t
     - Files: `packages/protocol/src/types.ts`, `packages/protocol/src/schema.ts`, `packages/core/src/session-manager.ts`, `packages/core/src/projection.ts`, `packages/daemon/src/gateway/ws-server.ts`, `packages/daemon/src/shared-session-host.ts`, `packages/daemon/src/adapters/api-model.ts`, `packages/daemon/src/gateway/ws-server.test.ts`, `packages/client-web/src/main.tsx`, `packages/client-web/src/styles.css`, `README.md`, `HANDOFF.md`.
     - Work: added image attachments to chat messages. The Web UI lets users attach images, previews them in the composer, sends them through `post_message`, and renders thumbnails in Chat. Message events persist `attachments`; projections include image metadata/data URLs; OpenAI-compatible `api-model` agents receive attached images as multimodal `image_url` content for vision-capable models.
 
+37. this change `feat: add windows nsis installer workflow`
+    - Files: `.github/workflows/windows-installer.yml`, `scripts/build-sidecar-bun.ts`, `scripts/bun-sidecar-smoke.ts`, `apps/desktop/src-tauri/src/lib.rs`, `apps/desktop/src-tauri/tauri.conf.json`, `package.json`, `README.md`, `HANDOFF.md`.
+    - Work: added a manually-triggered Windows GitHub Actions workflow that builds an unsigned x64 NSIS `.exe` installer and uploads installer/bundle/sidecar artifacts. The Bun sidecar build is now cross-platform and emits both `quorum-sidecar` and `quorum-sidecar.exe` so Tauri resources resolve on macOS and Windows; the Rust desktop shell chooses the platform-appropriate sidecar filename at runtime.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:
@@ -190,7 +194,7 @@ What is already implemented:
 - `pnpm sidecar:node:build` creates a Node-runtime fallback artifact in `dist-sidecar/node`.
 - `pnpm sidecar:node:smoke` builds that artifact, starts it, validates the same sidecar handshake and WebSocket round trip.
 - `pnpm packaging:env` installs Bun and Rust/Cargo into `.tools/` without modifying global shell startup files.
-- `pnpm sidecar:bun:build` compiles `packages/daemon/src/sidecar.ts` into `dist-sidecar/bun/quorum-sidecar`.
+- `pnpm sidecar:bun:build` compiles `packages/daemon/src/sidecar.ts` into `dist-sidecar/bun/quorum-sidecar` on Unix-like hosts and `dist-sidecar/bun/quorum-sidecar.exe` on Windows, plus a compatibility copy under the other filename for Tauri resource bundling.
 - `pnpm sidecar:bun:smoke` validates the compiled Bun sidecar with SQLite, token-authenticated WebSocket, and a shared-session echo turn.
 - `apps/desktop` is a Tauri 2 shell. Its Rust layer manages the sidecar process, parses the stdout handshake, and exposes `get_sidecar_connection()` to the Web UI.
 - The Web UI detects Tauri at startup and replaces the default `ws://127.0.0.1:8787` connection with the sidecar URL returned by `get_sidecar_connection()`.
@@ -200,18 +204,18 @@ What is already implemented:
 - WebSocket `get_credentials` / `set_credential` now back the Web UI provider credential modal. Provider API keys/base URLs/models are persisted in local SQLite `provider_configs`, immediately applied to `process.env`, and returned to the browser only as masked previews.
 - The Web UI now prioritizes the primary workflow: session/room selection on the left, chat/session stream and composer in the center, participants plus agent/model configuration on the right. Provider keys are hidden behind an API credential modal and framed as credential sources for API-model agents, not as selectable webchat sessions. Diagnostics such as replay, memory, tool activity, and checkpoints are collapsed by default. In shared-session mode, the legacy policy segmented control is disabled because `set_policy` is not implemented for the new kernel yet.
 - Working-memory summaries can be created, persisted through `SqliteStore`, triggered through WebSocket `compact_memory`, inspected in the Web UI Memory panel, and automatically compacted after turns once configured event thresholds are reached.
-- Verification: `pnpm typecheck`, `pnpm test`, `pnpm --filter @quorum/client-web build`, `pnpm smoke:shared`, `pnpm smoke:sidecar`, `pnpm sidecar:node:smoke`, `pnpm sidecar:bun:smoke`, `pnpm desktop:check`, and `pnpm desktop:build` pass on macOS arm64.
+- Verification: `pnpm typecheck`, `pnpm test`, `pnpm --filter @quorum/client-web build`, `pnpm smoke:shared`, `pnpm smoke:sidecar`, `pnpm sidecar:node:smoke`, `pnpm sidecar:bun:smoke`, `pnpm desktop:check`, and `pnpm desktop:build` pass on macOS arm64. The **Windows Installer** GitHub Actions workflow now exists for Windows x64 NSIS artifact validation.
 
 What is not implemented yet:
 
-- **Installer-grade release is not done.** There is no signing/notarization, no Windows installer validation, and no auto-update yet.
+- **Installer-grade signed release is not done.** There is no signing/notarization and no auto-update yet. An unsigned Windows x64 NSIS test installer can be produced by manually running the **Windows Installer** GitHub Actions workflow; artifact/manual install validation still needs to be performed on a Windows machine.
 - **Desktop double-click launch shell is scaffolded and macOS arm64 bundles build.** `apps/desktop` can launch the Web UI inside Tauri and start the compiled Bun sidecar through the Rust layer. `pnpm desktop:build` produces an unsigned `.app` and `.dmg`; the `.app` contains `Contents/Resources/sidecars/quorum-sidecar`.
 - **Developer one-command launch exists.** Use `pnpm dev` for the legacy kernel or `QUORUM_SESSION_KERNEL=shared pnpm dev` for the new shared-session kernel.
 - **Local sidecar entry exists and Bun compile is verified.** The sidecar can be run through tsx with `pnpm smoke:sidecar`, compiled with Bun using `pnpm sidecar:bun:build`, and verified with `pnpm sidecar:bun:smoke`.
 - **Node-runtime fallback exists.** It is not a single binary, but `pnpm sidecar:node:build` creates a smoke-tested fallback artifact. Keep it as the fallback route if Bun compile regresses on another platform.
 - **Rust/Cargo exists only in the project-local toolchain.** Source `.tools/packaging-env.sh` before running direct Cargo/Tauri commands, or use `pnpm desktop:check`.
 - The Web UI now exposes the new shared-session phase and bid queue, but it is still a minimal projection. It does not yet provide full replay controls, policy tuning, rich arbitration score inspection, or memory inspection.
-- Richer memory policy tuning UI, adapter-level native tool bridging, full timeline replay UI, signed installer pipeline, updater, and cross-platform desktop validation remain follow-up work.
+- Richer memory policy tuning UI, adapter-level native tool bridging, full timeline replay UI, signed installer pipeline, updater, and full cross-platform desktop validation remain follow-up work.
 
 Recommended next task for the new agent:
 

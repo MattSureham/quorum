@@ -141,11 +141,22 @@ pnpm sidecar:node:build
 pnpm sidecar:node:smoke
 ```
 
-Installer-grade release is not done yet. An unsigned macOS arm64 `.app` and `.dmg`
-can now be produced with `pnpm desktop:build`, and the bundled app includes the
-Bun sidecar under `Contents/Resources/sidecars/quorum-sidecar`. Remaining release
-work is signing/notarization, updater wiring, Windows installer generation,
-platform-specific validation, and hardening the desktop lifecycle.
+Installer-grade signed release is not done yet. Unsigned test builds are now
+available for macOS and Windows:
+
+- macOS arm64: `pnpm desktop:build` produces an unsigned `.app` and `.dmg`.
+- Windows x64: manually run the **Windows Installer** GitHub Actions workflow.
+  It builds an unsigned NSIS installer and uploads these artifacts:
+  - `quorum-windows-nsis-installer` — the one-click `.exe` installer
+  - `quorum-windows-bundle-output` — the full Tauri bundle directory
+  - `quorum-windows-sidecar` — the bundled `quorum-sidecar.exe` for debugging
+
+The Windows test installer is unsigned. Windows may show an "unknown publisher"
+or SmartScreen warning. Manual acceptance check: install the `.exe`, launch
+Quorum, confirm the UI connects to the sidecar, send a message to the Echo
+session, create a session with a workspace path, and confirm closing the app
+stops the sidecar process. Remaining release work is signing/notarization,
+updater wiring, and broader platform lifecycle hardening.
 
 ## Status
 

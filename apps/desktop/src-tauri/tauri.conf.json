@@ -27,7 +27,8 @@
     "active": true,
     "targets": "all",
     "resources": {
-      "../../../dist-sidecar/bun/quorum-sidecar": "sidecars/quorum-sidecar"
+      "../../../dist-sidecar/bun/quorum-sidecar": "sidecars/quorum-sidecar",
+      "../../../dist-sidecar/bun/quorum-sidecar.exe": "sidecars/quorum-sidecar.exe"
     },
     "macOS": {
       "minimumSystemVersion": "12.0"

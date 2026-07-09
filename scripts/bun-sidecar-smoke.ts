@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import type { RoomEvent } from "@quorum/protocol";
 
 const exec = promisify(execFile);
+const sidecarName = process.platform === "win32" ? "quorum-sidecar.exe" : "quorum-sidecar";
 
 interface Handshake {
   port: number;
@@ -62,7 +63,7 @@ function roundTrip(handshake: Handshake): Promise<RoomEvent[]> {
 await exec("tsx", ["scripts/build-sidecar-bun.ts"], { cwd: process.cwd() });
 
 const dir = await mkdtemp(join(tmpdir(), "quorum-bun-sidecar-smoke-"));
-const proc = spawn(resolve("dist-sidecar/bun/quorum-sidecar"), [], {
+const proc = spawn(resolve("dist-sidecar/bun", sidecarName), [], {
   cwd: process.cwd(),
   env: { ...process.env, QUORUM_DB_PATH: join(dir, "sidecar.sqlite") },
   stdio: ["ignore", "pipe", "inherit"],

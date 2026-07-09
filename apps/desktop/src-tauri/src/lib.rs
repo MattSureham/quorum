@@ -52,15 +52,24 @@ impl Serialize for DesktopError {
     }
 }
 
+fn sidecar_filename() -> &'static str {
+    if cfg!(windows) {
+        "quorum-sidecar.exe"
+    } else {
+        "quorum-sidecar"
+    }
+}
+
 fn dev_sidecar_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
-        .join("dist-sidecar/bun/quorum-sidecar")
+        .join("dist-sidecar/bun")
+        .join(sidecar_filename())
 }
 
 fn bundled_sidecar_path(app: &tauri::AppHandle) -> Option<PathBuf> {
     let resource_dir = app.path().resource_dir().ok()?;
-    Some(resource_dir.join("sidecars/quorum-sidecar"))
+    Some(resource_dir.join("sidecars").join(sidecar_filename()))
 }
 
 fn resolve_sidecar_path(app: &tauri::AppHandle) -> Result<PathBuf, DesktopError> {

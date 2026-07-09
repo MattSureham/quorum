@@ -23,8 +23,8 @@
     "desktop:build": "bash -lc 'source .tools/packaging-env.sh && pnpm --filter @quorum/desktop tauri build'",
     "desktop:check": "bash -lc 'source .tools/packaging-env.sh && pnpm --filter @quorum/desktop tauri info && cd apps/desktop/src-tauri && cargo check'",
     "packaging:env": "bash scripts/setup-packaging-env.sh",
-    "sidecar:bun:build": "bash -lc 'source .tools/packaging-env.sh && tsx scripts/build-sidecar-bun.ts'",
-    "sidecar:bun:smoke": "bash -lc 'source .tools/packaging-env.sh && tsx scripts/bun-sidecar-smoke.ts'",
+    "sidecar:bun:build": "tsx scripts/build-sidecar-bun.ts",
+    "sidecar:bun:smoke": "tsx scripts/bun-sidecar-smoke.ts",
     "sidecar:node:build": "tsx scripts/build-sidecar-node.ts",
     "sidecar:node:smoke": "tsx scripts/node-sidecar-smoke.ts"
   },
