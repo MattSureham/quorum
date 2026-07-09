@@ -101,6 +101,24 @@ const credentialPresets: CredentialDraft[] = [
   { providerId: "anthropic", envVar: "ANTHROPIC_API_KEY", apiKey: "", baseUrl: "", model: "claude-sonnet-4-20250514" },
 ];
 
+interface AgentModelPreset {
+  id: string;
+  display: string;
+  adapter: string;
+  detail: string;
+  credential: string;
+  providerId?: string;
+}
+
+const agentModelPresets: AgentModelPreset[] = [
+  { id: "codex", display: "Codex", adapter: "codex", detail: "CLI agent; uses the local Codex session/auth", credential: "Codex CLI" },
+  { id: "claude-code", display: "Claude Code", adapter: "claude-code", detail: "CLI/SDK agent; uses Claude Code auth", credential: "Claude Code auth" },
+  { id: "openclaw", display: "OpenClaw", adapter: "openclaw", detail: "Agent adapter placeholder; not installed in this build", credential: "Agent-specific auth" },
+  { id: "deepseek-v4-pro", display: "DeepSeek V4 Pro", adapter: "api-model", detail: "Direct API model agent", credential: "DeepSeek API key", providerId: "deepseek" },
+  { id: "deepseek-v4-flash", display: "DeepSeek V4 Flash", adapter: "api-model", detail: "Direct API model agent", credential: "DeepSeek API key", providerId: "deepseek" },
+  { id: "glm-5.2", display: "GLM 5.2", adapter: "api-model", detail: "Direct API model agent", credential: "OpenAI-compatible provider key", providerId: "openai" },
+];
+
 const defaultSettings: ClientSettings = {
   url: "ws://127.0.0.1:8787",
   roomId: "main",
@@ -710,9 +728,9 @@ function App() {
           </div>
         </section>
 
-        <ProviderStatusPanel
+        <AgentModelPanel
           connected={connected}
-          drafts={credentialDrafts}
+          participants={participants}
           views={credentialViews}
           onConfigure={() => setCredentialsOpen(true)}
         />
@@ -779,46 +797,83 @@ function App() {
   );
 }
 
-function ProviderStatusPanel({
+function AgentModelPanel({
   connected,
-  drafts,
+  participants,
   views,
   onConfigure,
 }: {
   connected: boolean;
-  drafts: CredentialDraft[];
+  participants: ParticipantDescriptor[];
   views: ProviderConfigView[];
   onConfigure: () => void;
 }) {
+  const roomAgents = participants.filter((participant) => participant.kind === "agent");
   return (
-    <section className="panel provider-panel">
+    <section className="panel agent-model-panel">
       <div className="panel-title">
-        <KeyRound size={16} />
-        <span>Providers</span>
+        <Settings2 size={16} />
+        <span>Agents & Models</span>
       </div>
-      <div className="provider-list">
-        {drafts.map((draft) => {
-          const view = views.find((provider) => provider.providerId === draft.providerId);
-          return (
-            <div key={draft.providerId} className="provider-row">
+      <div className="agent-model-section">
+        <div className="mini-heading">In this room</div>
+        <div className="agent-model-list">
+          {roomAgents.map((agent) => (
+            <div key={agent.id} className="agent-model-row active">
+              <Bot size={15} />
               <div>
-                <strong>{draft.providerId}</strong>
-                <span>{view?.model || draft.model}</span>
+                <strong>{agent.display}</strong>
+                <span>{formatAgentDetail(agent)}</span>
               </div>
-              <span className={view?.configured ? "credential-state configured" : "credential-state"}>
-                {view?.configured ? `set ${view.apiKeyPreview ?? ""}` : "not set"}
-              </span>
+              <span className="credential-state configured">room</span>
             </div>
-          );
-        })}
+          ))}
+        </div>
+      </div>
+      <div className="agent-model-section">
+        <div className="mini-heading">Available agent/model types</div>
+        <div className="agent-model-list">
+          {agentModelPresets.map((preset) => {
+            const view = preset.providerId ? views.find((provider) => provider.providerId === preset.providerId) : undefined;
+            const configured = preset.providerId ? view?.configured : preset.id !== "openclaw";
+            const state = preset.providerId
+              ? (configured ? `key ${view?.apiKeyPreview ?? "set"}` : "needs key")
+              : preset.id === "openclaw" ? "adapter TBD" : "local auth";
+            const statusClass = configured ? "credential-state configured" : "credential-state";
+            return (
+              <div key={preset.id} className="agent-model-row">
+                <Bot size={15} />
+                <div>
+                  <strong>{preset.display}</strong>
+                  <span>{preset.detail}</span>
+                </div>
+                <span className={statusClass}>{state}</span>
+              </div>
+            );
+          })}
+        </div>
       </div>
       <button type="button" className="secondary-action provider-config-action" disabled={!connected} onClick={onConfigure}>
-        <Settings2 size={15} />
-        <span>Configure credentials</span>
+        <KeyRound size={15} />
+        <span>Configure API keys</span>
       </button>
-      {!connected ? <div className="muted-note">Connect to a room before editing provider credentials.</div> : null}
+      {!connected ? <div className="muted-note">Connect to a room before editing API credentials.</div> : null}
+      <div className="muted-note">Agent/model selection is room-based; provider keys only unlock API-model agents.</div>
     </section>
   );
+}
+
+function formatAgentDetail(agent: ParticipantDescriptor): string {
+  const adapter = agent.adapter ?? agent.kind;
+  const model = typeof agent.adapterConfig?.model === "string" ? agent.adapterConfig.model : undefined;
+  return model ? `${adapter} / ${model}` : adapter;
+}
+
+function modelsUsingProvider(providerId: string): string {
+  const models = agentModelPresets
+    .filter((preset) => preset.providerId === providerId)
+    .map((preset) => preset.display);
+  return models.length ? `Used by ${models.join(", ")}` : "Credential source for API-model agents";
 }
 
 function CredentialsModal({
@@ -851,9 +906,9 @@ function CredentialsModal({
           <div>
             <div className="panel-title" id="credential-modal-title">
               <KeyRound size={16} />
-              <span>Provider credentials</span>
+              <span>API model credentials</span>
             </div>
-            <p>Keys are stored locally by the daemon. The browser receives masked previews only.</p>
+            <p>These keys are credential sources for API-model agents. CLI agents such as Codex and Claude Code use their own local auth/session.</p>
           </div>
           <button type="button" className="icon-action" onClick={onClose} aria-label="Close credentials">
             <XCircle size={18} />
@@ -866,7 +921,10 @@ function CredentialsModal({
             return (
               <div key={draft.providerId} className="credential-card">
                 <div className="credential-card-head">
-                  <strong>{draft.providerId}</strong>
+                  <div>
+                    <strong>{draft.providerId}</strong>
+                    <span>{modelsUsingProvider(draft.providerId)}</span>
+                  </div>
                   <span className={view?.configured ? "credential-state configured" : "credential-state"}>
                     {view?.configured ? `set ${view.apiKeyPreview ?? ""}` : "not set"}
                   </span>

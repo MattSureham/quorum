@@ -343,21 +343,34 @@ textarea:focus {
   gap: 8px;
 }
 
-.provider-panel {
+.agent-model-panel {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-.provider-list {
+.agent-model-section {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.mini-heading {
+  color: #66746f;
+  font-size: 11px;
+  font-weight: 780;
+  text-transform: uppercase;
+}
+
+.agent-model-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.provider-row {
+.agent-model-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   min-height: 42px;
@@ -367,20 +380,29 @@ textarea:focus {
   background: #fbfcfc;
 }
 
-.provider-row div {
+.agent-model-row.active {
+  border-color: #a7d8c7;
+  background: #f2fbf7;
+}
+
+.agent-model-row > svg {
+  color: #2f6f5b;
+}
+
+.agent-model-row div {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: 3px;
 }
 
-.provider-row strong {
+.agent-model-row strong {
   color: #202a27;
   font-size: 13px;
   font-weight: 780;
 }
 
-.provider-row div span {
+.agent-model-row div span {
   overflow: hidden;
   color: #64736e;
   font-size: 12px;
@@ -388,7 +410,7 @@ textarea:focus {
   white-space: nowrap;
 }
 
-.provider-row > .credential-state {
+.agent-model-row > .credential-state {
   overflow: visible;
   white-space: nowrap;
 }
@@ -466,10 +488,25 @@ textarea:focus {
   gap: 8px;
 }
 
+.credential-card-head div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
 .credential-card-head strong {
   color: #202a27;
   font-size: 13px;
   font-weight: 780;
+}
+
+.credential-card-head div span {
+  overflow: hidden;
+  color: #64736e;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .credential-state {

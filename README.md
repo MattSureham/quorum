@@ -84,11 +84,13 @@ a Replay panel that rebuilds shared-session phase/speaker/bid state from a chose
 event sequence.
 
 The Web UI is organized around the primary workflow: session selection on the
-left, the chat/session stream in the center, and participant/provider status on
-the right. Provider credentials are edited from a modal opened by the Providers
-panel; API key inputs are not shown on the main workspace. Diagnostics such as
-replay, memory, tools, and checkpoints are collapsed so they do not dominate
-normal use.
+left, the chat/session stream in the center, and participant plus agent/model
+configuration on the right. The right panel is agent/model-oriented: Codex,
+Claude Code, OpenClaw-style adapters, and direct API model agents such as
+DeepSeek/GLM are the user-facing units. Provider credentials are only hidden
+credential sources for API-model agents; they are not webchat sessions and are
+not shown as the primary selection surface. Diagnostics such as replay, memory,
+tools, and checkpoints are collapsed so they do not dominate normal use.
 
 Working-memory summaries are now generated, persisted, triggerable through
 WebSocket `compact_memory`, exposed in the Web UI Memory panel, and automatically
@@ -178,8 +180,10 @@ pnpm typecheck      # tsc -b (needs deps installed)
 
 ## Wire real agents
 
-Start the daemon + Web UI, then use the **Providers** panel's credential modal to
-save provider API keys, base URLs, and default models. The modal is hidden during
+Start the daemon + Web UI, then use the **Agents & Models** panel to inspect the
+room's active agents and available agent/model types. Use **Configure API keys**
+only for direct API model agents such as DeepSeek/GLM. CLI agents such as Codex
+and Claude Code use their own local auth/session. The key modal is hidden during
 normal chat/session work. Credentials are stored locally in the Quorum SQLite
 database, applied to the daemon process immediately, and only returned to the
 browser as masked previews.
@@ -197,8 +201,12 @@ or `QUORUM_CONFIG=<path>`. Each agent is a `ParticipantDescriptor` with an
 QUORUM_SESSION_KERNEL=shared pnpm dev
 ```
 
-Then open `http://127.0.0.1:5173`, open the Providers configuration modal if
-real LLM credentials are needed, and send a room message.
+Then open `http://127.0.0.1:5173`, use **Configure API keys** only if direct API
+model agents need credentials, and send a room message.
+
+Current limitation: the Web UI surfaces agent/model choices, but the actual room
+roster is still loaded from config. Dynamic add/remove of agents from the UI
+needs a backend room-config route before it should be considered complete.
 
 ## Layout
 
