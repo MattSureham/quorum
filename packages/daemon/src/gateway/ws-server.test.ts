@@ -61,11 +61,25 @@ describe("Gateway", () => {
       expect(snapshot.events[0].seq).toBe(1);
 
       const eventPromise = nextMessage(ws);
-      ws.send(JSON.stringify({ t: "post_message", roomId: "room", text: "hello", addressedTo: ["echo"] }));
+      ws.send(JSON.stringify({
+        t: "post_message",
+        roomId: "room",
+        text: "hello",
+        addressedTo: ["echo"],
+        attachments: [{
+          id: "img-1",
+          name: "chart.png",
+          mimeType: "image/png",
+          dataUrl: "data:image/png;base64,AAAA",
+          sizeBytes: 4,
+        }],
+      }));
       const event = await eventPromise;
       expect(event.t).toBe("event");
       expect(event.event.type).toBe("message");
       expect(event.event.addressedTo).toEqual(["echo"]);
+      expect(event.event.body.attachments).toHaveLength(1);
+      expect(event.event.body.attachments[0].name).toBe("chart.png");
 
       ws.send(JSON.stringify({
         t: "set_policy",

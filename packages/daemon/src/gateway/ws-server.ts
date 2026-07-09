@@ -1,7 +1,7 @@
 import { WebSocketServer, type WebSocket } from "ws";
 import type { AddressInfo } from "node:net";
 import { ClientMessageSchema } from "@quorum/protocol/schema";
-import type { Room, ConductorPolicyConfig, CreateSessionInput } from "@quorum/protocol";
+import type { Room, ConductorPolicyConfig, CreateSessionInput, ImageAttachment } from "@quorum/protocol";
 import { projectSessionState, type EventLog } from "@quorum/core";
 import type { MemorySummary } from "@quorum/protocol";
 import type { ProviderConfigView } from "../persistence/sqlite-store.js";
@@ -13,7 +13,7 @@ export interface GatewayDeps {
   humanId?: string;
   authToken?: string;
   /** Override human prompt handling, e.g. to route through SessionManager. */
-  postMessage?: (text: string, addressedTo?: string[]) => Promise<void> | void;
+  postMessage?: (text: string, addressedTo?: string[], attachments?: ImageAttachment[]) => Promise<void> | void;
   /** Resolve a pending tool-approval request (approve_tool). */
   approveTool?: (callId: string, allow: boolean) => void;
   compactMemory?: (fromSeq?: number, toSeq?: number) => Promise<MemorySummary | undefined> | MemorySummary | undefined;
@@ -140,10 +140,15 @@ export class Gateway {
         ws.send(JSON.stringify({ t: "snapshot", room: session.room, events: session.log.replay(m.sinceSeq ?? 0) }));
         break;
       case "post_message":
-        if (session.postMessage) void Promise.resolve(session.postMessage(m.text, m.addressedTo)).catch((err) =>
+        if (session.postMessage) void Promise.resolve(session.postMessage(m.text, m.addressedTo, m.attachments)).catch((err) =>
           ws.send(JSON.stringify({ t: "error", text: `post_message failed: ${err instanceof Error ? err.message : String(err)}` })),
         );
-        else void session.log.append({ author: this.human(session), type: "message", body: { text: m.text }, addressedTo: m.addressedTo });
+        else void session.log.append({
+          author: this.human(session),
+          type: "message",
+          body: { text: m.text, ...(m.attachments?.length ? { attachments: m.attachments } : {}) },
+          addressedTo: m.addressedTo,
+        });
         break;
       case "interrupt":
         if (session.interrupt) void Promise.resolve(session.interrupt(!!m.hard)).catch((err) =>

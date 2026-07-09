@@ -44,7 +44,14 @@ export interface RoomEvent {
 }
 
 // ---- body shapes (discriminated by RoomEvent.type) ----
-export interface MessageBody { text: string }
+export interface ImageAttachment {
+  id: string;
+  name: string;
+  mimeType: string;
+  dataUrl: string;
+  sizeBytes?: number;
+}
+export interface MessageBody { text: string; attachments?: ImageAttachment[] }
 export interface ThinkingBody { text: string; partial?: boolean }
 export interface ToolCallBody { tool: string; name?: string; args: unknown; callId: string }
 export interface ToolResultBody { callId: string; ok: boolean; stdout?: string; exitCode?: number; diffRef?: string }

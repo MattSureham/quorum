@@ -69,7 +69,7 @@ export async function startSharedSessionRoom(
       log,
       room: nextRoom,
       humanId: humans[0]?.id,
-      postMessage: (text, addressedTo) => session.submitUserPrompt(text, addressedTo),
+      postMessage: (text, addressedTo, attachments) => session.submitUserPrompt(text, addressedTo, attachments),
       interrupt: (hard) => session.interrupt("human", hard),
       approveTool: (callId, allow) => session.approveTool(callId, allow),
       compactMemory: (fromSeq, toSeq) => session.compactWorkingMemory(fromSeq, toSeq),

@@ -37,6 +37,7 @@ import type {
   FloorGrantBody,
   FloorReleaseBody,
   FloorRequestBody,
+  ImageAttachment,
   MessageBody,
   MemorySummary,
   ParticipantDescriptor,
@@ -265,6 +266,21 @@ function buildSessionParticipants(draft: SessionDraft, currentRoom: Room): Parti
   return participants;
 }
 
+function readImageAttachment(file: File): Promise<ImageAttachment> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error ?? new Error(`Failed to read ${file.name}`));
+    reader.onload = () => resolve({
+      id: `img-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      name: file.name,
+      mimeType: file.type || "application/octet-stream",
+      dataUrl: String(reader.result ?? ""),
+      sizeBytes: file.size,
+    });
+    reader.readAsDataURL(file);
+  });
+}
+
 // Latest approval state per callId; the UI shows a prompt for any still "requested".
 function pendingApprovals(events: RoomEvent[]): ApprovalSignal[] {
   const latest = new Map<string, ApprovalSignal>();
@@ -440,6 +456,7 @@ function App() {
   const [events, setEvents] = useState<RoomEvent[]>([]);
   const [selectedTargets, setSelectedTargets] = useState<string[]>([]);
   const [composer, setComposer] = useState("");
+  const [composerAttachments, setComposerAttachments] = useState<ImageAttachment[]>([]);
   const [lastSubmittedAt, setLastSubmittedAt] = useState<number | undefined>();
   const [now, setNow] = useState(Date.now());
   const [replayAfterSeq, setReplayAfterSeq] = useState("0");
@@ -459,6 +476,7 @@ function App() {
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const teardownRef = useRef(false);
   const feedRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const stickRef = useRef(true); // keep pinned to newest unless the user scrolls up
 
   const displayRoom = room ?? previewRoom;
@@ -663,11 +681,30 @@ function App() {
 
   function sendMessage() {
     const text = composer.trim();
-    if (!text) return;
-    if (send({ t: "post_message", text, addressedTo: selectedTargets.length ? selectedTargets : undefined })) {
+    if (!text && !composerAttachments.length) return;
+    if (send({
+      t: "post_message",
+      text,
+      attachments: composerAttachments.length ? composerAttachments : undefined,
+      addressedTo: selectedTargets.length ? selectedTargets : undefined,
+    })) {
       setLastSubmittedAt(Date.now());
       setComposer("");
+      setComposerAttachments([]);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
+  }
+
+  async function attachImages(files: FileList | null) {
+    if (!files?.length) return;
+    const images = [...files].filter((file) => file.type.startsWith("image/"));
+    const loaded = await Promise.all(images.map(readImageAttachment));
+    setComposerAttachments((current) => [...current, ...loaded].slice(0, 6));
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  function removeAttachment(id: string) {
+    setComposerAttachments((current) => current.filter((item) => item.id !== id));
   }
 
   function sendInterrupt() {
@@ -943,8 +980,33 @@ function App() {
             }}
             placeholder="Message the session"
           />
+          {composerAttachments.length ? (
+            <div className="composer-attachments">
+              {composerAttachments.map((image) => (
+                <div key={image.id} className="composer-attachment">
+                  <img src={image.dataUrl} alt={image.name} />
+                  <span>{image.name}</span>
+                  <button type="button" aria-label={`Remove ${image.name}`} onClick={() => removeAttachment(image.id)}>
+                    <XCircle size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
           <div className="composer-actions">
-            <button className="send-action" type="button" disabled={!connected || !composer.trim()} onClick={sendMessage}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden-file-input"
+              onChange={(input) => void attachImages(input.currentTarget.files)}
+            />
+            <button className="secondary-action attach-action" type="button" disabled={!connected} onClick={() => fileInputRef.current?.click()}>
+              <Plus size={16} />
+              <span>Image</span>
+            </button>
+            <button className="send-action" type="button" disabled={!connected || (!composer.trim() && !composerAttachments.length)} onClick={sendMessage}>
               <Send size={16} />
               <span>Send</span>
             </button>
@@ -1680,7 +1742,17 @@ function ChatMessageRow({ event }: { event: RoomEvent }) {
         <strong>{event.author.display}</strong>
         <time>{new Date(event.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
       </div>
-      <div className="chat-message-body">{body.text}</div>
+      {body.text ? <div className="chat-message-body">{body.text}</div> : null}
+      {body.attachments?.length ? (
+        <div className="chat-message-attachments">
+          {body.attachments.map((image) => (
+            <figure key={image.id}>
+              <img src={image.dataUrl} alt={image.name} />
+              <figcaption>{image.name}</figcaption>
+            </figure>
+          ))}
+        </div>
+      ) : null}
     </article>
   );
 }

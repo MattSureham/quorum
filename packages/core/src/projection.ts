@@ -25,7 +25,13 @@ export function renderProjection(input: TurnInput): string {
       const to = e.addressedTo?.length ? `\u2192${e.addressedTo.join(",")}` : "\u2192all";
       switch (e.type) {
         case "message":
-          return `[t${e.seq} ${e.author.id}${to}] ${(e.body as MessageBody).text}`;
+          {
+            const body = e.body as MessageBody;
+            const attachments = body.attachments?.length
+              ? `\n${body.attachments.map((item, index) => `  [image ${index + 1}: ${item.name} ${item.mimeType} ${item.dataUrl}]`).join("\n")}`
+              : "";
+            return `[t${e.seq} ${e.author.id}${to}] ${body.text}${attachments}`;
+          }
         case "tool_call":
           return `[t${e.seq} ${e.author.id} tool:${(e.body as ToolCallBody).tool}]`;
         case "checkpoint": {

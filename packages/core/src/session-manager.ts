@@ -14,6 +14,7 @@ import type {
   ToolCallResult,
   TurnContext,
   WriteResult,
+  ImageAttachment,
 } from "@quorum/protocol";
 import type { EventLog } from "./event-log.js";
 import { ulid } from "./ids.js";
@@ -108,12 +109,12 @@ export class SessionManager {
     };
   }
 
-  async submitUserPrompt(text: string, addressedTo: string[] = []): Promise<void> {
+  async submitUserPrompt(text: string, addressedTo: string[] = [], attachments: ImageAttachment[] = []): Promise<void> {
     await this.mailbox.enqueue("submitUserPrompt", async () => {
       if (!this.running) this.running = true;
       this.lastPrompt = text;
       this.epoch++;
-      await this.append("message", { text }, "participant", {
+      await this.append("message", { text, ...(attachments.length ? { attachments } : {}) }, "participant", {
         author: { kind: "human", id: "human", display: "Human" },
         addressedTo,
       });

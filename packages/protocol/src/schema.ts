@@ -13,6 +13,14 @@ const ParticipantDescriptorSchema = z.object({
   status: z.enum(["idle", "thinking", "active", "offline"]),
 });
 
+const ImageAttachmentSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  mimeType: z.string(),
+  dataUrl: z.string(),
+  sizeBytes: z.number().int().optional(),
+});
+
 export const SessionPhaseSchema = z.enum([
   "idle",
   "collecting_bids",
@@ -76,7 +84,13 @@ export const ClientMessageSchema = z.discriminatedUnion("t", [
     }),
   }),
   z.object({ t: z.literal("subscribe"), roomId: z.string(), sinceSeq: z.number().optional() }),
-  z.object({ t: z.literal("post_message"), roomId: z.string(), text: z.string(), addressedTo: z.array(z.string()).optional() }),
+  z.object({
+    t: z.literal("post_message"),
+    roomId: z.string(),
+    text: z.string(),
+    attachments: z.array(ImageAttachmentSchema).optional(),
+    addressedTo: z.array(z.string()).optional(),
+  }),
   z.object({ t: z.literal("interrupt"), roomId: z.string(), hard: z.boolean().optional() }),
   z.object({ t: z.literal("set_policy"), roomId: z.string(), policy: z.object({
     name: z.enum(["free-for-all", "directed", "moderated"]),

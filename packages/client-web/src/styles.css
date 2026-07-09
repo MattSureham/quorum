@@ -937,6 +937,58 @@ h1 {
   min-height: 104px;
 }
 
+.hidden-file-input {
+  display: none;
+}
+
+.composer-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.composer-attachment {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 140px) 22px;
+  align-items: center;
+  gap: 7px;
+  min-height: 48px;
+  padding: 5px;
+  border: 1px solid #dbe5e1;
+  border-radius: 8px;
+  background: #f8faf9;
+}
+
+.composer-attachment img {
+  width: 42px;
+  height: 42px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.composer-attachment span {
+  overflow: hidden;
+  color: #465650;
+  font-size: 12px;
+  font-weight: 680;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-attachment button {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 0;
+  color: #66766f;
+  background: transparent;
+}
+
+.attach-action {
+  min-height: 40px;
+}
+
 .run-status-banner {
   display: grid;
   grid-template-columns: 10px minmax(0, 1fr) auto;
@@ -1116,6 +1168,37 @@ h1 {
   color: #202a27;
   font-size: 14px;
   line-height: 1.52;
+}
+
+.chat-message-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.chat-message-attachments figure {
+  margin: 0;
+}
+
+.chat-message-attachments img {
+  display: block;
+  max-width: 220px;
+  max-height: 180px;
+  border: 1px solid #d9e4df;
+  border-radius: 8px;
+  object-fit: contain;
+  background: #ffffff;
+}
+
+.chat-message-attachments figcaption {
+  max-width: 220px;
+  margin-top: 4px;
+  overflow: hidden;
+  color: #66766f;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .empty-chat {

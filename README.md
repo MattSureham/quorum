@@ -259,6 +259,14 @@ prompts and agent/model replies. Floor grants, bids, thinking updates, tool
 events, checkpoints, and other operational records stay in the less prominent
 diagnostics/checkpoint panels so the primary surface does not read like a log.
 
+Chat messages can include image attachments. The Web UI sends image data as
+message attachments, renders thumbnails in the transcript, and keeps those
+attachments in the event log. Direct `api-model` agents receive attached images
+through OpenAI-compatible `image_url` multimodal content, so vision-capable
+models can inspect them. CLI agents receive attachment metadata in their
+projected transcript; a dedicated local-file bridge for CLI vision input is a
+future enhancement.
+
 Direct API model agents also report configuration failures in the chat stream.
 For example, selecting DeepSeek without `DEEPSEEK_API_KEY` produces a visible
 agent message explaining the missing key instead of completing with no reply.
