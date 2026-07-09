@@ -211,6 +211,22 @@ Current limitation: the Web UI surfaces agent/model choices, but the actual room
 roster is still loaded from config. Dynamic add/remove of agents from the UI
 needs a backend room-config route before it should be considered complete.
 
+## Sessions and Modes
+
+The Web UI now exposes the intended session setup flow from the left **Sessions**
+panel via **New session**. The setup modal shows:
+
+- participant selection by agent/model, including current room agents and
+  available model-agent presets
+- session creation fields (`Session id`, `Title`)
+- mode selection for `自由讨论`, `抢麦/举手`, and `按序陈述`
+
+This is a visible planning surface, not a live backend operation yet. The daemon
+still runs a single config-backed room, and `subscribe(roomId)` is served by the
+current host. To make **Start session** real, implement a backend
+`SessionRegistry` that can create rooms, persist selected participants/mode, and
+route gateway events by session id.
+
 ## Layout
 
 ```

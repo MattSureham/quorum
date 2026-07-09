@@ -50,6 +50,7 @@ import type {
 import "./styles.css";
 
 type ConnectionState = "idle" | "connecting" | "connected" | "offline" | "error";
+type SessionMode = "open-discussion" | "raise-hand" | "round-robin";
 
 type ServerMessage =
   | { t: "snapshot"; room: Room; events: RoomEvent[] }
@@ -98,6 +99,13 @@ interface CredentialDraft {
   locked?: boolean;
 }
 
+interface SessionDraft {
+  roomId: string;
+  title: string;
+  mode: SessionMode;
+  participantIds: string[];
+}
+
 const credentialPresets: CredentialDraft[] = [
   { draftId: "preset-openai", providerId: "openai", envVar: "OPENAI_API_KEY", apiKey: "", baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini", locked: true },
   { draftId: "preset-deepseek", providerId: "deepseek", envVar: "DEEPSEEK_API_KEY", apiKey: "", baseUrl: "https://api.deepseek.com/v1", model: "deepseek-chat", locked: true },
@@ -128,6 +136,13 @@ const agentModelPresets: AgentModelPreset[] = [
 const defaultSettings: ClientSettings = {
   url: "ws://127.0.0.1:8787",
   roomId: "main",
+};
+
+const defaultSessionDraft: SessionDraft = {
+  roomId: "new-session",
+  title: "New session",
+  mode: "open-discussion",
+  participantIds: ["codex", "claude-code"],
 };
 
 const previewRoom: Room = {
@@ -338,6 +353,8 @@ function App() {
   const [credentialDrafts, setCredentialDrafts] = useState<CredentialDraft[]>(credentialPresets);
   const [credentialStatus, setCredentialStatus] = useState("");
   const [credentialsOpen, setCredentialsOpen] = useState(false);
+  const [sessionSetupOpen, setSessionSetupOpen] = useState(false);
+  const [sessionDraft, setSessionDraft] = useState<SessionDraft>(defaultSessionDraft);
   const wsRef = useRef<WebSocket | null>(null);
   const lastSeqRef = useRef(0);
   const attemptRef = useRef(0);
@@ -612,6 +629,15 @@ function App() {
       : [...current, id]);
   }
 
+  function toggleSessionDraftParticipant(id: string) {
+    setSessionDraft((current) => ({
+      ...current,
+      participantIds: current.participantIds.includes(id)
+        ? current.participantIds.filter((participantId) => participantId !== id)
+        : [...current.participantIds, id],
+    }));
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar session-sidebar">
@@ -632,6 +658,11 @@ function App() {
             <span>{displayRoom.title}</span>
             <strong>{displayRoom.id}</strong>
           </button>
+          <button className="secondary-action full-width-action" type="button" onClick={() => setSessionSetupOpen(true)}>
+            <Plus size={15} />
+            <span>New session</span>
+          </button>
+          <div className="muted-note">Creating real sessions needs the next backend SessionRegistry step.</div>
         </section>
 
         <section className="panel connection-panel">
@@ -836,6 +867,16 @@ function App() {
           onClose={() => setCredentialsOpen(false)}
         />
       ) : null}
+
+      {sessionSetupOpen ? (
+        <SessionSetupModal
+          draft={sessionDraft}
+          currentRoom={displayRoom}
+          onChange={setSessionDraft}
+          onToggleParticipant={toggleSessionDraftParticipant}
+          onClose={() => setSessionSetupOpen(false)}
+        />
+      ) : null}
     </main>
   );
 }
@@ -1033,6 +1074,126 @@ function CredentialsModal({
         {status ? <div className="credential-status">{status}</div> : null}
         <div className="credential-modal-actions">
           <button type="button" className="primary-action" onClick={onClose}>Done</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function SessionSetupModal({
+  draft,
+  currentRoom,
+  onChange,
+  onToggleParticipant,
+  onClose,
+}: {
+  draft: SessionDraft;
+  currentRoom: Room;
+  onChange: React.Dispatch<React.SetStateAction<SessionDraft>>;
+  onToggleParticipant: (id: string) => void;
+  onClose: () => void;
+}) {
+  const currentAgentIds = new Set(currentRoom.participants.filter((participant) => participant.kind === "agent").map((participant) => participant.id));
+  const participantOptions = [
+    ...currentRoom.participants.filter((participant) => participant.kind === "agent").map((participant) => ({
+      id: participant.id,
+      display: participant.display,
+      detail: formatAgentDetail(participant),
+      active: true,
+    })),
+    ...agentModelPresets.filter((preset) => !currentAgentIds.has(preset.id)).map((preset) => ({
+      id: preset.id,
+      display: preset.display,
+      detail: preset.detail,
+      active: false,
+    })),
+  ];
+  const modes: Array<{ id: SessionMode; label: string; detail: string }> = [
+    { id: "open-discussion", label: "自由讨论", detail: "Agents can take turns through bids; best for exploration." },
+    { id: "raise-hand", label: "抢麦/举手", detail: "Agents request the floor and must wait for the active speaker to finish." },
+    { id: "round-robin", label: "按序陈述", detail: "A fixed speaking order; best for structured reports." },
+  ];
+
+  return (
+    <div className="credential-modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        className="credential-modal session-setup-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="session-setup-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="credential-modal-head">
+          <div>
+            <div className="panel-title" id="session-setup-title">
+              <MessageSquare size={16} />
+              <span>Session setup</span>
+            </div>
+            <p>Use this flow to define the intended session. Starting it from the UI requires the backend SessionRegistry work listed below.</p>
+          </div>
+          <button type="button" className="icon-action" onClick={onClose} aria-label="Close session setup">
+            <XCircle size={18} />
+          </button>
+        </div>
+
+        <div className="session-setup-grid">
+          <section className="session-setup-section">
+            <div className="mini-heading">New session</div>
+            <label>
+              <span>Session id</span>
+              <input value={draft.roomId} onChange={(input) => onChange((current) => ({ ...current, roomId: input.currentTarget.value }))} />
+            </label>
+            <label>
+              <span>Title</span>
+              <input value={draft.title} onChange={(input) => onChange((current) => ({ ...current, title: input.currentTarget.value }))} />
+            </label>
+          </section>
+
+          <section className="session-setup-section">
+            <div className="mini-heading">Mode</div>
+            <div className="mode-list">
+              {modes.map((mode) => (
+                <button
+                  key={mode.id}
+                  className={draft.mode === mode.id ? "mode-option selected" : "mode-option"}
+                  type="button"
+                  onClick={() => onChange((current) => ({ ...current, mode: mode.id }))}
+                >
+                  <strong>{mode.label}</strong>
+                  <span>{mode.detail}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="session-setup-section wide">
+            <div className="mini-heading">Participants</div>
+            <div className="participant-picker-list">
+              {participantOptions.map((participant) => (
+                <label key={participant.id} className="participant-picker-row">
+                  <input
+                    type="checkbox"
+                    checked={draft.participantIds.includes(participant.id)}
+                    onChange={() => onToggleParticipant(participant.id)}
+                  />
+                  <div>
+                    <strong>{participant.display}</strong>
+                    <span>{participant.detail}</span>
+                  </div>
+                  <i>{participant.active ? "current room" : "available"}</i>
+                </label>
+              ))}
+            </div>
+          </section>
+        </div>
+
+        <div className="inline-alert session-setup-alert">
+          <AlertTriangle size={14} />
+          <span>Not wired yet: the daemon still hosts one config-backed room. Next backend step is a SessionRegistry that can create rooms, persist rosters, and route events by room id.</span>
+        </div>
+        <div className="credential-modal-actions">
+          <button type="button" className="secondary-action" onClick={onClose}>Close</button>
+          <button type="button" className="primary-action" disabled title="Requires backend SessionRegistry">Start session</button>
         </div>
       </section>
     </div>

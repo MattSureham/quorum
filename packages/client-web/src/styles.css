@@ -179,6 +179,10 @@ button {
   font-weight: 700;
 }
 
+.full-width-action {
+  width: 100%;
+}
+
 .status-pill {
   margin-left: auto;
   padding: 3px 8px;
@@ -553,7 +557,109 @@ textarea:focus {
 
 .credential-modal-actions {
   display: flex;
+  gap: 8px;
   justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.session-setup-modal {
+  width: min(880px, calc(100vw - 32px));
+}
+
+.session-setup-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+  gap: 12px;
+}
+
+.session-setup-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #e0e7e4;
+  border-radius: 8px;
+  background: #fbfcfc;
+}
+
+.session-setup-section.wide {
+  grid-column: 1 / -1;
+}
+
+.mode-list,
+.participant-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mode-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 58px;
+  padding: 9px;
+  border: 1px solid #d7e1de;
+  border-radius: 8px;
+  color: #26322f;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.mode-option.selected {
+  border-color: #8bc6b2;
+  background: #eaf7f2;
+}
+
+.mode-option strong,
+.participant-picker-row strong {
+  color: #202a27;
+  font-size: 13px;
+  font-weight: 780;
+}
+
+.mode-option span,
+.participant-picker-row span {
+  color: #64736e;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.participant-picker-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 8px;
+  border: 1px solid #d7e1de;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.participant-picker-row input {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+}
+
+.participant-picker-row div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.participant-picker-row i {
+  color: #65736f;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 720;
+}
+
+.session-setup-alert {
+  align-items: flex-start;
   margin-top: 12px;
 }
 
@@ -1544,6 +1650,22 @@ h1 {
 
   .credentials-panel {
     grid-template-columns: 1fr;
+  }
+
+  .session-setup-modal {
+    width: 100%;
+  }
+
+  .session-setup-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .participant-picker-row {
+    grid-template-columns: 18px minmax(0, 1fr);
+  }
+
+  .participant-picker-row i {
+    grid-column: 2;
   }
 
   .topbar,
