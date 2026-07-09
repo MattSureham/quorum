@@ -133,16 +133,20 @@ describe("RoomHost", () => {
   it("runs Claude Code through a local CLI subprocess by default", async () => {
     const dir = await mkdtemp(join(tmpdir(), "quorum-claude-cli-"));
     const fakeClaude = join(dir, "claude");
-    await writeFile(fakeClaude, `#!/bin/sh
+await writeFile(fakeClaude, `#!/bin/sh
 if [ -n "$ANTHROPIC_API_KEY" ]; then
   echo "unexpected ANTHROPIC_API_KEY" >&2
   exit 9
 fi
+case " $* " in
+  *" --verbose "*) ;;
+  *) echo "missing --verbose" >&2; exit 8 ;;
+esac
 printf '%s\\n' '{"type":"system","session_id":"fake-session"}'
 printf '%s\\n' '{"type":"assistant","message":{"content":[{"type":"text","text":"hello from local claude cli"}]}}'
 printf '%s\\n' '{"type":"result","session_id":"fake-session"}'
 `);
-    await chmod(fakeClaude, 0o755);
+await chmod(fakeClaude, 0o755);
     const oldAnthropicKey = process.env.ANTHROPIC_API_KEY;
     process.env.ANTHROPIC_API_KEY = "invalid-project-key";
 

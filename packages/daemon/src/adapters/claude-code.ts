@@ -66,6 +66,7 @@ export class ClaudeCodeAdapter extends BaseAgentAdapter {
     const cwd = input.workspacePath ?? process.cwd();
     const args = [
       "-p",
+      "--verbose",
       "--output-format",
       "stream-json",
       "--input-format",

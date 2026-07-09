@@ -151,6 +151,10 @@ The following is the implementation trail from this session. It is written for t
     - Files: `packages/daemon/src/adapters/claude-code.ts`, `README.md`, `HANDOFF.md`.
     - Work: changed `claude-code` from default Agent SDK execution to default local `claude` CLI subprocess execution using `claude -p --output-format stream-json`. This reuses the user's existing Claude Code local auth/keychain/session behavior instead of asking for an API key. The subprocess also strips `ANTHROPIC_API_KEY` by default so provider/API-model credentials cannot override local Claude Code login. The old SDK path remains available only when `adapterConfig.transport` is explicitly set to `"sdk"`.
 
+34. this change `fix: add verbose to claude code stream json`
+    - Files: `packages/daemon/src/adapters/claude-code.ts`, `packages/daemon/src/room-host.test.ts`, `README.md`, `HANDOFF.md`.
+    - Work: added `--verbose` to the default `claude -p --output-format stream-json` subprocess invocation because Claude CLI requires verbose mode for stream-json output in print mode. The fake CLI regression test now fails if `--verbose` is omitted.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:
@@ -280,7 +284,7 @@ SPEC.md       full design (Chinese): data model, Conductor state machine, adapte
 - **Chat vs log**: the central Chat transcript should remain message-only. Keep non-message room/session events in diagnostics, recent activity, tool activity, memory, replay, or checkpoint panels; do not reintroduce raw event rows into the primary chat stream.
 - **API-model failures**: `packages/daemon/src/adapters/api-model.ts` must never silently complete on missing keys, HTTP errors, or empty model responses. It should emit a visible message so the run-status banner and transcript explain what happened.
 - **The room (agents, policy, workspace)**: still defined in `quorum.config.json` at the repo root (or `QUORUM_CONFIG=<path>`). `packages/cli/src/index.ts` loads it via `loadConfig()` and falls back to built-in defaults if the file is missing.
-- **Add an agent**: currently still add a `ParticipantDescriptor` to `participants[]` with an `adapter` + `adapterConfig`. `claude-code` runs the local `claude` CLI subprocess by default and should reuse Claude Code local auth; it strips `ANTHROPIC_API_KEY` unless `adapterConfig.inheritApiKeyEnv` is explicitly true. Set `adapterConfig.transport: "sdk"` only for the optional Agent SDK path. `codex` needs the `codex` CLI on PATH; `api-model` is any OpenAI-compatible endpoint; `echo` is the built-in fake.
+- **Add an agent**: currently still add a `ParticipantDescriptor` to `participants[]` with an `adapter` + `adapterConfig`. `claude-code` runs the local `claude -p --verbose --output-format stream-json` CLI subprocess by default and should reuse Claude Code local auth; it strips `ANTHROPIC_API_KEY` unless `adapterConfig.inheritApiKeyEnv` is explicitly true. Set `adapterConfig.transport: "sdk"` only for the optional Agent SDK path. `codex` needs the `codex` CLI on PATH; `api-model` is any OpenAI-compatible endpoint; `echo` is the built-in fake.
 - **Moderator model**: `packages/daemon/src/moderator.ts`. Configured via `policy.moderatorModel` / `QUORUM_MODERATOR_MODEL` (default `gpt-4o-mini`) / `QUORUM_MODERATOR_BASE_URL`, key from `OPENAI_API_KEY`. Degrades to "yield to human" on any failure.
 
 ## Milestone status (SPEC §12)
