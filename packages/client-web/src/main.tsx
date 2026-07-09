@@ -16,6 +16,7 @@ import {
   PauseCircle,
   PenLine,
   Plug,
+  Plus,
   Radio,
   RefreshCcw,
   Send,
@@ -88,17 +89,19 @@ interface ProviderConfigView {
 }
 
 interface CredentialDraft {
+  draftId: string;
   providerId: string;
   envVar: string;
   apiKey: string;
   baseUrl: string;
   model: string;
+  locked?: boolean;
 }
 
 const credentialPresets: CredentialDraft[] = [
-  { providerId: "openai", envVar: "OPENAI_API_KEY", apiKey: "", baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini" },
-  { providerId: "deepseek", envVar: "DEEPSEEK_API_KEY", apiKey: "", baseUrl: "https://api.deepseek.com/v1", model: "deepseek-chat" },
-  { providerId: "anthropic", envVar: "ANTHROPIC_API_KEY", apiKey: "", baseUrl: "", model: "claude-sonnet-4-20250514" },
+  { draftId: "preset-openai", providerId: "openai", envVar: "OPENAI_API_KEY", apiKey: "", baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini", locked: true },
+  { draftId: "preset-deepseek", providerId: "deepseek", envVar: "DEEPSEEK_API_KEY", apiKey: "", baseUrl: "https://api.deepseek.com/v1", model: "deepseek-chat", locked: true },
+  { draftId: "preset-anthropic", providerId: "anthropic", envVar: "ANTHROPIC_API_KEY", apiKey: "", baseUrl: "", model: "claude-sonnet-4-20250514", locked: true },
 ];
 
 interface AgentModelPreset {
@@ -529,34 +532,70 @@ function App() {
   }
 
   function mergeCredentialViews(providers: ProviderConfigView[]) {
-    setCredentialDrafts((current) => current.map((draft) => {
-      const view = providers.find((provider) => provider.providerId === draft.providerId);
-      if (!view) return draft;
-      return {
-        ...draft,
-        envVar: view.envVar ?? draft.envVar,
-        baseUrl: view.baseUrl ?? draft.baseUrl,
-        model: view.model ?? draft.model,
-        apiKey: "",
-      };
-    }));
+    setCredentialDrafts((current) => {
+      const merged = current.map((draft) => {
+        const view = providers.find((provider) => provider.providerId === draft.providerId);
+        if (!view) return draft;
+        return {
+          ...draft,
+          envVar: view.envVar ?? draft.envVar,
+          baseUrl: view.baseUrl ?? draft.baseUrl,
+          model: view.model ?? draft.model,
+          apiKey: "",
+        };
+      });
+      const known = new Set(merged.map((draft) => draft.providerId).filter(Boolean));
+      for (const provider of providers) {
+        if (known.has(provider.providerId)) continue;
+        merged.push({
+          draftId: `saved-${provider.providerId}`,
+          providerId: provider.providerId,
+          envVar: provider.envVar ?? "",
+          apiKey: "",
+          baseUrl: provider.baseUrl ?? "",
+          model: provider.model ?? "",
+        });
+        known.add(provider.providerId);
+      }
+      return merged;
+    });
   }
 
-  function updateCredentialDraft(providerId: string, patch: Partial<CredentialDraft>) {
+  function updateCredentialDraft(draftId: string, patch: Partial<CredentialDraft>) {
     setCredentialStatus("");
-    setCredentialDrafts((current) => current.map((draft) => draft.providerId === providerId ? { ...draft, ...patch } : draft));
+    setCredentialDrafts((current) => current.map((draft) => draft.draftId === draftId ? { ...draft, ...patch } : draft));
+  }
+
+  function addCredentialDraft() {
+    setCredentialStatus("");
+    setCredentialDrafts((current) => [
+      ...current,
+      {
+        draftId: `custom-${Date.now()}`,
+        providerId: "",
+        envVar: "",
+        apiKey: "",
+        baseUrl: "",
+        model: "",
+      },
+    ]);
   }
 
   function saveCredential(draft: CredentialDraft) {
+    const providerId = draft.providerId.trim();
+    if (!providerId) {
+      setCredentialStatus("Provider id is required");
+      return;
+    }
     const payload: Record<string, unknown> = {
       t: "set_credential",
-      providerId: draft.providerId,
+      providerId,
       envVar: draft.envVar.trim() || undefined,
       baseUrl: draft.baseUrl.trim() || undefined,
       model: draft.model.trim() || undefined,
     };
     if (draft.apiKey.trim()) payload.apiKey = draft.apiKey.trim();
-    if (send(payload)) setCredentialStatus(`Saving ${draft.providerId}...`);
+    if (send(payload)) setCredentialStatus(`Saving ${providerId}...`);
   }
 
   function rollback(toHead: string) {
@@ -790,6 +829,7 @@ function App() {
           status={credentialStatus}
           onChange={updateCredentialDraft}
           onSave={saveCredential}
+          onAddProvider={addCredentialDraft}
           onClose={() => setCredentialsOpen(false)}
         />
       ) : null}
@@ -870,6 +910,7 @@ function formatAgentDetail(agent: ParticipantDescriptor): string {
 }
 
 function modelsUsingProvider(providerId: string): string {
+  if (!providerId) return "Custom API provider credential";
   const models = agentModelPresets
     .filter((preset) => preset.providerId === providerId)
     .map((preset) => preset.display);
@@ -883,14 +924,16 @@ function CredentialsModal({
   status,
   onChange,
   onSave,
+  onAddProvider,
   onClose,
 }: {
   connected: boolean;
   drafts: CredentialDraft[];
   views: ProviderConfigView[];
   status: string;
-  onChange: (providerId: string, patch: Partial<CredentialDraft>) => void;
+  onChange: (draftId: string, patch: Partial<CredentialDraft>) => void;
   onSave: (draft: CredentialDraft) => void;
+  onAddProvider: () => void;
   onClose: () => void;
 }) {
   return (
@@ -910,19 +953,25 @@ function CredentialsModal({
             </div>
             <p>These keys are credential sources for API-model agents. CLI agents such as Codex and Claude Code use their own local auth/session.</p>
           </div>
-          <button type="button" className="icon-action" onClick={onClose} aria-label="Close credentials">
-            <XCircle size={18} />
-          </button>
+          <div className="credential-modal-head-actions">
+            <button type="button" className="secondary-action compact-action" onClick={onAddProvider}>
+              <Plus size={15} />
+              <span>Add provider</span>
+            </button>
+            <button type="button" className="icon-action" onClick={onClose} aria-label="Close credentials">
+              <XCircle size={18} />
+            </button>
+          </div>
         </div>
 
         <div className="credentials-panel">
           {drafts.map((draft) => {
             const view = views.find((provider) => provider.providerId === draft.providerId);
             return (
-              <div key={draft.providerId} className="credential-card">
+              <div key={draft.draftId} className="credential-card">
                 <div className="credential-card-head">
                   <div>
-                    <strong>{draft.providerId}</strong>
+                    <strong>{draft.providerId || "New provider"}</strong>
                     <span>{modelsUsingProvider(draft.providerId)}</span>
                   </div>
                   <span className={view?.configured ? "credential-state configured" : "credential-state"}>
@@ -930,20 +979,29 @@ function CredentialsModal({
                   </span>
                 </div>
                 <label>
+                  <span>Provider id</span>
+                  <input
+                    disabled={draft.locked}
+                    placeholder="zhipu, moonshot, openrouter..."
+                    value={draft.providerId}
+                    onChange={(input) => onChange(draft.draftId, { providerId: input.currentTarget.value.trim().toLowerCase() })}
+                  />
+                </label>
+                <label>
                   <span>API key</span>
                   <input
                     type="password"
                     autoComplete="off"
                     placeholder={view?.configured ? "Leave blank to keep existing key" : "Paste API key"}
                     value={draft.apiKey}
-                    onChange={(input) => onChange(draft.providerId, { apiKey: input.currentTarget.value })}
+                    onChange={(input) => onChange(draft.draftId, { apiKey: input.currentTarget.value })}
                   />
                 </label>
                 <label>
                   <span>Env var</span>
                   <input
                     value={draft.envVar}
-                    onChange={(input) => onChange(draft.providerId, { envVar: input.currentTarget.value })}
+                    onChange={(input) => onChange(draft.draftId, { envVar: input.currentTarget.value })}
                   />
                 </label>
                 <label>
@@ -951,14 +1009,14 @@ function CredentialsModal({
                   <input
                     placeholder="Provider default"
                     value={draft.baseUrl}
-                    onChange={(input) => onChange(draft.providerId, { baseUrl: input.currentTarget.value })}
+                    onChange={(input) => onChange(draft.draftId, { baseUrl: input.currentTarget.value })}
                   />
                 </label>
                 <label>
                   <span>Default model</span>
                   <input
                     value={draft.model}
-                    onChange={(input) => onChange(draft.providerId, { model: input.currentTarget.value })}
+                    onChange={(input) => onChange(draft.draftId, { model: input.currentTarget.value })}
                   />
                 </label>
                 <button type="button" className="secondary-action" disabled={!connected} onClick={() => onSave(draft)}>

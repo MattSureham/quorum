@@ -454,6 +454,19 @@ textarea:focus {
   margin-bottom: 14px;
 }
 
+.credential-modal-head-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.compact-action {
+  min-height: 34px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
 .credential-modal-head .panel-title {
   margin-bottom: 4px;
 }
@@ -1521,6 +1534,12 @@ h1 {
 
   .credential-modal-head {
     align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .credential-modal-head-actions {
+    width: 100%;
+    justify-content: space-between;
   }
 
   .credentials-panel {
