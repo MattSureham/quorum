@@ -156,9 +156,10 @@ The Windows test installer is unsigned. Windows may show an "unknown publisher"
 or SmartScreen warning. Manual acceptance check: install the `.exe`, launch
 Quorum, confirm the UI connects to the sidecar, send a message to the Echo
 session, create a session with a workspace path, and confirm closing the app
-stops the sidecar process. Local CLI agents such as Claude Code are launched
-through the Windows shell so `.cmd` shims work. Remaining release work is
-signing/notarization, updater wiring, and broader platform lifecycle hardening.
+stops the sidecar process. The desktop bundle includes Windows icon resources,
+and local CLI agents such as Claude Code are launched through the Windows shell
+so `.cmd` shims work. Remaining release work is signing/notarization, updater
+wiring, and broader platform lifecycle hardening.
 
 ## Status
 

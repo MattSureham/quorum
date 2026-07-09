@@ -175,6 +175,10 @@ The following is the implementation trail from this session. It is written for t
     - Files: `packages/daemon/src/adapters/claude-code.ts`, `README.md`, `HANDOFF.md`.
     - Work: changed the Claude Code CLI adapter to spawn through the Windows shell on Windows. This is required for `.cmd` launchers such as npm-installed Claude Code shims and fixes the `spawn EINVAL` failure surfaced by the Windows installer workflow.
 
+40. this change `fix: add windows desktop icon resource`
+    - Files: `apps/desktop/src-tauri/icons/icon.ico`, `README.md`, `HANDOFF.md`.
+    - Work: generated a Windows `.ico` resource from the existing 512px desktop PNG icon because Tauri's Windows resource build requires `icons/icon.ico` before NSIS bundling can proceed.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:
@@ -206,6 +210,7 @@ What is already implemented:
 - `pnpm sidecar:bun:smoke` validates the compiled Bun sidecar with SQLite, token-authenticated WebSocket, and a shared-session echo turn.
 - `apps/desktop` is a Tauri 2 shell. Its Rust layer manages the sidecar process, parses the stdout handshake, and exposes `get_sidecar_connection()` to the Web UI.
 - The Web UI detects Tauri at startup and replaces the default `ws://127.0.0.1:8787` connection with the sidecar URL returned by `get_sidecar_connection()`.
+- The desktop bundle now includes `apps/desktop/src-tauri/icons/icon.ico` for Windows resource generation.
 - Tests now cover SQLite projection tables, legacy event-table migration, replay projection, and a three-agent shared-session open discussion through queued bids.
 - Shared-session `AgentRuntime.callTool()` now has a human approval loop wired through `approve_tool`; it emits requested/granted/denied approval signals, executes approved safe room tools (`read_room`, `post_note`, `request_review`, `hand_off`, `raise_hand`), and records `tool_call` / `tool_result` events. Approved external command tools such as `Bash` now route through a daemon-provided local sandbox executor with workspace cwd isolation, timeout, output truncation, allowlisted tool names, and dangerous-command blocking.
 - WebSocket `replay_projection` returns a projected shared-session state from `afterSeq`, and the Web UI has a Replay panel for phase/speaker/bid-state checks.
