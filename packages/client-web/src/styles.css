@@ -272,6 +272,22 @@ textarea:focus {
   cursor: pointer;
 }
 
+.icon-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 7px;
+  color: #30423c;
+  background: transparent;
+  cursor: pointer;
+}
+
+.icon-action:hover {
+  background: #ecf2ef;
+}
+
 .primary-action {
   color: #ffffff;
   background: #2f6f5b;
@@ -327,12 +343,110 @@ textarea:focus {
   gap: 8px;
 }
 
-.credentials-panel {
+.provider-panel {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-height: 52vh;
+}
+
+.provider-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.provider-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 8px;
+  border: 1px solid #e0e7e4;
+  border-radius: 8px;
+  background: #fbfcfc;
+}
+
+.provider-row div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.provider-row strong {
+  color: #202a27;
+  font-size: 13px;
+  font-weight: 780;
+}
+
+.provider-row div span {
+  overflow: hidden;
+  color: #64736e;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.provider-row > .credential-state {
+  overflow: visible;
+  white-space: nowrap;
+}
+
+.provider-config-action {
+  width: 100%;
+}
+
+.muted-note {
+  color: #687872;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.credential-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 22, 20, 0.42);
+}
+
+.credential-modal {
+  width: min(820px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
   overflow: auto;
+  padding: 16px;
+  border: 1px solid #ccd6d2;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 24px 80px rgba(16, 28, 24, 0.24);
+}
+
+.credential-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.credential-modal-head .panel-title {
+  margin-bottom: 4px;
+}
+
+.credential-modal-head p {
+  margin: 0;
+  color: #687872;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.credentials-panel {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .credential-card {
@@ -378,12 +492,19 @@ textarea:focus {
 
 .credential-status {
   min-height: 28px;
+  margin-top: 10px;
   padding: 7px 8px;
   border-radius: 7px;
   color: #14533f;
   background: #e5f4ee;
   font-size: 12px;
   font-weight: 720;
+}
+
+.credential-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
 }
 
 .participant-row,
@@ -1299,7 +1420,7 @@ h1 {
   }
 
   .credentials-panel {
-    max-height: 420px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -1349,6 +1470,24 @@ h1 {
 
   .connection-panel .primary-action {
     min-height: 34px;
+  }
+
+  .credential-modal-backdrop {
+    align-items: stretch;
+    padding: 10px;
+  }
+
+  .credential-modal {
+    width: 100%;
+    max-height: calc(100vh - 20px);
+  }
+
+  .credential-modal-head {
+    align-items: flex-start;
+  }
+
+  .credentials-panel {
+    grid-template-columns: 1fr;
   }
 
   .topbar,

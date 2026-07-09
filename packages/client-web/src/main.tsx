@@ -313,6 +313,7 @@ function App() {
   const [credentialViews, setCredentialViews] = useState<ProviderConfigView[]>([]);
   const [credentialDrafts, setCredentialDrafts] = useState<CredentialDraft[]>(credentialPresets);
   const [credentialStatus, setCredentialStatus] = useState("");
+  const [credentialsOpen, setCredentialsOpen] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const lastSeqRef = useRef(0);
   const attemptRef = useRef(0);
@@ -709,13 +710,11 @@ function App() {
           </div>
         </section>
 
-        <CredentialsPanel
+        <ProviderStatusPanel
           connected={connected}
           drafts={credentialDrafts}
           views={credentialViews}
-          status={credentialStatus}
-          onChange={updateCredentialDraft}
-          onSave={saveCredential}
+          onConfigure={() => setCredentialsOpen(true)}
         />
 
         <details className="debug-details">
@@ -764,17 +763,72 @@ function App() {
           </div>
         </details>
       </aside>
+
+      {credentialsOpen ? (
+        <CredentialsModal
+          connected={connected}
+          drafts={credentialDrafts}
+          views={credentialViews}
+          status={credentialStatus}
+          onChange={updateCredentialDraft}
+          onSave={saveCredential}
+          onClose={() => setCredentialsOpen(false)}
+        />
+      ) : null}
     </main>
   );
 }
 
-function CredentialsPanel({
+function ProviderStatusPanel({
+  connected,
+  drafts,
+  views,
+  onConfigure,
+}: {
+  connected: boolean;
+  drafts: CredentialDraft[];
+  views: ProviderConfigView[];
+  onConfigure: () => void;
+}) {
+  return (
+    <section className="panel provider-panel">
+      <div className="panel-title">
+        <KeyRound size={16} />
+        <span>Providers</span>
+      </div>
+      <div className="provider-list">
+        {drafts.map((draft) => {
+          const view = views.find((provider) => provider.providerId === draft.providerId);
+          return (
+            <div key={draft.providerId} className="provider-row">
+              <div>
+                <strong>{draft.providerId}</strong>
+                <span>{view?.model || draft.model}</span>
+              </div>
+              <span className={view?.configured ? "credential-state configured" : "credential-state"}>
+                {view?.configured ? `set ${view.apiKeyPreview ?? ""}` : "not set"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <button type="button" className="secondary-action provider-config-action" disabled={!connected} onClick={onConfigure}>
+        <Settings2 size={15} />
+        <span>Configure credentials</span>
+      </button>
+      {!connected ? <div className="muted-note">Connect to a room before editing provider credentials.</div> : null}
+    </section>
+  );
+}
+
+function CredentialsModal({
   connected,
   drafts,
   views,
   status,
   onChange,
   onSave,
+  onClose,
 }: {
   connected: boolean;
   drafts: CredentialDraft[];
@@ -782,63 +836,87 @@ function CredentialsPanel({
   status: string;
   onChange: (providerId: string, patch: Partial<CredentialDraft>) => void;
   onSave: (draft: CredentialDraft) => void;
+  onClose: () => void;
 }) {
   return (
-    <section className="panel credentials-panel">
-      <div className="panel-title">
-        <KeyRound size={16} />
-        <span>Credentials</span>
-      </div>
-      {drafts.map((draft) => {
-        const view = views.find((provider) => provider.providerId === draft.providerId);
-        return (
-          <div key={draft.providerId} className="credential-card">
-            <div className="credential-card-head">
-              <strong>{draft.providerId}</strong>
-              <span className={view?.configured ? "credential-state configured" : "credential-state"}>
-                {view?.configured ? `set ${view.apiKeyPreview ?? ""}` : "not set"}
-              </span>
+    <div className="credential-modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        className="credential-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="credential-modal-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="credential-modal-head">
+          <div>
+            <div className="panel-title" id="credential-modal-title">
+              <KeyRound size={16} />
+              <span>Provider credentials</span>
             </div>
-            <label>
-              <span>API key</span>
-              <input
-                type="password"
-                placeholder={view?.configured ? "Leave blank to keep existing key" : "Paste API key"}
-                value={draft.apiKey}
-                onChange={(input) => onChange(draft.providerId, { apiKey: input.currentTarget.value })}
-              />
-            </label>
-            <label>
-              <span>Env var</span>
-              <input
-                value={draft.envVar}
-                onChange={(input) => onChange(draft.providerId, { envVar: input.currentTarget.value })}
-              />
-            </label>
-            <label>
-              <span>Base URL</span>
-              <input
-                placeholder="Provider default"
-                value={draft.baseUrl}
-                onChange={(input) => onChange(draft.providerId, { baseUrl: input.currentTarget.value })}
-              />
-            </label>
-            <label>
-              <span>Default model</span>
-              <input
-                value={draft.model}
-                onChange={(input) => onChange(draft.providerId, { model: input.currentTarget.value })}
-              />
-            </label>
-            <button type="button" className="secondary-action" disabled={!connected} onClick={() => onSave(draft)}>
-              <Check size={14} />
-              <span>Save</span>
-            </button>
+            <p>Keys are stored locally by the daemon. The browser receives masked previews only.</p>
           </div>
-        );
-      })}
-      {status ? <div className="credential-status">{status}</div> : null}
-    </section>
+          <button type="button" className="icon-action" onClick={onClose} aria-label="Close credentials">
+            <XCircle size={18} />
+          </button>
+        </div>
+
+        <div className="credentials-panel">
+          {drafts.map((draft) => {
+            const view = views.find((provider) => provider.providerId === draft.providerId);
+            return (
+              <div key={draft.providerId} className="credential-card">
+                <div className="credential-card-head">
+                  <strong>{draft.providerId}</strong>
+                  <span className={view?.configured ? "credential-state configured" : "credential-state"}>
+                    {view?.configured ? `set ${view.apiKeyPreview ?? ""}` : "not set"}
+                  </span>
+                </div>
+                <label>
+                  <span>API key</span>
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    placeholder={view?.configured ? "Leave blank to keep existing key" : "Paste API key"}
+                    value={draft.apiKey}
+                    onChange={(input) => onChange(draft.providerId, { apiKey: input.currentTarget.value })}
+                  />
+                </label>
+                <label>
+                  <span>Env var</span>
+                  <input
+                    value={draft.envVar}
+                    onChange={(input) => onChange(draft.providerId, { envVar: input.currentTarget.value })}
+                  />
+                </label>
+                <label>
+                  <span>Base URL</span>
+                  <input
+                    placeholder="Provider default"
+                    value={draft.baseUrl}
+                    onChange={(input) => onChange(draft.providerId, { baseUrl: input.currentTarget.value })}
+                  />
+                </label>
+                <label>
+                  <span>Default model</span>
+                  <input
+                    value={draft.model}
+                    onChange={(input) => onChange(draft.providerId, { model: input.currentTarget.value })}
+                  />
+                </label>
+                <button type="button" className="secondary-action" disabled={!connected} onClick={() => onSave(draft)}>
+                  <Check size={14} />
+                  <span>Save</span>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+        {status ? <div className="credential-status">{status}</div> : null}
+        <div className="credential-modal-actions">
+          <button type="button" className="primary-action" onClick={onClose}>Done</button>
+        </div>
+      </section>
+    </div>
   );
 }
 

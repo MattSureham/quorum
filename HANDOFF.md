@@ -87,6 +87,26 @@ The following is the implementation trail from this session. It is written for t
     - Files: `packages/core/src/tool-executor.ts`, `packages/core/src/session-manager.ts`, `packages/core/src/session-manager.test.ts`, `packages/daemon/src/tools/local-sandbox-executor.ts`, `packages/daemon/src/tools/local-sandbox-executor.test.ts`, `packages/daemon/src/shared-session-host.ts`, `packages/daemon/src/index.ts`, `README.md`, `HANDOFF.md`, `HANDOFF.zh.md`.
     - Work: added a core `ToolExecutor` injection point and a daemon local sandbox executor for approved external command tools such as `Bash`. Current safeguards: workspace cwd containment, timeout, stdout/stderr truncation, tool allowlist, and common dangerous-command blocking. Remaining gap: adapter-native Claude/Codex tool events still need bridging so every native tool call goes through the same approval/sandbox path.
 
+18. `cf765f2 docs: add session implementation handoff log`
+    - Files: `HANDOFF.md`.
+    - Work: recorded the implementation trail so another agent can continue without reconstructing the session from chat history.
+
+19. `b4f0494 fix: keep web ui composer visible` and `a260cdd fix: make shared session interrupts usable`
+    - Files: `packages/client-web/src/main.tsx`, `packages/client-web/src/styles.css`, shared-session/gateway files as needed.
+    - Work: made the primary chat composer usable in the Web UI and fixed interruption handling so humans can regain control during shared-session runs.
+
+20. `bd76368 feat: configure provider credentials in web ui`
+    - Files: `packages/daemon/src/persistence/sqlite-store.ts`, `packages/daemon/src/gateway/ws-server.ts`, `packages/daemon/src/shared-session-host.ts`, `packages/daemon/src/adapters/api-model.ts`, `packages/client-web/src/main.tsx`, `packages/client-web/src/styles.css`, docs/tests.
+    - Work: added WebSocket `get_credentials` / `set_credential`, persisted provider API keys/base URLs/models in local SQLite, applied them to daemon `process.env`, and returned only masked previews to the browser.
+
+21. `394da4f fix: simplify web ui information architecture`
+    - Files: `packages/client-web/src/main.tsx`, `packages/client-web/src/styles.css`, `README.md`, `HANDOFF.md`.
+    - Work: reorganized the Web UI around the main workflow: rooms/sessions on the left, chat/session stream in the center, participants/providers on the right, with diagnostics collapsed.
+
+22. this change `fix: hide credential forms behind modal`
+    - Files: `packages/client-web/src/main.tsx`, `packages/client-web/src/styles.css`, `README.md`, `HANDOFF.md`.
+    - Work: moved provider API key inputs out of the persistent right sidebar. The main workspace now shows only provider status and a Configure button; actual credential editing happens in a modal that can be closed after setup.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:
@@ -121,8 +141,8 @@ What is already implemented:
 - Tests now cover SQLite projection tables, legacy event-table migration, replay projection, and a three-agent shared-session open discussion through queued bids.
 - Shared-session `AgentRuntime.callTool()` now has a human approval loop wired through `approve_tool`; it emits requested/granted/denied approval signals, executes approved safe room tools (`read_room`, `post_note`, `request_review`, `hand_off`, `raise_hand`), and records `tool_call` / `tool_result` events. Approved external command tools such as `Bash` now route through a daemon-provided local sandbox executor with workspace cwd isolation, timeout, output truncation, allowlisted tool names, and dangerous-command blocking.
 - WebSocket `replay_projection` returns a projected shared-session state from `afterSeq`, and the Web UI has a Replay panel for phase/speaker/bid-state checks.
-- WebSocket `get_credentials` / `set_credential` now back the Web UI Credentials panel. Provider API keys/base URLs/models are persisted in local SQLite `provider_configs`, immediately applied to `process.env`, and returned to the browser only as masked previews.
-- The Web UI now prioritizes the primary workflow: session/room selection on the left, chat/session stream and composer in the center, participant + credential configuration on the right. Diagnostics such as replay, memory, tool activity, and checkpoints are collapsed by default. In shared-session mode, the legacy policy segmented control is disabled because `set_policy` is not implemented for the new kernel yet.
+- WebSocket `get_credentials` / `set_credential` now back the Web UI provider credential modal. Provider API keys/base URLs/models are persisted in local SQLite `provider_configs`, immediately applied to `process.env`, and returned to the browser only as masked previews.
+- The Web UI now prioritizes the primary workflow: session/room selection on the left, chat/session stream and composer in the center, participants and provider status on the right. Credential forms are hidden behind a modal opened from the Providers panel. Diagnostics such as replay, memory, tool activity, and checkpoints are collapsed by default. In shared-session mode, the legacy policy segmented control is disabled because `set_policy` is not implemented for the new kernel yet.
 - Working-memory summaries can be created, persisted through `SqliteStore`, triggered through WebSocket `compact_memory`, inspected in the Web UI Memory panel, and automatically compacted after turns once configured event thresholds are reached.
 - Verification: `pnpm typecheck`, `pnpm test`, `pnpm --filter @quorum/client-web build`, `pnpm smoke:shared`, `pnpm smoke:sidecar`, `pnpm sidecar:node:smoke`, `pnpm sidecar:bun:smoke`, `pnpm desktop:check`, and `pnpm desktop:build` pass on macOS arm64.
 
@@ -209,7 +229,7 @@ SPEC.md       full design (Chinese): data model, Conductor state machine, adapte
 - **WS gateway** (`daemon/src/gateway/ws-server.ts`, SPEC §10): client→server `subscribe/post_message/interrupt/set_policy/approve_tool/take_write_floor/rollback`; server→client `snapshot/event/error`. Binds 127.0.0.1:8787.
 
 ## Where to change common things
-- **Provider credentials**: configure them in the Web UI Credentials panel. They are persisted locally in SQLite and applied to daemon `process.env`; the browser only receives masked previews.
+- **Provider credentials**: configure them from the Web UI Providers panel via the credential modal. Do not put API key inputs directly in the persistent sidebar. Credentials are persisted locally in SQLite and applied to daemon `process.env`; the browser only receives masked previews.
 - **The room (agents, policy, workspace)**: still defined in `quorum.config.json` at the repo root (or `QUORUM_CONFIG=<path>`). `packages/cli/src/index.ts` loads it via `loadConfig()` and falls back to built-in defaults if the file is missing.
 - **Add an agent**: currently still add a `ParticipantDescriptor` to `participants[]` with an `adapter` + `adapterConfig`. `claude-code` needs the Agent SDK + Claude Code auth; `codex` needs the `codex` CLI on PATH; `api-model` is any OpenAI-compatible endpoint; `echo` is the built-in fake.
 - **Moderator model**: `packages/daemon/src/moderator.ts`. Configured via `policy.moderatorModel` / `QUORUM_MODERATOR_MODEL` (default `gpt-4o-mini`) / `QUORUM_MODERATOR_BASE_URL`, key from `OPENAI_API_KEY`. Degrades to "yield to human" on any failure.
