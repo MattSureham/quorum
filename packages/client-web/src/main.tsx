@@ -101,6 +101,8 @@ interface CredentialDraft {
 const credentialPresets: CredentialDraft[] = [
   { draftId: "preset-openai", providerId: "openai", envVar: "OPENAI_API_KEY", apiKey: "", baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini", locked: true },
   { draftId: "preset-deepseek", providerId: "deepseek", envVar: "DEEPSEEK_API_KEY", apiKey: "", baseUrl: "https://api.deepseek.com/v1", model: "deepseek-chat", locked: true },
+  { draftId: "preset-zhipu", providerId: "zhipu", envVar: "ZHIPU_API_KEY", apiKey: "", baseUrl: "https://open.bigmodel.cn/api/paas/v4", model: "glm-4.6", locked: true },
+  { draftId: "preset-minimax", providerId: "minimax", envVar: "MINIMAX_API_KEY", apiKey: "", baseUrl: "https://api.minimax.io/v1", model: "MiniMax-M3", locked: true },
   { draftId: "preset-anthropic", providerId: "anthropic", envVar: "ANTHROPIC_API_KEY", apiKey: "", baseUrl: "", model: "claude-sonnet-4-20250514", locked: true },
 ];
 
@@ -119,7 +121,8 @@ const agentModelPresets: AgentModelPreset[] = [
   { id: "openclaw", display: "OpenClaw", adapter: "openclaw", detail: "Agent adapter placeholder; not installed in this build", credential: "Agent-specific auth" },
   { id: "deepseek-v4-pro", display: "DeepSeek V4 Pro", adapter: "api-model", detail: "Direct API model agent", credential: "DeepSeek API key", providerId: "deepseek" },
   { id: "deepseek-v4-flash", display: "DeepSeek V4 Flash", adapter: "api-model", detail: "Direct API model agent", credential: "DeepSeek API key", providerId: "deepseek" },
-  { id: "glm-5.2", display: "GLM 5.2", adapter: "api-model", detail: "Direct API model agent", credential: "OpenAI-compatible provider key", providerId: "openai" },
+  { id: "glm-5.2", display: "GLM 5.2", adapter: "api-model", detail: "Direct API model agent", credential: "Zhipu API key", providerId: "zhipu" },
+  { id: "minimax-m3", display: "MiniMax M3", adapter: "api-model", detail: "Direct API model agent", credential: "MiniMax API key", providerId: "minimax" },
 ];
 
 const defaultSettings: ClientSettings = {

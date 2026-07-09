@@ -115,6 +115,10 @@ The following is the implementation trail from this session. It is written for t
     - Files: `packages/client-web/src/main.tsx`, `packages/client-web/src/styles.css`, `README.md`, `HANDOFF.md`.
     - Work: the API credential modal is no longer limited to the built-in OpenAI/DeepSeek/Anthropic preset rows. Users can add a custom provider id, env var, base URL, default model, and API key; saved non-preset providers returned by the daemon are merged back into the modal.
 
+25. this change `feat: add zhipu and minimax credential presets`
+    - Files: `packages/client-web/src/main.tsx`, `README.md`, `HANDOFF.md`.
+    - Work: added Zhipu and MiniMax to the built-in API credential presets, kept DeepSeek as an explicit preset, mapped GLM model agents to the Zhipu provider, and added MiniMax M3 as an available direct API model agent.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:
@@ -237,7 +241,7 @@ SPEC.md       full design (Chinese): data model, Conductor state machine, adapte
 - **WS gateway** (`daemon/src/gateway/ws-server.ts`, SPEC §10): client→server `subscribe/post_message/interrupt/set_policy/approve_tool/take_write_floor/rollback`; server→client `snapshot/event/error`. Binds 127.0.0.1:8787.
 
 ## Where to change common things
-- **Agent/model config**: the Web UI right sidebar should be agent/model oriented. Users select or configure participants such as `codex`, `claude-code`, OpenClaw-style adapters, or direct API model agents such as DeepSeek/GLM. Provider credentials are only hidden credential sources for API-model agents; do not put API key inputs directly in the persistent sidebar. The credential modal must support custom providers, not only preset providers. Credentials are persisted locally in SQLite and applied to daemon `process.env`; the browser only receives masked previews.
+- **Agent/model config**: the Web UI right sidebar should be agent/model oriented. Users select or configure participants such as `codex`, `claude-code`, OpenClaw-style adapters, or direct API model agents such as DeepSeek/GLM/MiniMax. Provider credentials are only hidden credential sources for API-model agents; do not put API key inputs directly in the persistent sidebar. The credential modal has built-in presets for OpenAI, DeepSeek, Zhipu, MiniMax, and Anthropic, and must support custom providers beyond presets. Credentials are persisted locally in SQLite and applied to daemon `process.env`; the browser only receives masked previews.
 - **The room (agents, policy, workspace)**: still defined in `quorum.config.json` at the repo root (or `QUORUM_CONFIG=<path>`). `packages/cli/src/index.ts` loads it via `loadConfig()` and falls back to built-in defaults if the file is missing.
 - **Add an agent**: currently still add a `ParticipantDescriptor` to `participants[]` with an `adapter` + `adapterConfig`. `claude-code` needs the Agent SDK + Claude Code auth; `codex` needs the `codex` CLI on PATH; `api-model` is any OpenAI-compatible endpoint; `echo` is the built-in fake.
 - **Moderator model**: `packages/daemon/src/moderator.ts`. Configured via `policy.moderatorModel` / `QUORUM_MODERATOR_MODEL` (default `gpt-4o-mini`) / `QUORUM_MODERATOR_BASE_URL`, key from `OPENAI_API_KEY`. Degrades to "yield to human" on any failure.

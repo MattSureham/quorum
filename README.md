@@ -183,12 +183,13 @@ pnpm typecheck      # tsc -b (needs deps installed)
 Start the daemon + Web UI, then use the **Agents & Models** panel to inspect the
 room's active agents and available agent/model types. Use **Configure API keys**
 only for direct API model agents such as DeepSeek/GLM. The modal includes common
-presets and an **Add provider** action for arbitrary OpenAI-compatible providers
-such as Zhipu, Moonshot, OpenRouter, or a private gateway. CLI agents such as
-Codex and Claude Code use their own local auth/session. The key modal is hidden
-during normal chat/session work. Credentials are stored locally in the Quorum
-SQLite database, applied to the daemon process immediately, and only returned to
-the browser as masked previews.
+presets for OpenAI, DeepSeek, Zhipu, MiniMax, and Anthropic, plus an **Add
+provider** action for arbitrary OpenAI-compatible providers such as Moonshot,
+OpenRouter, or a private gateway. CLI agents such as Codex and Claude Code use
+their own local auth/session. The key modal is hidden during normal chat/session
+work. Credentials are stored locally in the Quorum SQLite database, applied to
+the daemon process immediately, and only returned to the browser as masked
+previews.
 
 The agent roster still comes from the room config for now: `quorum.config.json`
 or `QUORUM_CONFIG=<path>`. Each agent is a `ParticipantDescriptor` with an
