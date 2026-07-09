@@ -189,6 +189,13 @@ interface SharedSessionProjection {
   debugEvents: RoomEvent[];
 }
 
+interface RunStatus {
+  state: "offline" | "submitted" | "collecting" | "arbitrating" | "speaking" | "settling" | "completed" | "idle" | "error";
+  label: string;
+  detail: string;
+  lastEvent?: string;
+}
+
 function event(
   seq: number,
   id: string,
@@ -350,6 +357,52 @@ function projectSharedSession(events: RoomEvent[]): SharedSessionProjection {
   };
 }
 
+function describeRunStatus({
+  connected,
+  events,
+  shared,
+  lastSubmittedAt,
+  now,
+}: {
+  connected: boolean;
+  events: RoomEvent[];
+  shared: SharedSessionProjection;
+  lastSubmittedAt?: number;
+  now: number;
+}): RunStatus {
+  const latest = events[events.length - 1];
+  const lastEvent = latest ? `${latest.type} by ${latest.author.display}` : undefined;
+  const waitMs = lastSubmittedAt ? Math.max(0, now - lastSubmittedAt) : 0;
+  const waitSeconds = Math.floor(waitMs / 1000);
+  const waitingPrefix = waitMs > 5_000 ? `Still waiting (${waitSeconds}s). ` : "";
+  if (!connected) return { state: "offline", label: "Offline", detail: "Connect to a room before sending.", lastEvent };
+  if (lastSubmittedAt && (!latest || latest.ts < lastSubmittedAt)) {
+    return { state: "submitted", label: "Submitted", detail: `${waitingPrefix}Message sent locally; waiting for daemon acknowledgement.`, lastEvent };
+  }
+  if (latest?.type === "turn_failed") return { state: "error", label: "Turn failed", detail: "The latest agent turn failed. Check diagnostics for details.", lastEvent };
+  if (shared.enabled) {
+    if (shared.phase === "collecting_bids") {
+      return { state: "collecting", label: "Collecting bids", detail: `${waitingPrefix}${shared.pendingBids.length} agent bid(s) received so far.`, lastEvent };
+    }
+    if (shared.phase === "arbitrating" || shared.phase === "speaker_granted") {
+      return { state: "arbitrating", label: "Selecting speaker", detail: shared.selected?.agentId ? `${shared.selected.agentId} selected.` : "Choosing who speaks next.", lastEvent };
+    }
+    if (shared.phase === "speaking") {
+      return { state: "speaking", label: "Speaking", detail: `${waitingPrefix}${shared.activeSpeaker ? `${shared.activeSpeaker} is responding.` : "An agent is responding."}`, lastEvent };
+    }
+    if (shared.phase === "settling") {
+      return { state: "settling", label: "Settling", detail: "Finalizing the turn and checking for follow-up bids.", lastEvent };
+    }
+    if (shared.phase === "idle" && shared.lastCompleted) {
+      return { state: "completed", label: "Completed", detail: `Last turn completed: ${shared.lastCompleted}.`, lastEvent };
+    }
+  }
+  if (latest?.type === "message" && latest.author.kind === "human") {
+    return { state: "submitted", label: "Waiting for agents", detail: "Human message is in the room; waiting for an agent to react.", lastEvent };
+  }
+  return { state: "idle", label: "Idle", detail: latest ? "No active agent turn." : "No messages in this session yet.", lastEvent };
+}
+
 function loadSettings(): ClientSettings {
   try {
     const raw = localStorage.getItem("quorum.client.settings");
@@ -385,6 +438,8 @@ function App() {
   const [events, setEvents] = useState<RoomEvent[]>([]);
   const [selectedTargets, setSelectedTargets] = useState<string[]>([]);
   const [composer, setComposer] = useState("");
+  const [lastSubmittedAt, setLastSubmittedAt] = useState<number | undefined>();
+  const [now, setNow] = useState(Date.now());
   const [replayAfterSeq, setReplayAfterSeq] = useState("0");
   const [replayResult, setReplayResult] = useState<ServerMessage & { t: "replay_projection" }>();
   const [memoryFromSeq, setMemoryFromSeq] = useState("0");
@@ -417,6 +472,10 @@ function App() {
   const approvals = isPreview ? [] : pendingApprovals(events);
   const holdsWriteFloor = isPreview ? false : humanHoldsWriteFloor(events);
   const shared = useMemo(() => projectSharedSession(displayEvents), [displayEvents]);
+  const runStatus = useMemo(
+    () => describeRunStatus({ connected, events: displayEvents, shared, lastSubmittedAt, now }),
+    [connected, displayEvents, shared, lastSubmittedAt, now],
+  );
 
   const groupedTurns = useMemo(() => {
     const turns = new Map<string, RoomEvent[]>();
@@ -432,6 +491,12 @@ function App() {
   useEffect(() => {
     saveSettings(settings);
   }, [settings]);
+
+  useEffect(() => {
+    if (!lastSubmittedAt) return undefined;
+    const timer = setInterval(() => setNow(Date.now()), 1_000);
+    return () => clearInterval(timer);
+  }, [lastSubmittedAt]);
 
   // Keep the transcript pinned to the newest event unless the user scrolled up.
   useEffect(() => {
@@ -567,6 +632,7 @@ function App() {
     setDraftSettings(next);
     setEvents([]);
     setSelectedTargets([]);
+    setLastSubmittedAt(undefined);
     lastSeqRef.current = 0;
     send({ t: "subscribe", roomId, sinceSeq: 0 });
   }
@@ -605,6 +671,7 @@ function App() {
     const text = composer.trim();
     if (!text) return;
     if (send({ t: "post_message", text, addressedTo: selectedTargets.length ? selectedTargets : undefined })) {
+      setLastSubmittedAt(Date.now());
       setComposer("");
     }
   }
@@ -818,6 +885,7 @@ function App() {
           <Metric icon={<Activity size={16} />} label="Events" value={String(displayEvents.length)} />
           <Metric icon={<Hand size={16} />} label={shared.enabled ? "Speaker" : "Floor"} value={shared.activeSpeaker ?? activeTurn?.participantId ?? "open"} />
           <Metric icon={<PauseCircle size={16} />} label={shared.enabled ? "Phase" : "Last turn"} value={shared.enabled ? shared.phase : latestRelease?.reason ?? "pending"} />
+          <Metric icon={<Radio size={16} />} label="Activity" value={runStatus.label} />
           <Metric icon={<Settings2 size={16} />} label="Kernel" value={shared.enabled ? "shared-session" : policy.name} />
         </section>
 
@@ -857,6 +925,7 @@ function App() {
         ) : null}
 
         <section className="chat-composer">
+          <RunStatusBanner status={runStatus} />
           <div className="agent-targets">
             {agents.map((agent) => (
               <button
@@ -1322,6 +1391,19 @@ function StatusPill({ status, preview }: { status: ConnectionState; preview: boo
       {reconnecting ? <RefreshCcw size={11} className="spin" /> : null}
       {label}
     </span>
+  );
+}
+
+function RunStatusBanner({ status }: { status: RunStatus }) {
+  return (
+    <div className={`run-status-banner ${status.state}`}>
+      <span className="run-status-dot" />
+      <div>
+        <strong>{status.label}</strong>
+        <span>{status.detail}</span>
+      </div>
+      {status.lastEvent ? <code>{status.lastEvent}</code> : null}
+    </div>
   );
 }
 

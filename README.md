@@ -224,6 +224,11 @@ session id. Current limitation: dynamically-created sessions are not persisted
 across daemon restarts yet, and `按序陈述` currently creates a session but still
 executes on the shared bid kernel until a strict round-robin scheduler is added.
 
+After a message is sent, the composer shows a run-status banner derived from the
+event stream. It reports submitted/waiting, bid collection, speaker selection,
+speaking, settling, completion, and stalled waits, so a silent session is visible
+as a specific phase rather than looking like the Send button did nothing.
+
 ## Layout
 
 ```
