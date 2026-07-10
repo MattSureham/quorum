@@ -1,11 +1,15 @@
 import { EventLog, LegacyAgentAdapter, SessionManager, type WorkspaceManager } from "@quorum/core";
-import type { CreateSessionInput, ParticipantDescriptor, Room, SessionMode } from "@quorum/protocol";
+import type { AgentHealth, CreateSessionInput, ParticipantDescriptor, Room, SessionMode } from "@quorum/protocol";
+import { execFile } from "node:child_process";
 import { mkdirSync } from "node:fs";
+import { promisify } from "node:util";
 import { createParticipant } from "./adapters/registry.js";
 import { Gateway, type GatewaySessionDeps } from "./gateway/ws-server.js";
 import { SqliteStore } from "./persistence/sqlite-store.js";
 import { createLocalSandboxToolExecutor } from "./tools/local-sandbox-executor.js";
 import { GitWorkspace } from "./workspace/git-workspace.js";
+
+const exec = promisify(execFile);
 
 export interface SharedSessionHost {
   log: EventLog;
@@ -53,6 +57,56 @@ function readyWorkspace(workspace: GitWorkspace, ready: Promise<void>): Workspac
       return workspace.rollbackTo(head);
     },
   };
+}
+
+async function commandExists(bin: string): Promise<boolean> {
+  try {
+    await exec(bin, ["--version"], { timeout: 2_500 });
+    return true;
+  } catch {
+    try {
+      await exec(bin, ["--help"], { timeout: 2_500 });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+async function checkParticipantHealth(participant: ParticipantDescriptor): Promise<AgentHealth> {
+  const adapter = participant.adapter ?? "";
+  const cfg = participant.adapterConfig ?? {};
+  if (adapter === "echo") return { ok: true, status: "idle", detail: "local echo agent ready" };
+  if (adapter === "openclaw") return { ok: false, status: "offline", detail: "adapter placeholder is not installed" };
+  if (adapter === "codex") {
+    const bin = typeof cfg.bin === "string" ? cfg.bin : "codex";
+    const ok = await commandExists(bin);
+    return ok
+      ? { ok: true, status: "idle", detail: `${bin} CLI found` }
+      : { ok: false, status: "offline", detail: `${bin} CLI not found on PATH` };
+  }
+  if (adapter === "claude-code") {
+    const bin = typeof cfg.bin === "string" ? cfg.bin : "claude";
+    const ok = await commandExists(bin);
+    return ok
+      ? { ok: true, status: "idle", detail: `${bin} CLI found; local login is verified on first turn` }
+      : { ok: false, status: "offline", detail: `${bin} CLI not found on PATH` };
+  }
+  if (adapter === "api-model") {
+    const apiKeyEnv = typeof cfg.apiKeyEnv === "string" ? cfg.apiKeyEnv : "OPENAI_API_KEY";
+    const key = process.env[apiKeyEnv];
+    return key
+      ? { ok: true, status: "idle", detail: `${apiKeyEnv} configured` }
+      : { ok: false, status: "offline", detail: `missing API key env var ${apiKeyEnv}` };
+  }
+  return { ok: false, status: "offline", detail: `unknown adapter ${adapter || "(none)"}` };
+}
+
+async function checkRoomAgents(room: Room): Promise<Record<string, AgentHealth>> {
+  const entries = await Promise.all(room.participants
+    .filter((participant) => participant.kind === "agent")
+    .map(async (participant) => [participant.id, await checkParticipantHealth(participant)] as const));
+  return Object.fromEntries(entries);
 }
 
 /**
@@ -149,6 +203,7 @@ export async function startSharedSessionRoom(
       compactMemory: (fromSeq, toSeq) => session.compactWorkingMemory(fromSeq, toSeq),
       listCredentials: () => store.readProviderConfigViews(),
       setCredential: (input) => store.upsertProviderConfig(input),
+      checkAgents: () => checkRoomAgents(nextRoom),
       takeWriteFloor: () => session.takeWriteFloor(),
       releaseWriteFloor: () => session.releaseWriteFloor(),
       setPolicy: () => {

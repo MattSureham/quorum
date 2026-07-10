@@ -1,7 +1,7 @@
 import { WebSocketServer, type WebSocket } from "ws";
 import type { AddressInfo } from "node:net";
 import { ClientMessageSchema } from "@quorum/protocol/schema";
-import type { Room, ConductorPolicyConfig, CreateSessionInput, ImageAttachment } from "@quorum/protocol";
+import type { Room, ConductorPolicyConfig, CreateSessionInput, ImageAttachment, AgentHealth } from "@quorum/protocol";
 import { projectSessionState, type EventLog } from "@quorum/core";
 import type { MemorySummary } from "@quorum/protocol";
 import type { ProviderConfigView } from "../persistence/sqlite-store.js";
@@ -19,6 +19,7 @@ export interface GatewayDeps {
   compactMemory?: (fromSeq?: number, toSeq?: number) => Promise<MemorySummary | undefined> | MemorySummary | undefined;
   listCredentials?: () => ProviderConfigView[];
   setCredential?: (input: { providerId: string; envVar?: string; apiKey?: string; baseUrl?: string; model?: string }) => ProviderConfigView;
+  checkAgents?: () => Promise<Record<string, AgentHealth>> | Record<string, AgentHealth>;
   interrupt?: (hard: boolean) => Promise<void> | void;
   /** Let the human take the write floor to edit files directly (take_write_floor). */
   takeWriteFloor?: () => Promise<void> | void;
@@ -234,6 +235,17 @@ export class Gateway {
         break;
       case "get_credentials":
         ws.send(JSON.stringify({ t: "credentials", providers: this.deps.listCredentials?.() ?? [] }));
+        break;
+      case "check_agents":
+        if (!session.checkAgents) {
+          ws.send(JSON.stringify({ t: "agent_health", roomId: session.room.id, health: {} }));
+          break;
+        }
+        void Promise.resolve(session.checkAgents()).then((health) => {
+          ws.send(JSON.stringify({ t: "agent_health", roomId: session.room.id, health }));
+        }).catch((err) =>
+          ws.send(JSON.stringify({ t: "error", text: `check_agents failed: ${err instanceof Error ? err.message : String(err)}` })),
+        );
         break;
       case "set_credential":
         if (!this.deps.setCredential) {

@@ -161,6 +161,10 @@ button {
   margin-bottom: 10px;
 }
 
+.panel-title-action {
+  margin-left: auto;
+}
+
 .connection-panel {
   display: flex;
   flex-direction: column;
@@ -494,6 +498,11 @@ textarea:focus {
   white-space: nowrap;
 }
 
+.agent-model-row > .agent-health {
+  overflow: visible;
+  white-space: nowrap;
+}
+
 .provider-config-action {
   width: 100%;
 }
@@ -791,6 +800,36 @@ textarea:focus {
   font-size: 11px;
   font-style: normal;
   font-weight: 720;
+}
+
+.agent-health {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 22px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.agent-health svg {
+  flex: 0 0 auto;
+}
+
+.agent-health.ok {
+  color: #0f5d44;
+  background: #dff3ea;
+}
+
+.agent-health.bad {
+  color: #8a2e29;
+  background: #fff0ed;
+}
+
+.agent-health.unknown {
+  color: #5d6b66;
+  background: #edf2f0;
 }
 
 .participant-row.active {

@@ -7,6 +7,7 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
+  CircleAlert,
   CircleDot,
   GitCommitHorizontal,
   Hand,
@@ -32,6 +33,7 @@ import {
 } from "lucide-react";
 import type {
   ApprovalSignal,
+  AgentHealth,
   Bid,
   CheckpointBody,
   ConductorPolicyConfig,
@@ -95,6 +97,9 @@ const zhText: Record<string, string> = {
   "no files": "不写文件",
   "key required": "需要 key",
   "health unknown": "健康状态未知",
+  "healthy": "健康",
+  "unavailable": "不可用",
+  "Check agents": "检查智能体",
   "Message the session": "发送消息到会话",
   "Image": "图片",
   "Send": "发送",
@@ -262,6 +267,7 @@ type ServerMessage =
   | { t: "memory_compacted"; summary?: MemorySummary; summaries: MemorySummary[] }
   | { t: "credentials"; providers: ProviderConfigView[] }
   | { t: "credential_saved"; provider: ProviderConfigView; providers: ProviderConfigView[] }
+  | { t: "agent_health"; roomId: string; health: Record<string, AgentHealth> }
   | { t: "error"; text: string };
 
 interface SharedSessionProjectionResult {
@@ -820,6 +826,7 @@ function App() {
   const [credentialViews, setCredentialViews] = useState<ProviderConfigView[]>([]);
   const [credentialDrafts, setCredentialDrafts] = useState<CredentialDraft[]>(credentialPresets);
   const [credentialStatus, setCredentialStatus] = useState("");
+  const [agentHealth, setAgentHealth] = useState<Record<string, AgentHealth>>({});
   const [credentialsOpen, setCredentialsOpen] = useState(false);
   const [sessionSetupOpen, setSessionSetupOpen] = useState(false);
   const [sessionDraftSeed, setSessionDraftSeed] = useState<SessionDraft>(defaultSessionDraft);
@@ -924,6 +931,8 @@ function App() {
           setRooms((current) => upsertRoom(current, message.room).filter((item) => !deletedSessionIdsRef.current.has(item.id)));
           setEvents((current) => ingest(mergeEvents(current, message.events)));
           if (message.summaries) setMemorySummaries(message.summaries);
+          setAgentHealth({});
+          socket.send(JSON.stringify({ t: "check_agents", roomId: message.room.id }));
         } else if (message.t === "event") {
           setEvents((current) => ingest(mergeEvents(current, [message.event])));
         } else if (message.t === "sessions") {
@@ -940,6 +949,7 @@ function App() {
           setSessionsLoaded(true);
           setRoom(message.room);
           setEvents([]);
+          setAgentHealth({});
           lastSeqRef.current = 0;
           const nextSettings = { ...next, roomId: message.room.id };
           setSettings(nextSettings);
@@ -956,6 +966,7 @@ function App() {
           setSessionsLoaded(true);
           setRoom(message.room);
           setEvents([]);
+          setAgentHealth({});
           lastSeqRef.current = 0;
           const nextSettings = { ...next, roomId: message.room.id };
           setSettings(nextSettings);
@@ -979,6 +990,7 @@ function App() {
               setRoom(undefined);
               setEvents([]);
               setMemorySummaries([]);
+              setAgentHealth({});
             }
           }
         } else if (message.t === "replay_projection") {
@@ -992,6 +1004,9 @@ function App() {
           setCredentialStatus(`${message.provider.providerId} saved`);
           setCredentialViews(message.providers);
           mergeCredentialViews(message.providers);
+          socket.send(JSON.stringify({ t: "check_agents", roomId: settings.roomId }));
+        } else if (message.t === "agent_health") {
+          if (message.roomId === settings.roomId || message.roomId === displayRoom.id) setAgentHealth(message.health);
         } else if (message.t === "error") {
           deletedSessionIdsRef.current.clear();
           setDeletedSessionIds(new Set());
@@ -1136,6 +1151,10 @@ function App() {
 
   function approveTool(callId: string, allow: boolean) {
     send({ t: "approve_tool", callId, allow });
+  }
+
+  function checkAgents() {
+    send({ t: "check_agents" });
   }
 
   function takeWriteFloor() {
@@ -1469,7 +1488,7 @@ function App() {
           <div className="panel-title"><Bot size={16} /><span>{t("Participants")}</span></div>
           <div className="participant-list">
             {participants.map((participant) => (
-              <ParticipantRow key={participant.id} participant={participant} active={activeTurn?.participantId === participant.id} t={t} />
+              <ParticipantRow key={participant.id} participant={participant} health={agentHealth[participant.id]} active={activeTurn?.participantId === participant.id} t={t} />
             ))}
           </div>
         </section>
@@ -1478,7 +1497,9 @@ function App() {
           connected={connected}
           participants={participants}
           views={credentialViews}
+          health={agentHealth}
           onConfigure={() => setCredentialsOpen(true)}
+          onCheckAgents={checkAgents}
           t={t}
         />
 
@@ -1573,13 +1594,17 @@ function AgentModelPanel({
   connected,
   participants,
   views,
+  health,
   onConfigure,
+  onCheckAgents,
   t,
 }: {
   connected: boolean;
   participants: ParticipantDescriptor[];
   views: ProviderConfigView[];
+  health: Record<string, AgentHealth>;
   onConfigure: () => void;
+  onCheckAgents: () => void;
   t: Translate;
 }) {
   const roomAgents = participants.filter((participant) => participant.kind === "agent");
@@ -1588,6 +1613,9 @@ function AgentModelPanel({
       <div className="panel-title">
         <Settings2 size={16} />
         <span>{t("Agents & Models")}</span>
+        <button type="button" className="icon-action panel-title-action" disabled={!connected} title={t("Check agents")} aria-label={t("Check agents")} onClick={onCheckAgents}>
+          <RefreshCcw size={14} />
+        </button>
       </div>
       <div className="agent-model-section">
         <div className="mini-heading">{t("In this room")}</div>
@@ -1600,7 +1628,7 @@ function AgentModelPanel({
                 <span>{formatAgentDetail(agent)}</span>
                 <CapabilityBadges labels={capabilityBadgesForAgent(agent)} t={t} />
               </div>
-              <span className="credential-state configured">{t("room")}</span>
+              <AgentHealthBadge health={health[agent.id]} t={t} />
             </div>
           ))}
         </div>
@@ -1968,7 +1996,7 @@ function RunStatusBanner({ status }: { status: RunStatus }) {
   );
 }
 
-function ParticipantRow({ participant, active, t }: { participant: ParticipantDescriptor; active: boolean; t: Translate }) {
+function ParticipantRow({ participant, health, active, t }: { participant: ParticipantDescriptor; health?: AgentHealth; active: boolean; t: Translate }) {
   const Icon = participant.kind === "human" ? UserRound : Bot;
   return (
     <div className={active ? "participant-row active" : "participant-row"}>
@@ -1978,8 +2006,25 @@ function ParticipantRow({ participant, active, t }: { participant: ParticipantDe
         <span>{participant.adapter ?? participant.kind}</span>
         {participant.kind === "agent" ? <CapabilityBadges labels={capabilityBadgesForAgent(participant)} t={t} /> : null}
       </div>
-      <i>{active ? t("live") : t(participant.status)}</i>
+      {participant.kind === "agent" ? <AgentHealthBadge health={health} active={active} fallback={participant.status} t={t} /> : <i>{active ? t("live") : t(participant.status)}</i>}
     </div>
+  );
+}
+
+function AgentHealthBadge({ health, active = false, fallback, t }: { health?: AgentHealth; active?: boolean; fallback?: string; t: Translate }) {
+  if (!health) {
+    return (
+      <span className="agent-health unknown" title={t("health unknown")}>
+        <CircleAlert size={12} />
+        {active ? t("live") : fallback ? t(fallback) : t("health unknown")}
+      </span>
+    );
+  }
+  return (
+    <span className={health.ok ? "agent-health ok" : "agent-health bad"} title={health.detail ?? ""}>
+      {health.ok ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />}
+      {health.ok ? t("healthy") : t("unavailable")}
+    </span>
   );
 }
 

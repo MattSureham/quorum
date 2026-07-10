@@ -123,6 +123,13 @@ discussion is shown as free bidding, Raise hand as floor requests that wait for
 the active speaker to finish, and Round robin as the selected participant order
 with current, completed, and remaining speakers.
 
+Agent health checks can be triggered from the **Agents & Models** panel and run
+automatically when a session snapshot loads. The first pass checks local CLI
+availability for Codex/Claude Code, API key env availability for direct API
+models, and placeholder/unknown adapter states. Full native-login verification
+still happens on the first real CLI turn because those tools own their local
+auth/session state.
+
 The built-in Claude-family local agent is named **Claude Code** because it uses
 the `claude-code` adapter and local Claude Code auth/session. Anthropic API
 models should be added as explicit API-model participants, for example a

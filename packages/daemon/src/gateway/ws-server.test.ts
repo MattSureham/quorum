@@ -263,6 +263,30 @@ describe("Gateway", () => {
     }
   });
 
+  it("returns agent health checks", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const gateway = new Gateway({
+      log,
+      room,
+      humanId: "human",
+      setPolicy: () => {},
+      checkAgents: () => ({ echo: { ok: true, status: "idle", detail: "ready" } }),
+    }, 0);
+    await gateway.ready;
+    const ws = await connect(gateway.url());
+
+    try {
+      ws.send(JSON.stringify({ t: "check_agents", roomId: "room" }));
+      const message = await nextMessage(ws);
+      expect(message.t).toBe("agent_health");
+      expect(message.roomId).toBe("room");
+      expect(message.health.echo).toMatchObject({ ok: true, status: "idle" });
+    } finally {
+      ws.close();
+      await gateway.close();
+    }
+  });
+
   it("broadcasts session deletion to all connected clients", async () => {
     const log = new EventLog("room", new InMemoryStore());
     const gateway = new Gateway({
