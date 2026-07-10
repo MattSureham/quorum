@@ -141,6 +141,17 @@ const zhText: Record<string, string> = {
   "Raise hand": "举手/抢麦",
   "Agents request the floor and must wait for the active speaker to finish.": "智能体申请发言权，并等待当前发言者结束。",
   "Round robin": "按序陈述",
+  "Open discussion mode": "自由讨论模式",
+  "Raise hand mode": "举手/抢麦模式",
+  "Round robin mode": "按序陈述模式",
+  "Mode semantics": "模式语义",
+  "Free bidding; agents may volunteer and the arbiter chooses the next speaker.": "自由抢麦；智能体可主动申请发言，由仲裁器选择下一位。",
+  "Agents request the floor and wait until the current speaker finishes.": "智能体申请发言权，并等待当前发言者结束。",
+  "Agents speak in the selected participant order, one turn each.": "智能体按选定参与者顺序各发言一次。",
+  "Speaking order": "发言顺序",
+  "Completed speakers": "已发言",
+  "Remaining speakers": "未发言",
+  "next": "下一位",
   "Agents speak once each in the selected participant order.": "智能体按所选参与者顺序各发言一次。",
   "current room": "当前房间",
   "available": "可用",
@@ -413,6 +424,14 @@ interface RunStatus {
   lastEvent?: string;
 }
 
+interface ModeView {
+  label: string;
+  detail: string;
+  orderedAgents: ParticipantDescriptor[];
+  completedAgentIds: string[];
+  remainingAgentIds: string[];
+}
+
 function event(
   seq: number,
   id: string,
@@ -555,6 +574,50 @@ function latestAgentOutputAfter(events: RoomEvent[], seq: number): RoomEvent | u
     item.author.kind === "agent" &&
     (item.type === "thinking" || item.type === "turn_output_chunk" || item.type === "message")
   );
+}
+
+function modeView(room: Room, events: RoomEvent[], t: Translate): ModeView {
+  const orderedAgents = room.participants.filter((participant) => participant.kind === "agent");
+  const completedAgentIds = events
+    .filter((item) => item.type === "turn_completed")
+    .map((item) => String((item.body as any).speakerId ?? ""))
+    .filter(Boolean);
+  const latestPrompt = latestHumanMessage(events);
+  const completedAfterPrompt = latestPrompt
+    ? events
+      .filter((item) => item.seq > latestPrompt.seq && item.type === "turn_completed")
+      .map((item) => String((item.body as any).speakerId ?? ""))
+      .filter(Boolean)
+    : completedAgentIds;
+  const uniqueCompleted = [...new Set(completedAfterPrompt)];
+  const remainingAgentIds = orderedAgents
+    .map((agent) => agent.id)
+    .filter((id) => !uniqueCompleted.includes(id));
+  if (room.schedulerMode === "round-robin") {
+    return {
+      label: t("Round robin mode"),
+      detail: t("Agents speak in the selected participant order, one turn each."),
+      orderedAgents,
+      completedAgentIds: uniqueCompleted,
+      remainingAgentIds,
+    };
+  }
+  if (room.policy.noConsecutive) {
+    return {
+      label: t("Raise hand mode"),
+      detail: t("Agents request the floor and wait until the current speaker finishes."),
+      orderedAgents,
+      completedAgentIds: [],
+      remainingAgentIds: [],
+    };
+  }
+  return {
+    label: t("Open discussion mode"),
+    detail: t("Free bidding; agents may volunteer and the arbiter chooses the next speaker."),
+    orderedAgents,
+    completedAgentIds: [],
+    remainingAgentIds: [],
+  };
 }
 
 function projectSharedSession(events: RoomEvent[]): SharedSessionProjection {
@@ -1422,7 +1485,7 @@ function App() {
         <details className="debug-details">
           <summary><SquareTerminal size={16} /> {t("Session diagnostics")}</summary>
           <div className="diagnostics-stack">
-            {shared.enabled ? <SharedSessionPanel shared={shared} t={t} /> : null}
+            {shared.enabled ? <SharedSessionPanel shared={shared} room={displayRoom} events={displayEvents} t={t} /> : null}
             {shared.enabled ? (
               <ReplayPanel
                 afterSeq={replayAfterSeq}
@@ -1991,9 +2054,11 @@ function Metric({ icon, label, value }: { icon: React.ReactNode; label: string; 
   );
 }
 
-function SharedSessionPanel({ shared, t }: { shared: SharedSessionProjection; t: Translate }) {
+function SharedSessionPanel({ shared, room, events, t }: { shared: SharedSessionProjection; room: Room; events: RoomEvent[]; t: Translate }) {
   const scoreComponents = Object.entries(shared.selected?.components ?? {})
     .filter(([, value]) => Number.isFinite(value));
+  const mode = modeView(room, events, t);
+  const participantName = (id: string) => mode.orderedAgents.find((agent) => agent.id === id)?.display ?? id;
   return (
     <section className="shared-panel shared-session-panel">
       <div className="shared-panel-head">
@@ -2009,6 +2074,38 @@ function SharedSessionPanel({ shared, t }: { shared: SharedSessionProjection; t:
         <span>{t("selected")}</span>
         <strong>{shared.selected?.agentId ? `${shared.selected.agentId} · ${shared.selected.kind} · ${shared.selected.score?.toFixed(3) ?? "n/a"}` : t("none")}</strong>
       </div>
+      <div className="mini-heading mode-heading">{t("Mode semantics")}</div>
+      <div className="mode-card">
+        <strong>{mode.label}</strong>
+        <span>{mode.detail}</span>
+      </div>
+      {room.schedulerMode === "round-robin" ? (
+        <>
+          <div className="mini-heading mode-heading">{t("Speaking order")}</div>
+          <div className="speaker-order">
+            {mode.orderedAgents.map((agent, index) => {
+              const completed = mode.completedAgentIds.includes(agent.id);
+              const current = shared.activeSpeaker === agent.id;
+              const next = mode.remainingAgentIds[0] === agent.id;
+              return (
+                <div key={agent.id} className={current ? "speaker-order-row current" : completed ? "speaker-order-row done" : "speaker-order-row"}>
+                  <span>{index + 1}</span>
+                  <strong>{agent.display}</strong>
+                  <i>{current ? t("active") : completed ? t("Done") : next ? t("next") : t("pending")}</i>
+                </div>
+              );
+            })}
+          </div>
+          <div className="shared-kv">
+            <span>{t("Completed speakers")}</span>
+            <strong>{mode.completedAgentIds.length ? mode.completedAgentIds.map(participantName).join(", ") : t("none")}</strong>
+          </div>
+          <div className="shared-kv">
+            <span>{t("Remaining speakers")}</span>
+            <strong>{mode.remainingAgentIds.length ? mode.remainingAgentIds.map(participantName).join(", ") : t("none")}</strong>
+          </div>
+        </>
+      ) : null}
       {scoreComponents.length ? (
         <>
           <div className="mini-heading score-heading">{t("Score components")}</div>

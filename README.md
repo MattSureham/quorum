@@ -118,6 +118,11 @@ bid collection, speaker selection, agent contact, agent thinking/output, running
 tools, waiting for tool approval, normal completion, failure, and the important
 "completed without visible reply" case.
 
+Shared-session mode semantics are visible in the diagnostics panel. Open
+discussion is shown as free bidding, Raise hand as floor requests that wait for
+the active speaker to finish, and Round robin as the selected participant order
+with current, completed, and remaining speakers.
+
 The built-in Claude-family local agent is named **Claude Code** because it uses
 the `claude-code` adapter and local Claude Code auth/session. Anthropic API
 models should be added as explicit API-model participants, for example a

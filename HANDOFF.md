@@ -221,6 +221,11 @@ The following is the implementation trail from this session. It is written for t
     - Work: expanded the Web UI run-status banner from coarse shared-session phases into user-facing execution stages: queued locally, daemon accepted, collecting bids, selecting speaker, contacting agent, agent thinking/output, tool running, waiting for tool approval, completed, failed, and completed-without-visible-reply. The status is derived from recent room events, pending approval signals, unresolved tool calls, and whether an agent message appeared after the latest human prompt. Chat remains message-only; these execution details stay in the banner/diagnostics area.
     - Verification: run `pnpm typecheck`, `pnpm test`, and `pnpm --filter @quorum/client-web build` after this change.
 
+51. this change `feat: clarify session modes in web ui`
+    - Files: `packages/client-web/src/main.tsx`, `packages/client-web/src/styles.css`, `README.md`, `HANDOFF.md`.
+    - Work: added a shared-session mode summary to the diagnostics panel. Open discussion is described as free bidding, Raise hand as explicit floor requests that wait for the active speaker, and Round robin as ordered one-turn-per-agent speaking. For round-robin rooms the panel now shows the selected participant order plus current, completed, and remaining speakers derived from room participants and turn completion events.
+    - Verification: run `pnpm typecheck`, `pnpm test`, and `pnpm --filter @quorum/client-web build` after this change.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:
@@ -263,6 +268,7 @@ What is already implemented:
 - The Web UI now prioritizes the primary workflow: session/room selection on the left, chat/session stream and composer in the center, participants plus agent/model configuration on the right. Provider keys are hidden behind an API credential modal and framed as credential sources for API-model agents, not as selectable webchat sessions. Diagnostics such as replay, memory, tool activity, and checkpoints are collapsed by default. In shared-session mode, the legacy policy segmented control is disabled because `set_policy` is not implemented for the new kernel yet.
 - The Web UI surfaces compact agent/model capability badges so users can distinguish local CLI agents, API-model agents, file-editing agents, command/tool-capable agents, vision-capable agents, placeholder entries, key-required entries, and unknown health states. These are currently declared/preset capabilities, not a full runtime health probe.
 - The run-status banner now explains the execution stage instead of only showing coarse phase labels. It can surface queueing, scheduler wait, agent contact, thinking/output, running tools, waiting approval, failure, and completed-without-visible-reply states.
+- Shared-session diagnostics now explain mode semantics and show round-robin order/current/completed/remaining speakers.
 - Shared-session editable agent turns now use `GitWorkspace` write-floor serialization and per-turn checkpointing. `SessionManager` acquires/releases the workspace lease for agents with `canEditFiles`, records checkpoints when files changed, and waits for workspace initialization before git operations.
 - Local CLI agents such as Claude Code use shell launching on Windows so `.cmd` shims work.
 - Claude Code and Codex native session/thread ids are stored in agent-private memory and resumed best-effort. Resume failure records a diagnostic warning and falls back to the Quorum context bundle. The context bundle includes checksum/seq/hash anchors and error-control rules so native hidden memory is treated as advisory when it conflicts with Quorum state.
