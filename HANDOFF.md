@@ -179,6 +179,10 @@ The following is the implementation trail from this session. It is written for t
     - Files: `apps/desktop/src-tauri/icons/icon.ico`, `README.md`, `HANDOFF.md`.
     - Work: generated a Windows `.ico` resource from the existing 512px desktop PNG icon because Tauri's Windows resource build requires `icons/icon.ico` before NSIS bundling can proceed.
 
+41. this change `feat: continue persisted shared sessions`
+    - Files: `packages/protocol/src/types.ts`, `packages/protocol/src/schema.ts`, `packages/core/src/session-manager.ts`, `packages/core/src/types.ts`, `packages/core/src/legacy-agent-adapter.ts`, `packages/daemon/src/persistence/sqlite-store.ts`, `packages/daemon/src/gateway/ws-server.ts`, `packages/daemon/src/shared-session-host.ts`, `packages/daemon/src/adapters/claude-code.ts`, `packages/daemon/src/adapters/codex.ts`, `packages/daemon/src/adapters/base.ts`, `packages/client-web/src/main.tsx`, tests, `README.md`, `HANDOFF.md`.
+    - Work: added lossless Quorum-layer session continuation. Shared-session room metadata now persists in SQLite; `list_sessions` includes persisted sessions; `continue_session` lazily rebuilds a session from stored room metadata and append-only events; subscribe snapshots include memory summaries; `SessionManager` restores epoch/last turn from replay so new events continue after the prior head. Agent prompts now include a deterministic Quorum context bundle. Claude Code and Codex persist native session/thread ids in agent-private memory, attempt best-effort resume, and fall back to Quorum context when native resume fails.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:
@@ -197,6 +201,7 @@ What is already implemented:
 - `@quorum/daemon` now bootstraps shared-session SQLite tables for sessions, events,
   snapshots, turns, bids, memory, agent configs, provider configs, and migrations.
 - `@quorum/daemon` now has `startSharedSessionRoom()`, which wraps existing adapters through `LegacyAgentAdapter` and routes human prompts through `SessionManager`.
+- Shared-session room metadata is persisted, and `continue_session` can rebuild prior sessions from SQLite without copying events or changing session ids.
 - The CLI can choose the new kernel with `QUORUM_SESSION_KERNEL=shared`; without that env var it keeps the legacy `Conductor` path.
 - `quorum.webui-smoke.config.json` provides a no-credential echo-agent config for manual Web UI testing. Use `QUORUM_SESSION_KERNEL=shared QUORUM_CONFIG=quorum.webui-smoke.config.json QUORUM_DB_PATH=.quorum/webui-smoke.sqlite pnpm dev`.
 - `@quorum/client-web` can now detect shared-session events and display phase, active speaker, bid queue, selected speaker, and debug events.
@@ -214,9 +219,11 @@ What is already implemented:
 - Tests now cover SQLite projection tables, legacy event-table migration, replay projection, and a three-agent shared-session open discussion through queued bids.
 - Shared-session `AgentRuntime.callTool()` now has a human approval loop wired through `approve_tool`; it emits requested/granted/denied approval signals, executes approved safe room tools (`read_room`, `post_note`, `request_review`, `hand_off`, `raise_hand`), and records `tool_call` / `tool_result` events. Approved external command tools such as `Bash` now route through a daemon-provided local sandbox executor with workspace cwd isolation, timeout, output truncation, allowlisted tool names, and dangerous-command blocking.
 - WebSocket `replay_projection` returns a projected shared-session state from `afterSeq`, and the Web UI has a Replay panel for phase/speaker/bid-state checks.
+- WebSocket `continue_session` returns `session_continued`; snapshots include memory summaries so restored sessions bring back chat history and working memory.
 - WebSocket `get_credentials` / `set_credential` now back the Web UI provider credential modal. Provider API keys/base URLs/models are persisted in local SQLite `provider_configs`, immediately applied to `process.env`, and returned to the browser only as masked previews.
 - The Web UI now prioritizes the primary workflow: session/room selection on the left, chat/session stream and composer in the center, participants plus agent/model configuration on the right. Provider keys are hidden behind an API credential modal and framed as credential sources for API-model agents, not as selectable webchat sessions. Diagnostics such as replay, memory, tool activity, and checkpoints are collapsed by default. In shared-session mode, the legacy policy segmented control is disabled because `set_policy` is not implemented for the new kernel yet.
 - Local CLI agents such as Claude Code use shell launching on Windows so `.cmd` shims work.
+- Claude Code and Codex native session/thread ids are stored in agent-private memory and resumed best-effort. Resume failure records a diagnostic warning and falls back to the Quorum context bundle.
 - Working-memory summaries can be created, persisted through `SqliteStore`, triggered through WebSocket `compact_memory`, inspected in the Web UI Memory panel, and automatically compacted after turns once configured event thresholds are reached.
 - Verification: `pnpm typecheck`, `pnpm test`, `pnpm --filter @quorum/client-web build`, `pnpm smoke:shared`, `pnpm smoke:sidecar`, `pnpm sidecar:node:smoke`, `pnpm sidecar:bun:smoke`, `pnpm desktop:check`, and `pnpm desktop:build` pass on macOS arm64. The **Windows Installer** GitHub Actions workflow now exists for Windows x64 NSIS artifact validation.
 

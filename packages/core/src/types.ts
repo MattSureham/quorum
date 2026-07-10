@@ -43,7 +43,11 @@ export interface TurnInput {
   participants: ParticipantDescriptor[];
   projection: RoomEvent[];   // events since this participant last spoke
   protocol: string;          // room speaking-protocol text
+  contextBundle?: string;    // deterministic Quorum context used after restore/continue
   workspacePath?: string;
+  nativeSessionId?: string;
+  onNativeSessionId?: (sessionId: string) => void;
+  onNativeSessionResumeFailed?: (detail: string) => void;
   signal: AbortSignal;       // aborts on interrupt / deadline
   readRoom?: (sinceSeq: number) => RoomEvent[]; // backs the `read_room` room tool
   /** Interactive permission gate: ask the human to approve a tool call. Resolves allow/deny. */

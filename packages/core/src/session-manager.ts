@@ -20,7 +20,7 @@ import type { EventLog } from "./event-log.js";
 import { ulid } from "./ids.js";
 import { CommandMailbox } from "./command-mailbox.js";
 import { Arbiter, type ArbitrationDecision } from "./arbiter.js";
-import { assertTransition } from "./session-state.js";
+import { assertTransition, projectSessionState } from "./session-state.js";
 import { isRoomTool, normalizeToolName, runRoomTool } from "./room-tools.js";
 import { createWorkingMemorySummary } from "./memory.js";
 import type { ToolExecutor } from "./tool-executor.js";
@@ -54,6 +54,17 @@ export interface SessionSnapshot {
 }
 
 const systemAuthor = { kind: "system" as const, id: "session", display: "SessionManager" };
+const CONTEXT_EVENT_TYPES = new Set<RoomEvent["type"]>([
+  "message",
+  "tool_call",
+  "tool_result",
+  "checkpoint",
+  "system",
+  "turn_started",
+  "turn_completed",
+  "turn_cancelled",
+  "turn_failed",
+]);
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -79,6 +90,11 @@ export class SessionManager {
   constructor(private readonly opts: SessionManagerOptions) {
     for (const agent of opts.agents) this.byId.set(agent.id, agent);
     this.arbiter = opts.arbiter ?? new Arbiter();
+    if (opts.log.headSeq > 0) {
+      const projected = projectSessionState(opts.log.replay(0));
+      this.epoch = projected.epoch;
+      this.lastTurnId = projected.lastTurnId;
+    }
   }
 
   start(): void {
@@ -321,6 +337,7 @@ export class SessionManager {
         contextSeq: this.opts.log.headSeq,
         participants: this.participants(),
         transcript: this.opts.log.replay(0),
+        contextBundle: this.contextBundle(),
       };
 
       for await (const delta of agent.speak(ctx, this.runtime(), ac.signal)) {
@@ -435,6 +452,47 @@ export class SessionManager {
         return { ok: true, version };
       },
     };
+  }
+
+  private contextBundle(): string {
+    const headSeq = this.opts.log.headSeq;
+    const summaries = this.opts.log.readWorkingMemorySummaries();
+    const recent = this.opts.log
+      .replay(0)
+      .filter((event) => CONTEXT_EVENT_TYPES.has(event.type))
+      .slice(-30);
+    const active = this.active ? `${this.active.speakerId}/${this.active.turnId}` : "none";
+    const pendingApprovals = [...this.pendingToolApprovals.entries()]
+      .map(([callId, pending]) => `${pending.tool} [${callId}]`)
+      .join(", ") || "none";
+    const summaryLines = summaries.length
+      ? summaries.slice(-5).map((summary) =>
+        `- #${summary.sourceFromSeq}-#${summary.sourceToSeq} ${summary.summaryId} hash=${summary.sourceHash.slice(0, 12)}: ${summary.content}`,
+      ).join("\n")
+      : "- none";
+    const eventLines = recent.length
+      ? recent.map((event) => {
+        const body = event.body as Record<string, unknown>;
+        const text = typeof body.text === "string" ? body.text : JSON.stringify(body);
+        return `- #${event.seq} ${event.type} ${event.author.id}: ${text.slice(0, 500)}`;
+      }).join("\n")
+      : "- none";
+    return [
+      "## Quorum Context Bundle",
+      "This context is reconstructed from Quorum's authoritative append-only event log. It is not native model hidden state.",
+      `Session: ${this.opts.title} (${this.opts.sessionId})`,
+      `Head seq: ${headSeq}`,
+      `Workspace: ${this.opts.workspacePath ?? "none"}`,
+      `Phase: ${this.phase}; epoch: ${this.epoch}; active: ${active}; lastTurn: ${this.lastTurnId ?? "none"}`,
+      `Participants: ${this.participants().map((participant) => `${participant.id}(${participant.kind})`).join(", ")}`,
+      `Pending approvals: ${pendingApprovals}`,
+      "",
+      "Working memory summaries:",
+      summaryLines,
+      "",
+      "Recent authoritative events:",
+      eventLines,
+    ].join("\n");
   }
 
   private async requestToolApproval(req: ToolCallRequest): Promise<ToolCallResult> {

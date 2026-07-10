@@ -1,7 +1,7 @@
 import { createRequire } from "node:module";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { RoomEvent } from "@quorum/protocol";
+import type { Room, RoomEvent } from "@quorum/protocol";
 import type { MemorySummary } from "@quorum/protocol";
 import type { EventStore } from "@quorum/core";
 
@@ -22,6 +22,17 @@ export interface ProviderConfigView {
   baseUrl?: string;
   model?: string;
   updatedAt: number;
+}
+
+export interface SessionRow {
+  sessionId: string;
+  title: string;
+  phase: string;
+  epoch: number;
+  headSeq: number;
+  createdAt: number;
+  updatedAt: number;
+  room?: Room;
 }
 
 const require = createRequire(import.meta.url);
@@ -93,6 +104,7 @@ export class SqliteStore implements EventStore {
       CREATE TABLE IF NOT EXISTS sessions (
         session_id TEXT PRIMARY KEY,
         title TEXT,
+        room_data TEXT,
         phase TEXT NOT NULL DEFAULT 'idle',
         epoch INTEGER NOT NULL DEFAULT 0,
         head_seq INTEGER NOT NULL DEFAULT 0,
@@ -209,6 +221,7 @@ export class SqliteStore implements EventStore {
     this.ensureColumn("events", "turn_id", "TEXT");
     this.ensureColumn("events", "visibility", "TEXT");
     this.ensureColumn("events", "author_id", "TEXT");
+    this.ensureColumn("sessions", "room_data", "TEXT");
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_events_room_type_seq ON events(room_id, type, seq);
       CREATE INDEX IF NOT EXISTS idx_events_room_turn_id ON events(room_id, turn_id);
@@ -277,6 +290,63 @@ export class SqliteStore implements EventStore {
       .map((row: any) => JSON.parse(row.summary) as MemorySummary);
   }
 
+  upsertSessionRoom(room: Room): void {
+    const now = Date.now();
+    this.db
+      .prepare(`
+        INSERT INTO sessions (session_id, title, room_data, phase, epoch, head_seq, created_at, updated_at)
+        VALUES (?, ?, ?, 'idle', 0, COALESCE((SELECT MAX(seq) FROM events WHERE room_id=?), 0), ?, ?)
+        ON CONFLICT(session_id) DO UPDATE SET
+          title=excluded.title,
+          room_data=excluded.room_data,
+          updated_at=excluded.updated_at
+      `)
+      .run(room.id, room.title, JSON.stringify(room), room.id, room.createdAt || now, now);
+  }
+
+  listSessionRows(): SessionRow[] {
+    return this.db
+      .prepare("SELECT session_id, title, room_data, phase, epoch, head_seq, created_at, updated_at FROM sessions ORDER BY created_at, session_id")
+      .all()
+      .map((row: any) => this.sessionRowView(row));
+  }
+
+  readSessionRoom(sessionId: string): Room | undefined {
+    const row = this.db.prepare("SELECT room_data, title, created_at FROM sessions WHERE session_id=?").get(sessionId) as any;
+    if (!row) return undefined;
+    if (row.room_data) return JSON.parse(row.room_data) as Room;
+    return {
+      id: sessionId,
+      title: row.title ?? sessionId,
+      branch: "main",
+      policy: { name: "free-for-all", maxTurnsPerTopic: 3, noConsecutive: true, turnDeadlineMs: 120_000 },
+      participants: [{ id: "human", kind: "human", display: "Human", status: "idle" }],
+      createdAt: row.created_at ?? Date.now(),
+    };
+  }
+
+  readAgentPrivateMemory(sessionId: string, agentId: string, namespace: string, key: string): unknown | undefined {
+    const row = this.db
+      .prepare("SELECT value FROM agent_private_memory WHERE session_id=? AND agent_id=? AND namespace=? AND key=?")
+      .get(sessionId, agentId, namespace, key) as any;
+    if (!row?.value) return undefined;
+    return JSON.parse(row.value);
+  }
+
+  writeAgentPrivateMemory(sessionId: string, agentId: string, namespace: string, key: string, value: unknown): void {
+    const current = this.db
+      .prepare("SELECT version FROM agent_private_memory WHERE session_id=? AND agent_id=? AND namespace=? AND key=?")
+      .get(sessionId, agentId, namespace, key) as any;
+    const version = (current?.version ?? 0) + 1;
+    this.db
+      .prepare(`
+        INSERT OR REPLACE INTO agent_private_memory
+          (session_id, agent_id, namespace, key, version, value, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `)
+      .run(sessionId, agentId, namespace, key, version, JSON.stringify(value), Date.now());
+  }
+
   upsertProviderConfig(input: Omit<ProviderConfig, "updatedAt">): ProviderConfigView {
     const existing = this.readProviderConfig(input.providerId);
     const next: ProviderConfig = {
@@ -334,12 +404,28 @@ export class SqliteStore implements EventStore {
     };
   }
 
+  private sessionRowView(row: any): SessionRow {
+    return {
+      sessionId: row.session_id,
+      title: row.title ?? row.session_id,
+      phase: row.phase,
+      epoch: row.epoch,
+      headSeq: row.head_seq,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      room: row.room_data ? JSON.parse(row.room_data) as Room : undefined,
+    };
+  }
+
   private ensureSession(e: RoomEvent): void {
     this.db
       .prepare(`
         INSERT INTO sessions (session_id, title, phase, epoch, head_seq, created_at, updated_at)
         VALUES (?, ?, 'idle', 0, ?, ?, ?)
-        ON CONFLICT(session_id) DO UPDATE SET head_seq=excluded.head_seq, updated_at=excluded.updated_at
+        ON CONFLICT(session_id) DO UPDATE SET
+          title=COALESCE(sessions.title, excluded.title),
+          head_seq=excluded.head_seq,
+          updated_at=excluded.updated_at
       `)
       .run(e.roomId, e.roomId, e.seq, e.ts, e.ts);
   }

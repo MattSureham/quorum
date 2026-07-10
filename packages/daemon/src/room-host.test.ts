@@ -207,6 +207,73 @@ printf '%s\\n' '{"type":"result","session_id":"fake-session"}'
     expect((events[0]?.body as any).text).toBe("hello from local claude cli");
   });
 
+  it("falls back to Quorum context when Claude Code native resume fails", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "quorum-claude-resume-"));
+    const fakeClaude = process.platform === "win32" ? join(dir, "claude.cmd") : join(dir, "claude");
+    if (process.platform === "win32") {
+      await writeFile(fakeClaude, `@echo off
+echo %* | findstr /C:"--resume" >nul
+if not errorlevel 1 (
+  echo resume failed 1>&2
+  exit /b 7
+)
+echo {"type":"system","session_id":"fresh-session"}
+echo {"type":"assistant","message":{"content":[{"type":"text","text":"fallback used quorum context"}]}}
+echo {"type":"result","session_id":"fresh-session"}
+`);
+    } else {
+      await writeFile(fakeClaude, `#!/bin/sh
+case " $* " in
+  *" --resume "*) echo "resume failed" >&2; exit 7 ;;
+esac
+printf '%s\\n' '{"type":"system","session_id":"fresh-session"}'
+printf '%s\\n' '{"type":"assistant","message":{"content":[{"type":"text","text":"fallback used quorum context"}]}}'
+printf '%s\\n' '{"type":"result","session_id":"fresh-session"}'
+`);
+      await chmod(fakeClaude, 0o755);
+    }
+
+    const participant = createParticipant({
+      id: "claude-code",
+      kind: "agent",
+      display: "Claude Code",
+      adapter: "claude-code",
+      adapterConfig: { bin: fakeClaude },
+      status: "idle",
+    });
+    const events: RoomEvent[] = [];
+    const resumeFailures: string[] = [];
+    const nativeIds: string[] = [];
+    for await (const event of participant.takeTurn({
+      turnId: "turn",
+      roomTitle: "Room",
+      self: participant.descriptor,
+      participants: [participant.descriptor],
+      projection: [],
+      protocol: "",
+      contextBundle: "## Quorum Context Bundle\nHead seq: 10",
+      nativeSessionId: "stale-session",
+      onNativeSessionResumeFailed: (detail) => resumeFailures.push(detail),
+      onNativeSessionId: (sessionId) => nativeIds.push(sessionId),
+      signal: new AbortController().signal,
+    })) {
+      events.push({
+        id: "event",
+        roomId: "room",
+        seq: events.length + 1,
+        ts: 1,
+        author: participant.descriptor,
+        visibility: "room",
+        ...event,
+      });
+    }
+
+    expect(resumeFailures[0]).toContain("resume failed");
+    expect(nativeIds).toContain("fresh-session");
+    expect(events.some((event) => event.type === "thinking" && (event.body as any).text.includes("retrying with Quorum context"))).toBe(true);
+    expect(events.some((event) => event.type === "message" && (event.body as any).text === "fallback used quorum context")).toBe(true);
+  });
+
   it("runs an echo agent from room configuration", async () => {
     const dir = await mkdtemp(join(tmpdir(), "quorum-room-"));
     const room = testRoom(dir);

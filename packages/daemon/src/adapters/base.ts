@@ -13,7 +13,8 @@ export abstract class BaseAgentAdapter implements Participant {
 
   /** Render the room-transcript delta + protocol into the agent's turn prompt. */
   protected prompt(input: TurnInput): string {
-    return renderProjection(input);
+    const rendered = renderProjection(input);
+    return input.contextBundle ? `${input.contextBundle}\n\n${rendered}` : rendered;
   }
   protected msg(text: string, addressedTo?: string[]): PartialRoomEvent {
     return { type: "message", body: { text }, addressedTo };

@@ -54,10 +54,11 @@ type ConnectionState = "idle" | "connecting" | "connected" | "offline" | "error"
 type SessionMode = "open-discussion" | "raise-hand" | "round-robin";
 
 type ServerMessage =
-  | { t: "snapshot"; room: Room; events: RoomEvent[] }
+  | { t: "snapshot"; room: Room; events: RoomEvent[]; summaries?: MemorySummary[] }
   | { t: "event"; event: RoomEvent }
   | { t: "sessions"; rooms: Room[] }
   | { t: "session_created"; room: Room; rooms: Room[] }
+  | { t: "session_continued"; room: Room; rooms: Room[] }
   | { t: "replay_projection"; afterSeq: number; headSeq: number; eventCount: number; projection: SharedSessionProjectionResult }
   | { t: "memory_compacted"; summary?: MemorySummary; summaries: MemorySummary[] }
   | { t: "credentials"; providers: ProviderConfigView[] }
@@ -561,11 +562,21 @@ function App() {
           setRoom(message.room);
           setRooms((current) => upsertRoom(current, message.room));
           setEvents((current) => ingest(mergeEvents(current, message.events)));
+          if (message.summaries) setMemorySummaries(message.summaries);
         } else if (message.t === "event") {
           setEvents((current) => ingest(mergeEvents(current, [message.event])));
         } else if (message.t === "sessions") {
           setRooms(message.rooms);
         } else if (message.t === "session_created") {
+          setRooms(message.rooms);
+          setRoom(message.room);
+          setEvents([]);
+          lastSeqRef.current = 0;
+          const nextSettings = { ...next, roomId: message.room.id };
+          setSettings(nextSettings);
+          setDraftSettings(nextSettings);
+          socket.send(JSON.stringify({ t: "subscribe", roomId: message.room.id, sinceSeq: 0 }));
+        } else if (message.t === "session_continued") {
           setRooms(message.rooms);
           setRoom(message.room);
           setEvents([]);
@@ -645,7 +656,7 @@ function App() {
     setSelectedTargets([]);
     setLastSubmittedAt(undefined);
     lastSeqRef.current = 0;
-    send({ t: "subscribe", roomId, sinceSeq: 0 });
+    send({ t: "continue_session", sessionId: roomId });
   }
 
   function send(payload: Record<string, unknown>): boolean {

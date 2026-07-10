@@ -39,6 +39,8 @@ implemented in `@quorum/core` as a parallel kernel:
 - `SqliteStore` now bootstraps the shared-session tables for sessions, turns,
   bids, snapshots, memory, agent configs, provider configs, and migrations while
   preserving the append-only event log as the source of truth.
+- Shared-session room metadata is persisted, so the daemon can list and continue
+  prior sessions after restart without copying events or changing session ids.
 - `projectSessionState()` rebuilds the live shared-session projection from replayed
   events.
 - `createWorkingMemorySummary()` and `SessionManager.compactWorkingMemory()` provide
@@ -101,6 +103,15 @@ that secretly maps to the Claude Code adapter.
 Working-memory summaries are now generated, persisted, triggerable through
 WebSocket `compact_memory`, exposed in the Web UI Memory panel, and automatically
 created after turns once the configured event thresholds are reached.
+
+Continue-session support is implemented for the shared kernel. The left session
+list includes persisted sessions; selecting an old session sends `continue_session`,
+rebuilds the in-memory `SessionManager` from SQLite, returns a replay snapshot
+with memory summaries, and appends new events after the existing head seq. CLI
+agents such as Claude Code and Codex store their native session/thread id in
+agent-private memory and attempt a best-effort resume. If native resume fails,
+Quorum records a diagnostic warning and retries with a deterministic context
+bundle reconstructed from the authoritative event log and working memory.
 
 Packaging status: developer one-command launch exists, and a local sidecar entry
 now exists at `packages/daemon/src/sidecar.ts`. It binds a random loopback port,
@@ -259,9 +270,10 @@ modes, and toggling participants do not close the modal or blank the app.
 `Start session` now calls the daemon `create_session` route. The shared-session
 host keeps an in-memory multi-session registry, creates a new `SessionManager`
 for the selected roster, and the gateway routes `subscribe/post_message` by
-session id. Current limitation: dynamically-created sessions are not persisted
-across daemon restarts yet, and `按序陈述` currently creates a session but still
-executes on the shared bid kernel until a strict round-robin scheduler is added.
+session id. Dynamically-created sessions persist their room metadata and can be
+continued after daemon restart. Current limitation: `按序陈述` currently creates
+a session but still executes on the shared bid kernel until a strict round-robin
+scheduler is added.
 
 After a message is sent, the composer shows a run-status banner derived from the
 event stream. It reports submitted/waiting, bid collection, speaker selection,

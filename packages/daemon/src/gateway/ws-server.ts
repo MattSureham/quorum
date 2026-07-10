@@ -26,9 +26,10 @@ export interface GatewayDeps {
   rollback?: (toHead: string) => Promise<void>;
   listSessions?: () => Room[];
   createSession?: (input: CreateSessionInput) => GatewaySessionDeps | Promise<GatewaySessionDeps>;
+  continueSession?: (sessionId: string) => GatewaySessionDeps | Promise<GatewaySessionDeps>;
 }
 
-export type GatewaySessionDeps = Omit<GatewayDeps, "authToken" | "listSessions" | "createSession">;
+export type GatewaySessionDeps = Omit<GatewayDeps, "authToken" | "listSessions" | "createSession" | "continueSession">;
 
 /**
  * Thin WebSocket gateway. Clients render the event stream and send commands.
@@ -129,6 +130,24 @@ export class Gateway {
       );
       return;
     }
+    if (m.t === "continue_session") {
+      const sessionId = m.sessionId ?? m.roomId;
+      if (!sessionId) {
+        ws.send(JSON.stringify({ t: "error", text: "continue_session requires sessionId" }));
+        return;
+      }
+      if (!this.deps.continueSession) {
+        ws.send(JSON.stringify({ t: "error", text: "session continuation is not available" }));
+        return;
+      }
+      void Promise.resolve(this.deps.continueSession(sessionId)).then((session) => {
+        const registered = this.registerSession(session);
+        ws.send(JSON.stringify({ t: "session_continued", room: registered.room, rooms: this.rooms() }));
+      }).catch((err) =>
+        ws.send(JSON.stringify({ t: "error", text: `continue_session failed: ${err instanceof Error ? err.message : String(err)}` })),
+      );
+      return;
+    }
     const session = this.session(m.roomId ?? this.deps.room.id);
     if (!session) {
       ws.send(JSON.stringify({ t: "error", text: `unknown session: ${m.roomId}` }));
@@ -137,7 +156,12 @@ export class Gateway {
     switch (m.t) {
       case "subscribe":
         this.subscriptions.set(ws, session.room.id);
-        ws.send(JSON.stringify({ t: "snapshot", room: session.room, events: session.log.replay(m.sinceSeq ?? 0) }));
+        ws.send(JSON.stringify({
+          t: "snapshot",
+          room: session.room,
+          events: session.log.replay(m.sinceSeq ?? 0),
+          summaries: session.log.readWorkingMemorySummaries(),
+        }));
         break;
       case "post_message":
         if (session.postMessage) void Promise.resolve(session.postMessage(m.text, m.addressedTo, m.attachments)).catch((err) =>

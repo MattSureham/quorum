@@ -46,11 +46,30 @@ export async function startSharedSessionRoom(
   function createManaged(nextRoom: Room): ManagedSharedSession {
     const existing = managed.get(nextRoom.id);
     if (existing) return existing;
+    store.upsertSessionRoom(nextRoom);
     const log = new EventLog(nextRoom.id, store);
     const participants = nextRoom.participants
       .filter((participant) => participant.kind === "agent")
       .map(createParticipant);
-    const agents = participants.map((participant) => new LegacyAgentAdapter(participant));
+    const agents = participants.map((participant) => new LegacyAgentAdapter(participant, {
+      workspacePath: nextRoom.workspacePath,
+      nativeSessionStore: {
+        read: (sessionId, agentId) => {
+          const value = store.readAgentPrivateMemory(sessionId, agentId, "native_session", "id");
+          return typeof value === "string" ? value : undefined;
+        },
+        write: (sessionId, agentId, nativeSessionId) =>
+          store.writeAgentPrivateMemory(sessionId, agentId, "native_session", "id", nativeSessionId),
+      },
+      onNativeSessionResumeFailed: (agentId, detail) => {
+        void log.append({
+          author: { kind: "system", id: "session", display: "SessionManager" },
+          type: "system",
+          body: { level: "warn", text: `native session resume failed for ${agentId}: ${detail}` },
+          visibility: "debug",
+        });
+      },
+    }));
     const humans = nextRoom.participants.filter((participant) => participant.kind === "human");
 
     const session = new SessionManager({
@@ -91,15 +110,33 @@ export async function startSharedSessionRoom(
 
   const primary = createManaged(room);
 
+  function listRooms(): Room[] {
+    const rooms = new Map<string, Room>();
+    for (const row of store.listSessionRows()) {
+      const storedRoom = row.room ?? store.readSessionRoom(row.sessionId);
+      if (storedRoom) rooms.set(storedRoom.id, storedRoom);
+    }
+    for (const item of managed.values()) rooms.set(item.room.id, item.room);
+    return [...rooms.values()];
+  }
+
+  function continueManaged(sessionId: string): GatewaySessionDeps {
+    const existing = managed.get(sessionId);
+    if (existing) return existing.gatewayDeps;
+    const storedRoom = store.readSessionRoom(sessionId);
+    if (!storedRoom) throw new Error(`unknown session: ${sessionId}`);
+    return createManaged(storedRoom).gatewayDeps;
+  }
+
   const gateway = new Gateway(
     {
       ...primary.gatewayDeps,
       authToken: opts.authToken,
       listCredentials: () => store.readProviderConfigViews(),
       setCredential: (input) => store.upsertProviderConfig(input),
-      listSessions: () => [...managed.values()].map((item) => item.room),
+      listSessions: listRooms,
       createSession: (input: CreateSessionInput) => {
-        if (managed.has(input.id)) throw new Error(`session already exists: ${input.id}`);
+        if (managed.has(input.id) || store.readSessionRoom(input.id)) throw new Error(`session already exists: ${input.id}`);
         const nextRoom: Room = {
           id: input.id,
           title: input.title || input.id,
@@ -112,6 +149,7 @@ export async function startSharedSessionRoom(
         };
         return createManaged(nextRoom).gatewayDeps;
       },
+      continueSession: continueManaged,
     },
     opts.port,
   );

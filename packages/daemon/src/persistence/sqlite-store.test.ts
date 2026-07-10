@@ -168,6 +168,40 @@ describe("SqliteStore", () => {
     }
   });
 
+  it("persists session room metadata and agent-private memory", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "quorum-sqlite-session-room-"));
+    const dbPath = join(dir, "session-room.sqlite");
+    const store = new SqliteStore(dbPath);
+    const room = {
+      id: "persisted-room",
+      title: "Persisted Room",
+      workspacePath: join(dir, "workspace"),
+      branch: "main",
+      policy: { name: "free-for-all" as const, maxTurnsPerTopic: 3, noConsecutive: true, turnDeadlineMs: 1_000 },
+      participants: [
+        { id: "human", kind: "human" as const, display: "Human", status: "idle" as const },
+        { id: "claude-code", kind: "agent" as const, display: "Claude Code", adapter: "claude-code", status: "idle" as const },
+      ],
+      createdAt: 123,
+    };
+    store.upsertSessionRoom(room);
+    store.writeAgentPrivateMemory("persisted-room", "claude-code", "native_session", "id", "native-123");
+    store.close();
+
+    const reopened = new SqliteStore(dbPath);
+    try {
+      expect(reopened.listSessionRows().map((row) => row.sessionId)).toContain("persisted-room");
+      expect(reopened.readSessionRoom("persisted-room")).toMatchObject({
+        id: "persisted-room",
+        title: "Persisted Room",
+        workspacePath: join(dir, "workspace"),
+      });
+      expect(reopened.readAgentPrivateMemory("persisted-room", "claude-code", "native_session", "id")).toBe("native-123");
+    } finally {
+      reopened.close();
+    }
+  });
+
   it("persists provider credentials as masked views and applies env vars", async () => {
     const dir = await mkdtemp(join(tmpdir(), "quorum-sqlite-credentials-"));
     const dbPath = join(dir, "credentials.sqlite");

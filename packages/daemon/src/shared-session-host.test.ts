@@ -180,4 +180,83 @@ describe("SharedSessionHost", () => {
       await host.stop();
     }
   });
+
+  it("lists and continues a persisted session after host restart", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "quorum-shared-session-continue-"));
+    const dbPath = join(dir, "room.sqlite");
+    const baseRoom: Room = {
+      id: "main-room",
+      title: "Main room",
+      branch: "main",
+      policy: { name: "free-for-all", maxTurnsPerTopic: 3, noConsecutive: true, turnDeadlineMs: 1_000 },
+      participants: [
+        { id: "human", kind: "human", display: "Human", status: "idle" },
+        { id: "echo", kind: "agent", display: "Echo", adapter: "echo", adapterConfig: { text: "main response" }, status: "idle" },
+      ],
+      createdAt: Date.now(),
+    };
+    const first = await startSharedSessionRoom(baseRoom, { dbPath, port: 0 });
+    const ws1 = await connect(first.gateway.url());
+    try {
+      ws1.send(JSON.stringify({
+        t: "create_session",
+        roomId: "main-room",
+        session: {
+          id: "continued-room",
+          title: "Continued room",
+          mode: "open-discussion",
+          workspacePath: join(dir, "continued-workspace"),
+          participants: [
+            { id: "human", kind: "human", display: "Human", status: "idle" },
+            { id: "echo2", kind: "agent", display: "Echo Two", adapter: "echo", adapterConfig: { text: "continued response" }, status: "idle" },
+          ],
+        },
+      }));
+      expect((await nextMessage(ws1)).t).toBe("session_created");
+      ws1.send(JSON.stringify({ t: "subscribe", roomId: "continued-room", sinceSeq: 0 }));
+      expect((await nextMessage(ws1)).t).toBe("snapshot");
+      ws1.send(JSON.stringify({ t: "post_message", roomId: "continued-room", text: "before restart" }));
+      const seen: RoomEvent[] = [];
+      ws1.on("message", (data) => {
+        const message = JSON.parse(String(data));
+        if (message.t === "event") seen.push(message.event);
+      });
+      await waitFor(() => seen.some((event) => event.type === "turn_completed"), 2_000);
+    } finally {
+      ws1.close();
+      await first.stop();
+    }
+
+    const second = await startSharedSessionRoom(baseRoom, { dbPath, port: 0 });
+    const ws2 = await connect(second.gateway.url());
+    try {
+      ws2.send(JSON.stringify({ t: "list_sessions", roomId: "main-room" }));
+      const listed = await nextMessage(ws2);
+      expect(listed.t).toBe("sessions");
+      expect(listed.rooms.map((item: Room) => item.id)).toContain("continued-room");
+
+      ws2.send(JSON.stringify({ t: "continue_session", sessionId: "continued-room" }));
+      const continued = await nextMessage(ws2);
+      expect(continued.t).toBe("session_continued");
+      expect(continued.room).toMatchObject({ id: "continued-room", workspacePath: join(dir, "continued-workspace") });
+
+      ws2.send(JSON.stringify({ t: "subscribe", roomId: "continued-room", sinceSeq: 0 }));
+      const snapshot = await nextMessage(ws2);
+      expect(snapshot.t).toBe("snapshot");
+      expect(snapshot.events.some((event: RoomEvent) => event.type === "message" && (event.body as any).text === "before restart")).toBe(true);
+      const previousHead = Math.max(...snapshot.events.map((event: RoomEvent) => event.seq));
+
+      const seen: RoomEvent[] = [];
+      ws2.on("message", (data) => {
+        const message = JSON.parse(String(data));
+        if (message.t === "event") seen.push(message.event);
+      });
+      ws2.send(JSON.stringify({ t: "post_message", roomId: "continued-room", text: "after restart" }));
+      await waitFor(() => seen.some((event) => event.type === "turn_completed"), 2_000);
+      expect(seen.some((event) => event.seq > previousHead && event.type === "message" && event.author.id === "echo2")).toBe(true);
+    } finally {
+      ws2.close();
+      await second.stop();
+    }
+  });
 });

@@ -28,6 +28,8 @@ export class CodexAdapter extends BaseAgentAdapter {
   }
 
   async *takeTurn(input: TurnInput): AsyncIterable<PartialRoomEvent> {
+    if (!this.threadId && input.nativeSessionId) this.threadId = input.nativeSessionId;
+    const usedResume = !!this.threadId;
     const prompt = this.prompt(input);
     const bin = this.opts.bin ?? "codex";
     const sandbox = this.opts.sandbox ?? "workspace-write";
@@ -45,6 +47,7 @@ export class CodexAdapter extends BaseAgentAdapter {
 
     const queue: PartialRoomEvent[] = [];
     let wake: (() => void) | null = null;
+    let resumeFailed = false;
     const push = (e: PartialRoomEvent) => { queue.push(e); wake?.(); wake = null; };
 
     const rl = createInterface({ input: child.stdout! });
@@ -55,7 +58,8 @@ export class CodexAdapter extends BaseAgentAdapter {
       try { ev = JSON.parse(t); } catch { return; }
       switch (ev.type) {
         case "thread.started":
-          this.threadId = ev.thread_id;
+          this.threadId = String(ev.thread_id);
+          input.onNativeSessionId?.(this.threadId);
           break;
         case "item.completed": {
           const it = ev.item ?? {};
@@ -78,6 +82,13 @@ export class CodexAdapter extends BaseAgentAdapter {
           break;
         }
         case "turn.failed":
+          if (usedResume) {
+            resumeFailed = true;
+            input.onNativeSessionResumeFailed?.(ev.error?.message ?? "Codex native resume failed");
+            this.threadId = undefined;
+            push({ type: "thinking", body: { text: "Native Codex thread resume failed; retrying with Quorum context bundle." } });
+            break;
+          }
           push({ type: "system", body: { level: "error", text: ev.error?.message ?? "codex turn failed" } });
           break;
         case "error":
@@ -96,6 +107,9 @@ export class CodexAdapter extends BaseAgentAdapter {
         if (queue.length) { yield queue.shift()!; continue; }
         if (closed) break;
         await Promise.race([new Promise<void>((r) => { wake = r; }), done]);
+      }
+      if (resumeFailed) {
+        yield* this.takeTurn({ ...input, nativeSessionId: undefined });
       }
     } finally {
       input.signal.removeEventListener("abort", onAbort);

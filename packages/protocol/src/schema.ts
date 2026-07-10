@@ -83,6 +83,7 @@ export const ClientMessageSchema = z.discriminatedUnion("t", [
       participants: z.array(ParticipantDescriptorSchema),
     }),
   }),
+  z.object({ t: z.literal("continue_session"), roomId: z.string().optional(), sessionId: z.string().optional() }),
   z.object({ t: z.literal("subscribe"), roomId: z.string(), sinceSeq: z.number().optional() }),
   z.object({
     t: z.literal("post_message"),

@@ -117,6 +117,10 @@ export interface CreateSessionInput {
   participants: ParticipantDescriptor[];
 }
 
+export interface ContinueSessionInput {
+  id: string;
+}
+
 export interface Turn {
   id: string;
   roomId: string;
@@ -200,6 +204,7 @@ export interface TurnContext {
   contextSeq: number;
   participants: ParticipantDescriptor[];
   transcript: RoomEvent[];
+  contextBundle?: string;
 }
 
 export type AgentDelta =

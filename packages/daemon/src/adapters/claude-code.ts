@@ -61,6 +61,8 @@ export class ClaudeCodeAdapter extends BaseAgentAdapter {
   }
 
   private async *takeTurnWithCli(input: TurnInput): AsyncIterable<PartialRoomEvent> {
+    if (!this.sessionId && input.nativeSessionId) this.sessionId = input.nativeSessionId;
+    const usedResume = !!this.sessionId;
     const prompt = this.prompt(input);
     const bin = this.opts.bin ?? "claude";
     const cwd = input.workspacePath ?? process.cwd();
@@ -110,7 +112,9 @@ export class ClaudeCodeAdapter extends BaseAgentAdapter {
       let ev: Record<string, any>;
       try { ev = JSON.parse(trimmed); } catch { return; }
       if (ev.type === "system" && ev.session_id) {
-        this.sessionId = ev.session_id;
+        const nextSessionId = String(ev.session_id);
+        this.sessionId = nextSessionId;
+        input.onNativeSessionId?.(nextSessionId);
       } else if (ev.type === "assistant") {
         for (const block of ev.message?.content ?? []) {
           if (block.type === "text") assistantText += block.text;
@@ -134,6 +138,7 @@ export class ClaudeCodeAdapter extends BaseAgentAdapter {
         }
       } else if (ev.type === "result") {
         this.sessionId = ev.session_id ?? this.sessionId;
+        if (this.sessionId) input.onNativeSessionId?.(this.sessionId);
         if (ev.result && !assistantText.trim()) assistantText = String(ev.result);
         flushAssistant();
       } else if (ev.type === "error") {
@@ -170,6 +175,13 @@ export class ClaudeCodeAdapter extends BaseAgentAdapter {
       while (queue.length) yield queue.shift()!;
       if (exitCode && exitCode !== 0) {
         const detail = stderr.trim() || `exit code ${exitCode}`;
+        if (usedResume) {
+          input.onNativeSessionResumeFailed?.(`Claude Code resume failed: ${detail}`);
+          this.sessionId = undefined;
+          yield this.think(`Native Claude Code session resume failed; retrying with Quorum context bundle. ${detail}`);
+          yield* this.takeTurnWithCli({ ...input, nativeSessionId: undefined });
+          return;
+        }
         yield this.msg(`Claude Code CLI failed. ${detail}`);
       }
     } finally {
@@ -180,6 +192,7 @@ export class ClaudeCodeAdapter extends BaseAgentAdapter {
   }
 
   private async *takeTurnWithSdk(input: TurnInput): AsyncIterable<PartialRoomEvent> {
+    if (!this.sessionId && input.nativeSessionId) this.sessionId = input.nativeSessionId;
     const sdkModule = "@anthropic-ai/claude-agent-sdk";
     const sdk = await import(sdkModule).catch(() => {
       throw new Error("install @anthropic-ai/claude-agent-sdk to use ClaudeCodeAdapter");
@@ -242,7 +255,11 @@ export class ClaudeCodeAdapter extends BaseAgentAdapter {
       for await (const m of stream as AsyncIterable<any>) {
         if (ac.signal.aborted) break;
         while (emitted.length) yield emitted.shift()!;
-        if (m.type === "system" && m.session_id) this.sessionId = m.session_id;
+        if (m.type === "system" && m.session_id) {
+          const nextSessionId = String(m.session_id);
+          this.sessionId = nextSessionId;
+          input.onNativeSessionId?.(nextSessionId);
+        }
         if (m.type === "assistant") {
           for (const block of m.message?.content ?? []) {
             if (block.type === "text") buffer += block.text;
@@ -266,6 +283,7 @@ export class ClaudeCodeAdapter extends BaseAgentAdapter {
           }
         } else if (m.type === "result") {
           this.sessionId = m.session_id ?? this.sessionId;
+          if (this.sessionId) input.onNativeSessionId?.(this.sessionId);
           break;
         }
       }

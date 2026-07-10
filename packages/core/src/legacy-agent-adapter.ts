@@ -15,7 +15,17 @@ export class LegacyAgentAdapter implements ISpeakerAgent {
   readonly id: string;
   readonly descriptor: ParticipantDescriptor;
 
-  constructor(private readonly legacy: Participant) {
+  constructor(
+    private readonly legacy: Participant,
+    private readonly opts: {
+      workspacePath?: string;
+      nativeSessionStore?: {
+        read(sessionId: string, agentId: string): string | undefined;
+        write(sessionId: string, agentId: string, nativeSessionId: string): void;
+      };
+      onNativeSessionResumeFailed?: (agentId: string, detail: string) => void;
+    } = {},
+  ) {
     this.id = legacy.id;
     this.descriptor = legacy.descriptor;
   }
@@ -50,6 +60,11 @@ export class LegacyAgentAdapter implements ISpeakerAgent {
       participants: turn.participants,
       projection: turn.transcript,
       protocol: "",
+      contextBundle: turn.contextBundle,
+      workspacePath: this.opts.workspacePath,
+      nativeSessionId: this.opts.nativeSessionStore?.read(turn.sessionId, this.id),
+      onNativeSessionId: (sessionId) => this.opts.nativeSessionStore?.write(turn.sessionId, this.id, sessionId),
+      onNativeSessionResumeFailed: (detail) => this.opts.onNativeSessionResumeFailed?.(this.id, detail),
       signal,
     };
 
