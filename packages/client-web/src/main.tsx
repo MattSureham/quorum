@@ -86,6 +86,15 @@ const zhText: Record<string, string> = {
   "CLI/SDK agent; uses Claude Code auth": "CLI/SDK 智能体；使用 Claude Code 认证",
   "Agent adapter placeholder; not installed in this build": "智能体 adapter 占位；当前构建未安装",
   "Direct API model agent": "直接 API 模型智能体",
+  "local CLI": "本地 CLI",
+  "API model": "API 模型",
+  "placeholder": "占位",
+  "files": "文件",
+  "commands": "命令",
+  "vision": "视觉",
+  "no files": "不写文件",
+  "key required": "需要 key",
+  "health unknown": "健康状态未知",
   "Message the session": "发送消息到会话",
   "Image": "图片",
   "Send": "发送",
@@ -293,6 +302,7 @@ interface AgentModelPreset {
   detail: string;
   credential: string;
   providerId?: string;
+  vision?: boolean;
 }
 
 const agentModelPresets: AgentModelPreset[] = [
@@ -302,7 +312,7 @@ const agentModelPresets: AgentModelPreset[] = [
   { id: "deepseek-v4-pro", display: "DeepSeek V4 Pro", adapter: "api-model", detail: "Direct API model agent", credential: "DeepSeek API key", providerId: "deepseek" },
   { id: "deepseek-v4-flash", display: "DeepSeek V4 Flash", adapter: "api-model", detail: "Direct API model agent", credential: "DeepSeek API key", providerId: "deepseek" },
   { id: "glm-5.2", display: "GLM 5.2", adapter: "api-model", detail: "Direct API model agent", credential: "Zhipu API key", providerId: "zhipu" },
-  { id: "minimax-m3", display: "MiniMax M3", adapter: "api-model", detail: "Direct API model agent", credential: "MiniMax API key", providerId: "minimax" },
+  { id: "minimax-m3", display: "MiniMax M3", adapter: "api-model", detail: "Direct API model agent", credential: "MiniMax API key", providerId: "minimax", vision: true },
 ];
 
 const defaultSettings: ClientSettings = {
@@ -1438,6 +1448,7 @@ function AgentModelPanel({
               <div>
                 <strong>{agent.display}</strong>
                 <span>{formatAgentDetail(agent)}</span>
+                <CapabilityBadges labels={capabilityBadgesForAgent(agent)} t={t} />
               </div>
               <span className="credential-state configured">{t("room")}</span>
             </div>
@@ -1460,6 +1471,7 @@ function AgentModelPanel({
                 <div>
                   <strong>{preset.display}</strong>
                   <span>{t(preset.detail)}</span>
+                  <CapabilityBadges labels={capabilityBadgesForPreset(preset, !!configured)} t={t} />
                 </div>
                 <span className={statusClass}>{state}</span>
               </div>
@@ -1481,6 +1493,25 @@ function formatAgentDetail(agent: ParticipantDescriptor): string {
   const adapter = agent.adapter ?? agent.kind;
   const model = typeof agent.adapterConfig?.model === "string" ? agent.adapterConfig.model : undefined;
   return model ? `${adapter} / ${model}` : adapter;
+}
+
+function capabilityBadgesForAgent(agent: ParticipantDescriptor): string[] {
+  const adapter = agent.adapter ?? agent.kind;
+  if (adapter === "codex" || adapter === "claude-code") return ["local CLI", "files", "commands"];
+  if (adapter === "api-model") {
+    const model = typeof agent.adapterConfig?.model === "string" ? agent.adapterConfig.model.toLowerCase() : "";
+    return ["API model", model.includes("minimax") ? "vision" : "no files"];
+  }
+  if (adapter === "echo") return ["local CLI", "no files"];
+  if (adapter === "openclaw") return ["placeholder"];
+  return [adapter];
+}
+
+function capabilityBadgesForPreset(preset: AgentModelPreset, configured: boolean): string[] {
+  if (preset.id === "openclaw") return ["placeholder"];
+  if (preset.adapter === "api-model") return ["API model", preset.vision ? "vision" : "no files", configured ? "set" : "key required"];
+  if (preset.adapter === "codex" || preset.adapter === "claude-code") return ["local CLI", "files", "commands"];
+  return [preset.adapter];
 }
 
 function modelsUsingProvider(providerId: string, t: Translate): string {
@@ -1795,8 +1826,17 @@ function ParticipantRow({ participant, active, t }: { participant: ParticipantDe
       <div>
         <strong>{participant.display}</strong>
         <span>{participant.adapter ?? participant.kind}</span>
+        {participant.kind === "agent" ? <CapabilityBadges labels={capabilityBadgesForAgent(participant)} t={t} /> : null}
       </div>
       <i>{active ? t("live") : t(participant.status)}</i>
+    </div>
+  );
+}
+
+function CapabilityBadges({ labels, t }: { labels: string[]; t: Translate }) {
+  return (
+    <div className="capability-badges">
+      {labels.map((label) => <span key={label}>{t(label)}</span>)}
     </div>
   );
 }

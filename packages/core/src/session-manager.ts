@@ -16,6 +16,7 @@ import type {
   TurnContext,
   WriteResult,
   ImageAttachment,
+  Capabilities,
 } from "@quorum/protocol";
 import type { EventLog } from "./event-log.js";
 import { ulid } from "./ids.js";
@@ -25,6 +26,7 @@ import { assertTransition, projectSessionState } from "./session-state.js";
 import { isRoomTool, normalizeToolName, runRoomTool } from "./room-tools.js";
 import { createWorkingMemorySummary } from "./memory.js";
 import type { ToolExecutor } from "./tool-executor.js";
+import type { WorkspaceManager, WriteLease } from "./types.js";
 
 export interface SessionManagerOptions {
   sessionId: string;
@@ -37,6 +39,7 @@ export interface SessionManagerOptions {
   turnTimeoutMs?: number;
   arbiter?: Arbiter;
   workspacePath?: string;
+  workspace?: WorkspaceManager;
   toolExecutor?: ToolExecutor;
   memory?: {
     autoCompact?: boolean;
@@ -91,6 +94,8 @@ export class SessionManager {
   private lastPrompt = "";
   private roundRobinQueue: string[] = [];
   private running = false;
+  private humanHoldsWriteFloor = false;
+  private humanWriteLease?: WriteLease;
   private readonly pendingToolApprovals = new Map<string, { tool: string; resolve: (allow: boolean) => void }>();
   private lastCompactedSeq = 0;
 
@@ -113,6 +118,9 @@ export class SessionManager {
     this.mailbox.stop();
     for (const pending of this.pendingToolApprovals.values()) pending.resolve(false);
     this.pendingToolApprovals.clear();
+    this.humanWriteLease?.release();
+    this.humanWriteLease = undefined;
+    this.humanHoldsWriteFloor = false;
     if (this.active) {
       this.active.ac.abort();
       await this.append("turn_cancelled", { turnId: this.active.turnId, reason: "session stopped" }, "system");
@@ -135,6 +143,7 @@ export class SessionManager {
   async submitUserPrompt(text: string, addressedTo: string[] = [], attachments: ImageAttachment[] = []): Promise<void> {
     await this.mailbox.enqueue("submitUserPrompt", async () => {
       if (!this.running) this.running = true;
+      this.releaseWriteFloor("human resumed the room");
       this.lastPrompt = text;
       this.epoch++;
       await this.append("message", { text, ...(attachments.length ? { attachments } : {}) }, "participant", {
@@ -172,6 +181,29 @@ export class SessionManager {
         await this.arbitrateIfPossible();
       }
     });
+  }
+
+  async takeWriteFloor(): Promise<void> {
+    if (this.humanHoldsWriteFloor) return;
+    this.humanHoldsWriteFloor = true;
+    if (this.opts.workspace) {
+      const lease = await this.opts.workspace.acquireWriteFloor("human-write", "human");
+      if (!this.humanHoldsWriteFloor) {
+        lease.release();
+        return;
+      }
+      this.humanWriteLease = lease;
+    }
+    await this.append("system", { level: "info", text: "human holds the write floor — agent turns paused" }, "system");
+  }
+
+  releaseWriteFloor(reason = "human released the write floor"): void {
+    if (!this.humanHoldsWriteFloor) return;
+    this.humanHoldsWriteFloor = false;
+    this.humanWriteLease?.release();
+    this.humanWriteLease = undefined;
+    void this.append("system", { level: "info", text: `write floor released — ${reason}` }, "system");
+    void this.mailbox.enqueue("writeFloorReleased", () => this.continueAfterWriteFloor()).catch(() => undefined);
   }
 
   async drain(): Promise<void> {
@@ -283,6 +315,7 @@ export class SessionManager {
 
   private async arbitrateIfPossible(): Promise<void> {
     if (this.active || this.phase === "speaking" || this.phase === "speaker_granted") return;
+    if (this.humanHoldsWriteFloor) return;
     if (this.pendingBids.size === 0) {
       await this.transition("idle", { reason: "no bids" });
       return;
@@ -339,6 +372,8 @@ export class SessionManager {
     const timeout = setTimeout(() => ac.abort(), this.opts.turnTimeoutMs ?? 120_000);
     let offset = 0;
     let outcome: "done" | "cancelled" | "failed" = "done";
+    const caps = this.agentCapabilities(agent);
+    let lease: WriteLease | undefined;
 
     await this.mailbox.enqueue("turnStarted", async () => {
       await this.transition("speaking", { turnId, speakerId: agent.id, generation });
@@ -346,6 +381,10 @@ export class SessionManager {
     });
 
     try {
+      if (caps.canEditFiles && this.opts.workspace) {
+        lease = await this.opts.workspace.acquireWriteFloor(turnId, agent.id);
+        await this.opts.workspace.snapshotPre();
+      }
       const ctx: TurnContext = {
         sessionId: this.opts.sessionId,
         turnId,
@@ -381,12 +420,22 @@ export class SessionManager {
         this.active = undefined;
         this.recentSpeakerCounts.set(agent.id, (this.recentSpeakerCounts.get(agent.id) ?? 0) + 1);
         const eventType = outcome === "done" ? "turn_completed" : outcome === "cancelled" ? "turn_cancelled" : "turn_failed";
-        await this.append(eventType, { turnId, speakerId: agent.id, generation, offset });
+        const completed = await this.append(eventType, { turnId, speakerId: agent.id, generation, offset });
+        if (caps.canEditFiles && this.opts.workspace) {
+          const checkpoint = await this.opts.workspace.checkpoint(turnId, agent.id, completed.id).catch(() => null);
+          if (checkpoint) {
+            await this.append("checkpoint", checkpoint, "system", {
+              author: { kind: "system", id: "workspace", display: "Workspace" },
+              turnId,
+            });
+          }
+        }
         await this.append("floor_release", { turnId, reason: outcome === "done" ? "done" : outcome });
         await this.maybeAutoCompactWorkingMemory();
         await this.transition("settling", { turnId, settlingWindowMs: this.opts.settlingWindowMs ?? 400 });
         void this.settleAndArbitrate();
       });
+      lease?.release();
     }
   }
 
@@ -418,6 +467,7 @@ export class SessionManager {
 
   private async grantNextRoundRobinSpeaker(): Promise<void> {
     if (this.active || this.phase === "speaking" || this.phase === "speaker_granted") return;
+    if (this.humanHoldsWriteFloor) return;
     const nextAgentId = this.roundRobinQueue.shift();
     if (!nextAgentId) {
       await this.transition("idle", { reason: "round-robin complete" });
@@ -464,6 +514,15 @@ export class SessionManager {
       revision: 0,
       rationale: "round-robin scheduler",
     };
+  }
+
+  private async continueAfterWriteFloor(): Promise<void> {
+    if (this.active || this.humanHoldsWriteFloor) return;
+    if (this.isRoundRobin() && this.roundRobinQueue.length) {
+      await this.grantNextRoundRobinSpeaker();
+      return;
+    }
+    if (this.pendingBids.size) await this.arbitrateIfPossible();
   }
 
   private async persistDelta(
@@ -668,6 +727,10 @@ export class SessionManager {
 
   private participants(): ParticipantDescriptor[] {
     return [...(this.opts.humans ?? []), ...this.opts.agents.map((agent) => agent.descriptor)];
+  }
+
+  private agentCapabilities(agent: ISpeakerAgent): Capabilities {
+    return agent.capabilities?.() ?? { canEditFiles: false, canRunCommands: false, supportsToolApproval: false, nativeTools: [] };
   }
 
   private bumpWaiting(speakerId: string): void {

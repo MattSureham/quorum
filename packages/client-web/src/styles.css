@@ -467,6 +467,28 @@ textarea:focus {
   white-space: nowrap;
 }
 
+.capability-badges {
+  display: flex;
+  flex-flow: row wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.capability-badges span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 1px 6px;
+  border: 1px solid #d9e3df;
+  border-radius: 999px;
+  color: #43504c;
+  background: #ffffff;
+  font-size: 10px;
+  font-weight: 740;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
 .agent-model-row > .credential-state {
   overflow: visible;
   white-space: nowrap;

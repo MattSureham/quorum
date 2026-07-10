@@ -1,9 +1,11 @@
-import { EventLog, LegacyAgentAdapter, SessionManager } from "@quorum/core";
+import { EventLog, LegacyAgentAdapter, SessionManager, type WorkspaceManager } from "@quorum/core";
 import type { CreateSessionInput, ParticipantDescriptor, Room, SessionMode } from "@quorum/protocol";
+import { mkdirSync } from "node:fs";
 import { createParticipant } from "./adapters/registry.js";
 import { Gateway, type GatewaySessionDeps } from "./gateway/ws-server.js";
 import { SqliteStore } from "./persistence/sqlite-store.js";
 import { createLocalSandboxToolExecutor } from "./tools/local-sandbox-executor.js";
+import { GitWorkspace } from "./workspace/git-workspace.js";
 
 export interface SharedSessionHost {
   log: EventLog;
@@ -17,6 +19,7 @@ interface ManagedSharedSession {
   log: EventLog;
   session: SessionManager;
   gatewayDeps: GatewaySessionDeps;
+  unwatch?: () => void;
 }
 
 function policyForMode(mode: SessionMode, base: Room["policy"]): Room["policy"] {
@@ -29,6 +32,27 @@ function ensureHuman(participants: ParticipantDescriptor[]): ParticipantDescript
   return participants.some((participant) => participant.kind === "human")
     ? participants
     : [{ id: "human", kind: "human", display: "You", status: "idle" }, ...participants];
+}
+
+function readyWorkspace(workspace: GitWorkspace, ready: Promise<void>): WorkspaceManager {
+  return {
+    async acquireWriteFloor(turnId, who) {
+      await ready;
+      return workspace.acquireWriteFloor(turnId, who);
+    },
+    async snapshotPre() {
+      await ready;
+      return workspace.snapshotPre();
+    },
+    async checkpoint(turnId, who, eventId) {
+      await ready;
+      return workspace.checkpoint(turnId, who, eventId);
+    },
+    async rollbackTo(head) {
+      await ready;
+      return workspace.rollbackTo(head);
+    },
+  };
 }
 
 /**
@@ -71,6 +95,35 @@ export async function startSharedSessionRoom(
       },
     }));
     const humans = nextRoom.participants.filter((participant) => participant.kind === "human");
+    const workspace = nextRoom.workspacePath ? new GitWorkspace(nextRoom.workspacePath, nextRoom.branch) : undefined;
+    let workspaceReady: Promise<void> | undefined;
+    if (workspace) {
+      mkdirSync(nextRoom.workspacePath!, { recursive: true });
+      workspaceReady = workspace.init().catch((err) => {
+        void log.append({
+          author: { kind: "system", id: "workspace", display: "Workspace" },
+          type: "system",
+          body: { level: "warn", text: `workspace init failed: ${err instanceof Error ? err.message : String(err)}` },
+          visibility: "system",
+        });
+        throw err;
+      });
+    }
+    let unwatch: (() => void) | undefined;
+    if (workspace && workspaceReady) {
+      void workspaceReady.then(() => {
+        unwatch = workspace.watchOutOfBand((checkpoint) => {
+          void log.append({
+            author: { kind: "human", id: humans[0]?.id ?? "human", display: humans[0]?.display ?? "Human" },
+            type: "checkpoint",
+            body: checkpoint,
+            visibility: "system",
+          });
+        });
+      }).catch(() => {
+        /* workspace init warning has already been recorded */
+      });
+    }
 
     const session = new SessionManager({
       sessionId: nextRoom.id,
@@ -79,6 +132,7 @@ export async function startSharedSessionRoom(
       agents,
       humans,
       workspacePath: nextRoom.workspacePath,
+      workspace: workspace && workspaceReady ? readyWorkspace(workspace, workspaceReady) : undefined,
       schedulerMode: nextRoom.schedulerMode,
       toolExecutor: nextRoom.workspacePath ? createLocalSandboxToolExecutor({ workspacePath: nextRoom.workspacePath }) : undefined,
       settlingWindowMs: 400,
@@ -95,22 +149,8 @@ export async function startSharedSessionRoom(
       compactMemory: (fromSeq, toSeq) => session.compactWorkingMemory(fromSeq, toSeq),
       listCredentials: () => store.readProviderConfigViews(),
       setCredential: (input) => store.upsertProviderConfig(input),
-      takeWriteFloor: async () => {
-        await log.append({
-          author: { kind: "system", id: "session", display: "SessionManager" },
-          type: "system",
-          body: { level: "info", text: "human holds the write floor — agent turns paused" },
-          visibility: "system",
-        });
-      },
-      releaseWriteFloor: async () => {
-        await log.append({
-          author: { kind: "system", id: "session", display: "SessionManager" },
-          type: "system",
-          body: { level: "info", text: "write floor released — human released the write floor" },
-          visibility: "system",
-        });
-      },
+      takeWriteFloor: () => session.takeWriteFloor(),
+      releaseWriteFloor: () => session.releaseWriteFloor(),
       setPolicy: () => {
         void log.append({
           author: { kind: "system", id: "session", display: "SessionManager" },
@@ -120,7 +160,7 @@ export async function startSharedSessionRoom(
         });
       },
     };
-    const created = { room: nextRoom, log, session, gatewayDeps };
+    const created = { room: nextRoom, log, session, gatewayDeps, unwatch: () => unwatch?.() };
     managed.set(nextRoom.id, created);
     return created;
   }
@@ -148,6 +188,7 @@ export async function startSharedSessionRoom(
   async function deleteManaged(sessionId: string): Promise<Room[]> {
     const existing = managed.get(sessionId);
     if (existing) {
+      existing.unwatch?.();
       await existing.session.stop();
       managed.delete(sessionId);
     }
@@ -189,7 +230,10 @@ export async function startSharedSessionRoom(
     session: primary.session,
     gateway,
     async stop() {
-      await Promise.all([...managed.values()].map((item) => item.session.stop()));
+      await Promise.all([...managed.values()].map(async (item) => {
+        item.unwatch?.();
+        await item.session.stop();
+      }));
       await gateway.close();
       store.close();
     },

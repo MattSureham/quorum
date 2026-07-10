@@ -264,6 +264,7 @@ export interface ISpeakerAgent {
   readonly id: string;
   readonly descriptor: ParticipantDescriptor;
   health(): Promise<AgentHealth>;
+  capabilities?(): Capabilities;
   shutdown(): Promise<void>;
   bid(ctx: BidContext): Promise<Bid>;
   speak(turn: TurnContext, runtime: AgentRuntime, signal: AbortSignal): AsyncGenerator<AgentDelta>;

@@ -3,6 +3,7 @@ import type {
   AgentDelta,
   AgentHealth,
   AgentRuntime,
+  Capabilities,
   Bid,
   BidContext,
   ISpeakerAgent,
@@ -16,6 +17,7 @@ import { SessionManager } from "./session-manager.js";
 import { Arbiter } from "./arbiter.js";
 import { ulid } from "./ids.js";
 import { projectSessionState } from "./session-state.js";
+import type { WorkspaceManager, WriteLease, CheckpointResult } from "./types.js";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -40,6 +42,7 @@ class StubSpeaker implements ISpeakerAgent {
       delayMs?: number;
       text?: string;
       replyToTurnId?: (ctx: BidContext) => string | undefined;
+      canEditFiles?: boolean;
     } = {},
   ) {
     this.descriptor = { id, kind: "agent", display: id, adapter: "stub", status: "idle" };
@@ -47,6 +50,15 @@ class StubSpeaker implements ISpeakerAgent {
 
   async health(): Promise<AgentHealth> {
     return { ok: true };
+  }
+
+  capabilities(): Capabilities {
+    return {
+      canEditFiles: !!this.opts.canEditFiles,
+      canRunCommands: !!this.opts.canEditFiles,
+      supportsToolApproval: false,
+      nativeTools: this.opts.canEditFiles ? ["edit"] : [],
+    };
   }
 
   async shutdown(): Promise<void> {}
@@ -160,6 +172,33 @@ class InterruptibleSpeaker extends StubSpeaker {
   }
 }
 
+class FakeWorkspace implements WorkspaceManager {
+  acquired: string[] = [];
+  released: string[] = [];
+  checkpoints: string[] = [];
+
+  async acquireWriteFloor(turnId: string, who: string): Promise<WriteLease> {
+    this.acquired.push(`${turnId}:${who}`);
+    return { release: () => this.released.push(`${turnId}:${who}`) };
+  }
+
+  async snapshotPre(): Promise<string> {
+    return "pre";
+  }
+
+  async checkpoint(turnId: string, who: string, eventId: string): Promise<CheckpointResult> {
+    this.checkpoints.push(`${turnId}:${who}:${eventId}`);
+    return {
+      preHead: "pre",
+      postHead: "post",
+      stat: { files: 1, insertions: 1, deletions: 0 },
+      summary: "fake checkpoint",
+    };
+  }
+
+  async rollbackTo(): Promise<void> {}
+}
+
 describe("SessionManager", () => {
   it("queues bids during speaking and selects the next speaker only after turn completion", async () => {
     const log = new EventLog("room", new InMemoryStore());
@@ -241,6 +280,35 @@ describe("SessionManager", () => {
         "round-robin",
         "round-robin",
       ]);
+    } finally {
+      await session.stop();
+    }
+  });
+
+  it("serializes editable shared-session turns through the workspace and checkpoints them", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const events: RoomEvent[] = [];
+    log.on((event) => events.push(event));
+    const workspace = new FakeWorkspace();
+    const session = new SessionManager({
+      sessionId: "room",
+      title: "Workspace test",
+      log,
+      agents: [new StubSpeaker("editor", { confidence: 1, text: "edited", canEditFiles: true })],
+      workspace,
+      settlingWindowMs: 20,
+      turnTimeoutMs: 1_000,
+    });
+
+    session.start();
+    try {
+      await session.submitUserPrompt("edit");
+      await waitFor(() => events.some((event) => event.type === "checkpoint"));
+
+      expect(workspace.acquired.some((item) => item.endsWith(":editor"))).toBe(true);
+      expect(workspace.released.some((item) => item.endsWith(":editor"))).toBe(true);
+      expect(workspace.checkpoints.some((item) => item.includes(":editor:"))).toBe(true);
+      expect(events.some((event) => event.type === "checkpoint" && (event.body as any).summary === "fake checkpoint")).toBe(true);
     } finally {
       await session.stop();
     }

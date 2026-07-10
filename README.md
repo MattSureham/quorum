@@ -102,7 +102,15 @@ diagnostics controls.
 The composer's **Take write floor** action pauses agent file editing while the
 human edits the workspace directly. When held, the button changes to **Release
 write floor** and stays clickable; releasing it or sending a chat message lets
-agents continue.
+agents continue. In shared-session mode this is now wired to the same
+`GitWorkspace` write-floor path used by editable agents, so file-capable agent
+turns acquire a serialized workspace lease and produce per-turn checkpoint events
+when they change files.
+
+The Web UI shows compact capability badges on agent/model rows. Local CLI
+agents are distinguished from direct API models, and badges surface file-edit,
+command/tool, vision, placeholder, key-required, and health-unknown states so
+the participant list is not just a name roster.
 
 The built-in Claude-family local agent is named **Claude Code** because it uses
 the `claude-code` adapter and local Claude Code auth/session. Anthropic API

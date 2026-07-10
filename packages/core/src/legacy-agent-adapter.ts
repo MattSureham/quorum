@@ -34,6 +34,10 @@ export class LegacyAgentAdapter implements ISpeakerAgent {
     return { ok: true, status: "idle" };
   }
 
+  capabilities() {
+    return this.legacy.capabilities();
+  }
+
   async shutdown(): Promise<void> {
     await this.legacy.dispose?.();
   }
