@@ -127,6 +127,11 @@ const zhText: Record<string, string> = {
   "In this room": "当前房间",
   "Available agent/model types": "可用智能体/模型类型",
   "Agent profiles": "智能体配置档",
+  "Custom profiles": "自定义配置档",
+  "Add profile": "添加配置档",
+  "Delete profile": "删除配置档",
+  "Profile id": "配置档 id",
+  "Display name": "显示名称",
   "Profile": "配置档",
   "Provider": "Provider",
   "Model": "模型",
@@ -367,6 +372,15 @@ interface SessionDraft {
   participantIds: string[];
 }
 
+interface AgentProfileDraft {
+  id: string;
+  display: string;
+  providerId: string;
+  model: string;
+  role: string;
+  vision: boolean;
+}
+
 const credentialPresets: CredentialDraft[] = [
   { draftId: "preset-openai", providerId: "openai", envVar: "OPENAI_API_KEY", apiKey: "", baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini", locked: true },
   { draftId: "preset-deepseek", providerId: "deepseek", envVar: "DEEPSEEK_API_KEY", apiKey: "", baseUrl: "https://api.deepseek.com/v1", model: "deepseek-chat", locked: true },
@@ -385,6 +399,7 @@ interface AgentModelPreset {
   model?: string;
   role: string;
   vision?: boolean;
+  custom?: boolean;
 }
 
 const agentModelPresets: AgentModelPreset[] = [
@@ -409,6 +424,15 @@ const defaultSessionDraft: SessionDraft = {
   permissionPolicy: "workspace-write",
   workspacePath: "",
   participantIds: ["codex", "claude-code"],
+};
+
+const defaultAgentProfileDraft: AgentProfileDraft = {
+  id: "",
+  display: "",
+  providerId: "deepseek",
+  model: "deepseek-chat",
+  role: "analysis model",
+  vision: false,
 };
 
 const previewRoom: Room = {
@@ -538,8 +562,8 @@ function upsertRoom(current: Room[], room: Room): Room[] {
   return next.sort((a, b) => a.createdAt - b.createdAt);
 }
 
-function participantFromPreset(id: string): ParticipantDescriptor | undefined {
-  const preset = agentModelPresets.find((item) => item.id === id);
+function participantFromPreset(id: string, profiles: AgentModelPreset[]): ParticipantDescriptor | undefined {
+  const preset = profiles.find((item) => item.id === id);
   if (!preset) return undefined;
   const credential = preset.providerId ? credentialPresets.find((item) => item.providerId === preset.providerId) : undefined;
   const adapterConfig: Record<string, unknown> = {};
@@ -563,11 +587,11 @@ function participantFromPreset(id: string): ParticipantDescriptor | undefined {
   };
 }
 
-function buildSessionParticipants(draft: SessionDraft, currentRoom: Room): ParticipantDescriptor[] {
+function buildSessionParticipants(draft: SessionDraft, currentRoom: Room, profiles: AgentModelPreset[]): ParticipantDescriptor[] {
   const participants: ParticipantDescriptor[] = [{ id: "human", kind: "human", display: "You", status: "idle" }];
   for (const id of draft.participantIds) {
     const existing = currentRoom.participants.find((participant) => participant.id === id && participant.kind === "agent");
-    const participant = existing ?? participantFromPreset(id);
+    const participant = existing ?? participantFromPreset(id, profiles);
     if (participant && !participants.some((item) => item.id === participant.id)) {
       participants.push(withPermissionPolicy({ ...participant, status: "idle" }, draft.permissionPolicy));
     }
@@ -939,6 +963,42 @@ function saveArchivedSessionIds(ids: Set<string>): void {
   localStorage.setItem("quorum.client.archivedSessions", JSON.stringify([...ids]));
 }
 
+function loadCustomProfiles(): AgentModelPreset[] {
+  try {
+    const raw = localStorage.getItem("quorum.client.agentProfiles");
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item) => typeof item?.id === "string" && typeof item?.display === "string")
+      .map((item) => ({
+        id: item.id,
+        display: item.display,
+        adapter: "api-model",
+        detail: "Direct API model agent",
+        credential: `${item.providerId ?? "custom"} API key`,
+        providerId: typeof item.providerId === "string" ? item.providerId : undefined,
+        model: typeof item.model === "string" ? item.model : undefined,
+        role: typeof item.role === "string" ? item.role : "analysis model",
+        vision: !!item.vision,
+        custom: true,
+      }));
+  } catch {
+    return [];
+  }
+}
+
+function saveCustomProfiles(profiles: AgentModelPreset[]): void {
+  const payload = profiles.filter((profile) => profile.custom).map((profile) => ({
+    id: profile.id,
+    display: profile.display,
+    providerId: profile.providerId,
+    model: profile.model,
+    role: profile.role,
+    vision: !!profile.vision,
+  }));
+  localStorage.setItem("quorum.client.agentProfiles", JSON.stringify(payload));
+}
+
 function isTauriRuntime(): boolean {
   return "__TAURI_INTERNALS__" in window;
 }
@@ -978,6 +1038,8 @@ function App() {
   const [credentialDrafts, setCredentialDrafts] = useState<CredentialDraft[]>(credentialPresets);
   const [credentialStatus, setCredentialStatus] = useState("");
   const [agentHealth, setAgentHealth] = useState<Record<string, AgentHealth>>({});
+  const [customProfiles, setCustomProfiles] = useState<AgentModelPreset[]>(() => loadCustomProfiles());
+  const [profileDraft, setProfileDraft] = useState<AgentProfileDraft>(defaultAgentProfileDraft);
   const [credentialsOpen, setCredentialsOpen] = useState(false);
   const [sessionSetupOpen, setSessionSetupOpen] = useState(false);
   const [sessionDraftSeed, setSessionDraftSeed] = useState<SessionDraft>(defaultSessionDraft);
@@ -1000,6 +1062,7 @@ function App() {
     );
   const isPreview = status !== "connected";
   const displayEvents = isPreview ? previewEvents : events;
+  const agentProfiles = useMemo(() => [...agentModelPresets, ...customProfiles], [customProfiles]);
   const chatEvents = displayEvents.filter((item) => item.type === "message");
   const activityEvents = displayEvents.filter((item) => item.type !== "message");
   const participants = displayRoom.participants;
@@ -1282,7 +1345,7 @@ function App() {
       setError(t("Session id is required"));
       return;
     }
-    const participants = buildSessionParticipants(draft, displayRoom);
+    const participants = buildSessionParticipants(draft, displayRoom, agentProfiles);
     if (!participants.some((participant) => participant.kind === "agent")) {
       setError(t("Select at least one agent/model"));
       return;
@@ -1432,6 +1495,37 @@ function App() {
     };
     if (draft.apiKey.trim()) payload.apiKey = draft.apiKey.trim();
     if (send(payload)) setCredentialStatus(`${t("Saving")} ${providerId}...`);
+  }
+
+  function addCustomProfile() {
+    const id = profileDraft.id.trim().toLowerCase();
+    if (!id || agentProfiles.some((profile) => profile.id === id)) return;
+    const nextProfile: AgentModelPreset = {
+      id,
+      display: profileDraft.display.trim() || id,
+      adapter: "api-model",
+      detail: "Direct API model agent",
+      credential: `${profileDraft.providerId.trim() || "custom"} API key`,
+      providerId: profileDraft.providerId.trim() || undefined,
+      model: profileDraft.model.trim() || undefined,
+      role: profileDraft.role.trim() || "analysis model",
+      vision: profileDraft.vision,
+      custom: true,
+    };
+    setCustomProfiles((current) => {
+      const next = [...current, nextProfile];
+      saveCustomProfiles(next);
+      return next;
+    });
+    setProfileDraft(defaultAgentProfileDraft);
+  }
+
+  function deleteCustomProfile(id: string) {
+    setCustomProfiles((current) => {
+      const next = current.filter((profile) => profile.id !== id);
+      saveCustomProfiles(next);
+      return next;
+    });
   }
 
   function rollback(toHead: string) {
@@ -1708,10 +1802,15 @@ function App() {
         <AgentModelPanel
           connected={connected}
           participants={participants}
+          profiles={agentProfiles}
+          profileDraft={profileDraft}
           views={credentialViews}
           health={agentHealth}
           onConfigure={() => setCredentialsOpen(true)}
           onCheckAgents={checkAgents}
+          onProfileDraft={setProfileDraft}
+          onAddProfile={addCustomProfile}
+          onDeleteProfile={deleteCustomProfile}
           t={t}
         />
 
@@ -1793,6 +1892,7 @@ function App() {
         <SessionSetupModal
           initialDraft={sessionDraftSeed}
           currentRoom={displayRoom}
+          profiles={agentProfiles}
           onStart={createSessionFromDraft}
           connected={connected}
           onClose={() => setSessionSetupOpen(false)}
@@ -1806,18 +1906,28 @@ function App() {
 function AgentModelPanel({
   connected,
   participants,
+  profiles,
+  profileDraft,
   views,
   health,
   onConfigure,
   onCheckAgents,
+  onProfileDraft,
+  onAddProfile,
+  onDeleteProfile,
   t,
 }: {
   connected: boolean;
   participants: ParticipantDescriptor[];
+  profiles: AgentModelPreset[];
+  profileDraft: AgentProfileDraft;
   views: ProviderConfigView[];
   health: Record<string, AgentHealth>;
   onConfigure: () => void;
   onCheckAgents: () => void;
+  onProfileDraft: React.Dispatch<React.SetStateAction<AgentProfileDraft>>;
+  onAddProfile: () => void;
+  onDeleteProfile: (id: string) => void;
   t: Translate;
 }) {
   const roomAgents = participants.filter((participant) => participant.kind === "agent");
@@ -1849,7 +1959,7 @@ function AgentModelPanel({
       <div className="agent-model-section">
         <div className="mini-heading">{t("Agent profiles")}</div>
         <div className="agent-model-list">
-          {agentModelPresets.map((preset) => {
+          {profiles.map((preset) => {
             const view = preset.providerId ? views.find((provider) => provider.providerId === preset.providerId) : undefined;
             const configured = preset.providerId ? view?.configured : preset.id !== "openclaw";
             const state = preset.providerId
@@ -1864,10 +1974,32 @@ function AgentModelPanel({
                   <span>{profileSummary(preset, t)}</span>
                   <CapabilityBadges labels={capabilityBadgesForPreset(preset, !!configured)} t={t} />
                 </div>
-                <span className={statusClass}>{state}</span>
+                {preset.custom ? (
+                  <button type="button" className="icon-action profile-delete-action" title={t("Delete profile")} aria-label={`${t("Delete profile")} ${preset.display}`} onClick={() => onDeleteProfile(preset.id)}>
+                    <Trash2 size={14} />
+                  </button>
+                ) : <span className={statusClass}>{state}</span>}
               </div>
             );
           })}
+        </div>
+      </div>
+      <div className="agent-model-section custom-profile-section">
+        <div className="mini-heading">{t("Custom profiles")}</div>
+        <div className="custom-profile-form">
+          <input placeholder={t("Profile id")} value={profileDraft.id} onChange={(input) => onProfileDraft((current) => ({ ...current, id: input.currentTarget.value }))} />
+          <input placeholder={t("Display name")} value={profileDraft.display} onChange={(input) => onProfileDraft((current) => ({ ...current, display: input.currentTarget.value }))} />
+          <input placeholder={t("Provider")} value={profileDraft.providerId} onChange={(input) => onProfileDraft((current) => ({ ...current, providerId: input.currentTarget.value.trim().toLowerCase() }))} />
+          <input placeholder={t("Model")} value={profileDraft.model} onChange={(input) => onProfileDraft((current) => ({ ...current, model: input.currentTarget.value }))} />
+          <input placeholder={t("Role")} value={profileDraft.role} onChange={(input) => onProfileDraft((current) => ({ ...current, role: input.currentTarget.value }))} />
+          <label className="inline-checkbox">
+            <input type="checkbox" checked={profileDraft.vision} onChange={(input) => onProfileDraft((current) => ({ ...current, vision: input.currentTarget.checked }))} />
+            <span>{t("vision")}</span>
+          </label>
+          <button type="button" className="secondary-action" disabled={!profileDraft.id.trim()} onClick={onAddProfile}>
+            <Plus size={14} />
+            <span>{t("Add profile")}</span>
+          </button>
         </div>
       </div>
       <button type="button" className="secondary-action provider-config-action" disabled={!connected} onClick={onConfigure}>
@@ -1922,9 +2054,9 @@ function capabilityBadgesForPreset(preset: AgentModelPreset, configured: boolean
   return [preset.adapter];
 }
 
-function modelsUsingProvider(providerId: string, t: Translate): string {
+function modelsUsingProvider(providerId: string, t: Translate, profiles = agentModelPresets): string {
   if (!providerId) return t("Custom API provider credential");
-  const models = agentModelPresets
+  const models = profiles
     .filter((preset) => preset.providerId === providerId)
     .map((preset) => preset.display);
   return models.length ? `${t("Used by")} ${models.join(", ")}` : t("Credential source for API-model agents");
@@ -2054,6 +2186,7 @@ function CredentialsModal({
 function SessionSetupModal({
   initialDraft,
   currentRoom,
+  profiles,
   connected,
   onStart,
   onClose,
@@ -2061,6 +2194,7 @@ function SessionSetupModal({
 }: {
   initialDraft: SessionDraft;
   currentRoom: Room;
+  profiles: AgentModelPreset[];
   connected: boolean;
   onStart: (draft: SessionDraft) => void;
   onClose: () => void;
@@ -2075,7 +2209,7 @@ function SessionSetupModal({
       detail: formatAgentDetail(participant),
       active: true,
     })),
-    ...agentModelPresets.filter((preset) => !currentAgentIds.has(preset.id)).map((preset) => ({
+    ...profiles.filter((preset) => !currentAgentIds.has(preset.id)).map((preset) => ({
       id: preset.id,
       display: preset.display,
       detail: profileSummary(preset, t),

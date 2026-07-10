@@ -530,6 +530,42 @@ textarea:focus {
   white-space: nowrap;
 }
 
+.profile-delete-action {
+  color: #8a3636;
+}
+
+.custom-profile-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.custom-profile-form input {
+  min-width: 0;
+  min-height: 32px;
+  padding: 6px 8px;
+  border: 1px solid #ccd8d4;
+  border-radius: 7px;
+  color: #25342f;
+  background: #ffffff;
+  font: inherit;
+  font-size: 12px;
+}
+
+.inline-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  color: #4f605a;
+  font-size: 12px;
+  font-weight: 720;
+}
+
+.custom-profile-form button {
+  min-height: 32px;
+}
+
 .provider-config-action {
   width: 100%;
 }

@@ -135,6 +135,9 @@ provider rows. A profile binds a user-facing role, adapter type, provider, model
 and capability labels, for example Codex local builder, Claude Code local
 reviewer, DeepSeek analysis model, or MiniMax vision reader. Provider credentials
 remain hidden credential sources used by API-model profiles.
+Users can also add/delete custom API-model profiles from the Web UI. Custom
+profiles are persisted locally in `localStorage` and are available in new
+session setup alongside built-in profiles.
 
 The session sidebar separates reversible cleanup from destructive deletion:
 Archive hides a session locally without deleting SQLite data, Export downloads a
