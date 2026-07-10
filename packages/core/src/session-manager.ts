@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type {
   AgentDelta,
   AgentRuntime,
@@ -68,6 +69,10 @@ const CONTEXT_EVENT_TYPES = new Set<RoomEvent["type"]>([
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function shortHash(value: unknown): string {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
 }
 
 export class SessionManager {
@@ -477,9 +482,19 @@ export class SessionManager {
         return `- #${event.seq} ${event.type} ${event.author.id}: ${text.slice(0, 500)}`;
       }).join("\n")
       : "- none";
+    const continuityAnchors = {
+      sessionId: this.opts.sessionId,
+      headSeq,
+      summaryHashes: summaries.slice(-5).map((summary) => ({
+        range: [summary.sourceFromSeq, summary.sourceToSeq],
+        hash: summary.sourceHash,
+      })),
+      recentEvents: recent.map((event) => ({ seq: event.seq, id: event.id, type: event.type, author: event.author.id })),
+    };
     return [
       "## Quorum Context Bundle",
       "This context is reconstructed from Quorum's authoritative append-only event log. It is not native model hidden state.",
+      `Context checksum: ${shortHash(continuityAnchors)}`,
       `Session: ${this.opts.title} (${this.opts.sessionId})`,
       `Head seq: ${headSeq}`,
       `Workspace: ${this.opts.workspacePath ?? "none"}`,
@@ -492,6 +507,12 @@ export class SessionManager {
       "",
       "Recent authoritative events:",
       eventLines,
+      "",
+      "Continuity / error-control rules:",
+      "- Treat this Quorum context bundle as authoritative over native model memory when they conflict.",
+      "- Preserve the session lineage by grounding claims in the listed seq ranges, hashes, and recent events.",
+      "- Do not silently fill gaps from memory. If a required fact is absent or ambiguous, say what is uncertain.",
+      "- If the user asks to continue prior work, continue from the latest head seq and avoid re-deciding settled points unless new evidence appears.",
     ].join("\n");
   }
 

@@ -74,6 +74,17 @@ class StubSpeaker implements ISpeakerAgent {
   }
 }
 
+class ContextCaptureSpeaker extends StubSpeaker {
+  capturedContextBundle = "";
+
+  async *speak(turn: TurnContext, _runtime: AgentRuntime, signal: AbortSignal): AsyncGenerator<AgentDelta> {
+    this.capturedContextBundle = turn.contextBundle ?? "";
+    if (signal.aborted) return;
+    yield { type: "text", text: "captured" };
+    yield { type: "done" };
+  }
+}
+
 class ToolSpeaker implements ISpeakerAgent {
   readonly descriptor: ParticipantDescriptor = { id: "tool-agent", kind: "agent", display: "tool-agent", adapter: "stub", status: "idle" };
   readonly id = "tool-agent";
@@ -401,6 +412,33 @@ describe("SessionManager", () => {
       const summary = log.readWorkingMemorySummaries()[0]!;
       expect(summary.content).toContain("auto compact this");
       expect(log.replay(0).some((event) => event.type === "system" && (event.body as any).auto === true)).toBe(true);
+    } finally {
+      await session.stop();
+    }
+  });
+
+  it("injects continuity anchors and error-control rules into agent context", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const speaker = new ContextCaptureSpeaker("agent", { confidence: 1 });
+    const session = new SessionManager({
+      sessionId: "room",
+      title: "Context control test",
+      log,
+      agents: [speaker],
+      settlingWindowMs: 20,
+      turnTimeoutMs: 1_000,
+    });
+
+    session.start();
+    try {
+      await session.submitUserPrompt("continue carefully");
+      await waitFor(() => log.replay(0).some((event) => event.type === "turn_completed"));
+
+      expect(speaker.capturedContextBundle).toContain("Context checksum:");
+      expect(speaker.capturedContextBundle).toContain("Continuity / error-control rules:");
+      expect(speaker.capturedContextBundle).toContain("authoritative over native model memory");
+      expect(speaker.capturedContextBundle).toContain("Head seq:");
+      expect(speaker.capturedContextBundle).toContain("#1 message human");
     } finally {
       await session.stop();
     }

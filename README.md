@@ -111,7 +111,11 @@ with memory summaries, and appends new events after the existing head seq. CLI
 agents such as Claude Code and Codex store their native session/thread id in
 agent-private memory and attempt a best-effort resume. If native resume fails,
 Quorum records a diagnostic warning and retries with a deterministic context
-bundle reconstructed from the authoritative event log and working memory.
+bundle reconstructed from the authoritative event log and working memory. The
+bundle includes a context checksum, seq/hash anchors, and explicit error-control
+rules telling the model to prefer Quorum's authoritative context over native
+hidden memory, avoid silently filling gaps, and surface uncertainty when restored
+context is incomplete.
 
 Packaging status: developer one-command launch exists, and a local sidecar entry
 now exists at `packages/daemon/src/sidecar.ts`. It binds a random loopback port,
