@@ -261,6 +261,11 @@ The following is the implementation trail from this session. It is written for t
     - Work: added a permission-policy selector to Session setup with `read-only`, `workspace-write`, `approval-required`, and `full-auto`. New session participants receive `adapterConfig.permissionPolicy`; Codex maps it to `sandbox`, Claude Code maps it to `permissionMode`, and API-model participants remain read-only. This is the first UI/config slice; complete enforcement across every native tool path remains future work.
     - Verification: run `pnpm typecheck`, `pnpm test`, and `pnpm --filter @quorum/client-web build` after this change.
 
+59. this change `feat: show image visibility by agent`
+    - Files: `packages/client-web/src/main.tsx`, `packages/client-web/src/styles.css`, `README.md`, `HANDOFF.md`.
+    - Work: added image-visibility feedback in the chat composer. When attachments are present, the UI lists agents that can inspect image content versus agents that only receive metadata/projection text. Current vision detection covers API-model MiniMax-style profiles; local CLI image file bridging remains future work.
+    - Verification: run `pnpm typecheck`, `pnpm test`, and `pnpm --filter @quorum/client-web build` after this change.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:
@@ -311,6 +316,7 @@ What is already implemented:
 - Session rows show a first-pass lifecycle label (`active`, `completed`, `archived`) and exports include that lifecycle. The label is derived in the Web UI and is not yet a persisted lifecycle field.
 - Diagnostics include a derived Turn Trace panel that groups recent turns by `turnId` and shows speaker, duration, tool count, output count, and outcome.
 - Session setup exposes a permission-policy selector and writes the selected policy into new participants' adapter config.
+- Chat image attachments now show per-session visibility: vision-capable agents versus metadata-only agents.
 - Shared-session editable agent turns now use `GitWorkspace` write-floor serialization and per-turn checkpointing. `SessionManager` acquires/releases the workspace lease for agents with `canEditFiles`, records checkpoints when files changed, and waits for workspace initialization before git operations.
 - Local CLI agents such as Claude Code use shell launching on Windows so `.cmd` shims work.
 - Claude Code and Codex native session/thread ids are stored in agent-private memory and resumed best-effort. Resume failure records a diagnostic warning and falls back to the Quorum context bundle. The context bundle includes checksum/seq/hash anchors and error-control rules so native hidden memory is treated as advisory when it conflicts with Quorum state.

@@ -160,6 +160,11 @@ approval-required, or full-auto. The selected policy is written into participant
 adapter config; Codex sandbox and Claude Code permission mode are mapped from it.
 Full policy enforcement across every native tool path is still ongoing.
 
+When images are attached in chat, the composer now shows which session agents
+can inspect image content and which agents will only receive metadata/projection
+text. API-model vision support is currently identified for MiniMax-style vision
+profiles; local CLI image file bridging is still future work.
+
 The built-in Claude-family local agent is named **Claude Code** because it uses
 the `claude-code` adapter and local Claude Code auth/session. Anthropic API
 models should be added as explicit API-model participants, for example a

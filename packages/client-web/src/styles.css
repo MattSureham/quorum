@@ -1126,6 +1126,29 @@ h1 {
   background: transparent;
 }
 
+.image-visibility {
+  display: grid;
+  gap: 3px;
+  padding: 8px 9px;
+  border: 1px solid #d6e4e7;
+  border-radius: 8px;
+  background: #fbfcfc;
+}
+
+.image-visibility strong {
+  color: #24332f;
+  font-size: 12px;
+  font-weight: 780;
+}
+
+.image-visibility span {
+  overflow: hidden;
+  color: #60716b;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .attach-action {
   min-height: 40px;
 }

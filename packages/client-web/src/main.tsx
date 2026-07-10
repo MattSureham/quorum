@@ -136,6 +136,9 @@ const zhText: Record<string, string> = {
   "analysis model": "分析模型",
   "fast model": "快速模型",
   "vision reader": "视觉读取",
+  "Image visibility": "图片可见性",
+  "Can inspect images": "可读取图片",
+  "Metadata only": "仅 metadata",
   "placeholder agent": "占位智能体",
   "Configure API keys": "配置 API keys",
   "Connect to a room before editing API credentials.": "连接到房间后才能编辑 API 凭证。",
@@ -1659,6 +1662,7 @@ function App() {
               ))}
             </div>
           ) : null}
+          {composerAttachments.length ? <ImageVisibility agents={agents} t={t} /> : null}
           <div className="composer-actions">
             <input
               ref={fileInputRef}
@@ -1903,6 +1907,12 @@ function capabilityBadgesForAgent(agent: ParticipantDescriptor): string[] {
   if (adapter === "echo") return ["local CLI", "no files"];
   if (adapter === "openclaw") return ["placeholder"];
   return [adapter];
+}
+
+function agentSupportsVision(agent: ParticipantDescriptor): boolean {
+  if (agent.adapter !== "api-model") return false;
+  const model = String(agent.adapterConfig?.model ?? agent.id).toLowerCase();
+  return model.includes("minimax") || agent.id.toLowerCase().includes("minimax");
 }
 
 function capabilityBadgesForPreset(preset: AgentModelPreset, configured: boolean): string[] {
@@ -2268,6 +2278,18 @@ function AgentHealthBadge({ health, active = false, fallback, t }: { health?: Ag
       {health.ok ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />}
       {health.ok ? t("healthy") : t("unavailable")}
     </span>
+  );
+}
+
+function ImageVisibility({ agents, t }: { agents: ParticipantDescriptor[]; t: Translate }) {
+  const vision = agents.filter(agentSupportsVision);
+  const metadataOnly = agents.filter((agent) => !agentSupportsVision(agent));
+  return (
+    <div className="image-visibility">
+      <strong>{t("Image visibility")}</strong>
+      <span>{t("Can inspect images")}: {vision.length ? vision.map((agent) => agent.display).join(", ") : t("none")}</span>
+      <span>{t("Metadata only")}: {metadataOnly.length ? metadataOnly.map((agent) => agent.display).join(", ") : t("none")}</span>
+    </div>
   );
 }
 
