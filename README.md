@@ -163,7 +163,10 @@ failure categories are still future work.
 Session setup exposes a first-pass permission policy: read-only, workspace-write,
 approval-required, or full-auto. The selected policy is written into participant
 adapter config; Codex sandbox and Claude Code permission mode are mapped from it.
-Full policy enforcement across every native tool path is still ongoing.
+Because native CLI tool calls are not yet all bridged through Quorum approval,
+`approval-required` maps local CLI agents to conservative modes (`read-only` for
+Codex, default permissions for Claude Code) instead of pretending every native
+tool call can already be intercepted.
 
 When images are attached in chat, the composer now shows which session agents
 can inspect image content and which agents will only receive metadata/projection

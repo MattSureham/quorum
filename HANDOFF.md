@@ -281,6 +281,11 @@ The following is the implementation trail from this session. It is written for t
     - Work: added `turn_trace` room events for shared-session turns. `SessionManager` records started/ended time, duration, outcome, tool-call count, output count, offset, speaker, and generation after each turn finishes. The Web UI Turn Trace panel now prefers these backend trace events and falls back to deriving traces from older event logs when they are missing. Token counts, native session id exposure, stdout/stderr aggregation, and structured failure categories are still future work.
     - Verification: run `pnpm typecheck`, `pnpm test`, and `pnpm --filter @quorum/client-web build` after this change.
 
+63. this change `fix: make approval-required conservative`
+    - Files: `packages/client-web/src/main.tsx`, `README.md`, `HANDOFF.md`.
+    - Work: tightened permission-policy mapping for native CLI agents. Until Codex/Claude Code native tool calls are fully bridged through Quorum approval, `approval-required` maps Codex to `read-only` sandbox and Claude Code to default permissions rather than workspace-write/accept-edits. `full-auto` remains the explicit least-restrictive choice.
+    - Verification: run `pnpm typecheck`, `pnpm test`, and `pnpm --filter @quorum/client-web build` after this change.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:
@@ -335,6 +340,7 @@ What is already implemented:
 - The Web UI supports locally persisted custom API-model profiles. They are available in Session setup and map to provider/model/role adapter config.
 - Session lifecycle is persisted in room metadata via `Room.lifecycle` and `update_session_lifecycle`; Archive/Unarchive uses this path when connected.
 - Shared-session turns emit `turn_trace` events; the Web UI Turn Trace panel prefers backend traces and falls back to event-derived traces.
+- Permission policy mapping is conservative for native CLI agents: `approval-required` does not grant workspace-write while native approval bridging is incomplete.
 - Shared-session editable agent turns now use `GitWorkspace` write-floor serialization and per-turn checkpointing. `SessionManager` acquires/releases the workspace lease for agents with `canEditFiles`, records checkpoints when files changed, and waits for workspace initialization before git operations.
 - Local CLI agents such as Claude Code use shell launching on Windows so `.cmd` shims work.
 - Claude Code and Codex native session/thread ids are stored in agent-private memory and resumed best-effort. Resume failure records a diagnostic warning and falls back to the Quorum context bundle. The context bundle includes checksum/seq/hash anchors and error-control rules so native hidden memory is treated as advisory when it conflicts with Quorum state.

@@ -602,9 +602,13 @@ function buildSessionParticipants(draft: SessionDraft, currentRoom: Room, profil
 function withPermissionPolicy(participant: ParticipantDescriptor, policy: PermissionPolicy): ParticipantDescriptor {
   const adapterConfig: Record<string, unknown> = { ...(participant.adapterConfig ?? {}), permissionPolicy: policy };
   if (participant.adapter === "codex") {
-    adapterConfig.sandbox = policy === "read-only" ? "read-only" : policy === "full-auto" ? "danger-full-access" : "workspace-write";
+    adapterConfig.sandbox = policy === "read-only" || policy === "approval-required"
+      ? "read-only"
+      : policy === "full-auto"
+        ? "danger-full-access"
+        : "workspace-write";
   } else if (participant.adapter === "claude-code") {
-    adapterConfig.permissionMode = policy === "full-auto" ? "bypassPermissions" : policy === "read-only" ? "default" : "acceptEdits";
+    adapterConfig.permissionMode = policy === "full-auto" ? "bypassPermissions" : policy === "workspace-write" ? "acceptEdits" : "default";
   } else if (participant.adapter === "api-model") {
     adapterConfig.permissionPolicy = "read-only";
   }
