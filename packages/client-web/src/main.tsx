@@ -3,12 +3,14 @@ import { createRoot } from "react-dom/client";
 import {
   Activity,
   AlertTriangle,
+  Archive,
   Bot,
   Check,
   CheckCircle2,
   ChevronDown,
   CircleAlert,
   CircleDot,
+  Download,
   GitCommitHorizontal,
   Hand,
   KeyRound,
@@ -62,6 +64,11 @@ const zhText: Record<string, string> = {
   "Sessions": "会话",
   "New session": "新建会话",
   "Delete session": "删除会话",
+  "Archive session": "归档会话",
+  "Unarchive session": "取消归档",
+  "Export session": "导出会话",
+  "Show archived": "显示归档",
+  "Hide archived": "隐藏归档",
   "Connection": "连接",
   "WebSocket": "WebSocket",
   "Room": "房间",
@@ -790,6 +797,20 @@ function saveLanguage(language: Language): void {
   localStorage.setItem("quorum.client.language", language);
 }
 
+function loadArchivedSessionIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem("quorum.client.archivedSessions");
+    const ids = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(ids) ? ids.filter((id) => typeof id === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveArchivedSessionIds(ids: Set<string>): void {
+  localStorage.setItem("quorum.client.archivedSessions", JSON.stringify([...ids]));
+}
+
 function isTauriRuntime(): boolean {
   return "__TAURI_INTERNALS__" in window;
 }
@@ -812,6 +833,8 @@ function App() {
   const [sessionsLoaded, setSessionsLoaded] = useState(false);
   const [deletingSessionIds, setDeletingSessionIds] = useState<Set<string>>(() => new Set());
   const [deletedSessionIds, setDeletedSessionIds] = useState<Set<string>>(() => new Set());
+  const [archivedSessionIds, setArchivedSessionIds] = useState<Set<string>>(() => loadArchivedSessionIds());
+  const [showArchived, setShowArchived] = useState(false);
   const [events, setEvents] = useState<RoomEvent[]>([]);
   const [selectedTargets, setSelectedTargets] = useState<string[]>([]);
   const [composer, setComposer] = useState("");
@@ -842,7 +865,11 @@ function App() {
 
   const displayRoom = room ?? (sessionsLoaded ? emptyRoom : previewRoom);
   const visibleRooms = (sessionsLoaded ? rooms : rooms.length ? rooms : [displayRoom])
-    .filter((item) => !deletingSessionIds.has(item.id) && !deletedSessionIds.has(item.id));
+    .filter((item) =>
+      !deletingSessionIds.has(item.id) &&
+      !deletedSessionIds.has(item.id) &&
+      (showArchived || !archivedSessionIds.has(item.id))
+    );
   const isPreview = status !== "connected";
   const displayEvents = isPreview ? previewEvents : events;
   const chatEvents = displayEvents.filter((item) => item.type === "message");
@@ -1082,6 +1109,37 @@ function App() {
     }
   }
 
+  function toggleArchiveSession(room: Room) {
+    setArchivedSessionIds((current) => {
+      const next = new Set(current);
+      if (next.has(room.id)) next.delete(room.id);
+      else next.add(room.id);
+      saveArchivedSessionIds(next);
+      return next;
+    });
+  }
+
+  function exportSession(room: Room) {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      room,
+      events: room.id === displayRoom.id ? displayEvents : [],
+      memorySummaries: room.id === displayRoom.id ? memorySummaries : [],
+      note: room.id === displayRoom.id
+        ? "Export contains the currently loaded transcript and memory summaries."
+        : "Switch to this session before exporting to include transcript and memory summaries.",
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${room.id || "session"}-quorum-export.json`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
   function send(payload: Record<string, unknown>): boolean {
     if (status !== "connected" || !wsRef.current) return false;
     wsRef.current.send(JSON.stringify({ roomId: settings.roomId, ...payload }));
@@ -1284,9 +1342,12 @@ function App() {
           <div className="panel-title">
             <MessageSquare size={16} />
             <span>{t("Sessions")}</span>
+            <button type="button" className="icon-action panel-title-action" title={showArchived ? t("Hide archived") : t("Show archived")} aria-label={showArchived ? t("Hide archived") : t("Show archived")} onClick={() => setShowArchived((value) => !value)}>
+              <Archive size={14} />
+            </button>
           </div>
           {visibleRooms.map((item) => (
-            <div key={item.id} className={item.id === displayRoom.id ? "room-list-row active" : "room-list-row"}>
+            <div key={item.id} className={item.id === displayRoom.id ? "room-list-row active" : archivedSessionIds.has(item.id) ? "room-list-row archived" : "room-list-row"}>
             <button
               key={item.id}
               className={item.id === displayRoom.id ? "room-list-item active" : "room-list-item"}
@@ -1296,6 +1357,24 @@ function App() {
             >
               <span>{item.title}</span>
               <strong>{item.id}</strong>
+            </button>
+            <button
+              className="icon-action room-export-action"
+              type="button"
+              title={t("Export session")}
+              aria-label={`${t("Export session")} ${item.title}`}
+              onClick={() => exportSession(item)}
+            >
+              <Download size={15} />
+            </button>
+            <button
+              className="icon-action room-archive-action"
+              type="button"
+              title={archivedSessionIds.has(item.id) ? t("Unarchive session") : t("Archive session")}
+              aria-label={`${archivedSessionIds.has(item.id) ? t("Unarchive session") : t("Archive session")} ${item.title}`}
+              onClick={() => toggleArchiveSession(item)}
+            >
+              <Archive size={15} />
             </button>
             <button
               className="icon-action room-delete-action"

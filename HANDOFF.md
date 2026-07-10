@@ -231,6 +231,11 @@ The following is the implementation trail from this session. It is written for t
     - Work: added a `check_agents` WebSocket command and `agent_health` response. Shared-session rooms now report first-pass health for agents: echo ready, placeholder adapters unavailable, Codex/Claude Code CLI binary availability, API-model key-env availability, and unknown adapter failures. The Web UI automatically checks health after snapshots and credential saves, exposes a manual check button in Agents & Models, and shows compact healthy/unavailable/unknown badges on participant and room-agent rows. This does not fully prove Claude/Codex native login; that remains verified by the first real CLI turn.
     - Verification: run `pnpm typecheck`, `pnpm test`, and `pnpm --filter @quorum/client-web build` after this change.
 
+53. this change `feat: archive and export sessions`
+    - Files: `packages/client-web/src/main.tsx`, `packages/client-web/src/styles.css`, `README.md`, `HANDOFF.md`.
+    - Work: added safer session-list management in the Web UI. Archive/Unarchive hides or restores sessions locally via `localStorage` without deleting SQLite data; a sidebar toggle shows archived sessions. Export downloads a JSON bundle for the selected row with room metadata and, when exporting the currently loaded session, transcript events and memory summaries. Delete remains the confirmed hard delete path that clears Quorum's local session rows.
+    - Verification: run `pnpm typecheck`, `pnpm test`, and `pnpm --filter @quorum/client-web build` after this change.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:
@@ -275,6 +280,7 @@ What is already implemented:
 - The run-status banner now explains the execution stage instead of only showing coarse phase labels. It can surface queueing, scheduler wait, agent contact, thinking/output, running tools, waiting approval, failure, and completed-without-visible-reply states.
 - Shared-session diagnostics now explain mode semantics and show round-robin order/current/completed/remaining speakers.
 - Agent health checks are available through WebSocket `check_agents` and the Web UI. Current checks cover CLI binary availability, API key env availability, placeholders, echo readiness, and unknown adapters.
+- The Web UI session sidebar supports local Archive/Unarchive, JSON Export, and confirmed hard Delete. Archive is local UI state only; it does not remove SQLite data.
 - Shared-session editable agent turns now use `GitWorkspace` write-floor serialization and per-turn checkpointing. `SessionManager` acquires/releases the workspace lease for agents with `canEditFiles`, records checkpoints when files changed, and waits for workspace initialization before git operations.
 - Local CLI agents such as Claude Code use shell launching on Windows so `.cmd` shims work.
 - Claude Code and Codex native session/thread ids are stored in agent-private memory and resumed best-effort. Resume failure records a diagnostic warning and falls back to the Quorum context bundle. The context bundle includes checksum/seq/hash anchors and error-control rules so native hidden memory is treated as advisory when it conflicts with Quorum state.

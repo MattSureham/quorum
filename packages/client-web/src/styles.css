@@ -197,7 +197,7 @@ button {
 
 .room-list-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 34px;
+  grid-template-columns: minmax(0, 1fr) 30px 30px 30px;
   gap: 6px;
   align-items: stretch;
 }
@@ -211,9 +211,25 @@ button {
   color: #8a3636;
 }
 
+.room-export-action,
+.room-archive-action {
+  align-self: center;
+  color: #4f6860;
+}
+
+.room-export-action:hover,
+.room-archive-action:hover {
+  color: #234d3f;
+  background: #e7f2ee;
+}
+
 .room-delete-action:hover {
   color: #6f2424;
   background: #f4dfdc;
+}
+
+.room-list-row.archived .room-list-item {
+  opacity: 0.65;
 }
 
 .room-list-item.active {

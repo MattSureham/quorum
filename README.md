@@ -130,6 +130,11 @@ models, and placeholder/unknown adapter states. Full native-login verification
 still happens on the first real CLI turn because those tools own their local
 auth/session state.
 
+The session sidebar separates reversible cleanup from destructive deletion:
+Archive hides a session locally without deleting SQLite data, Export downloads a
+JSON bundle of the currently loaded room/events/memory summaries, and Delete
+still performs a confirmed hard delete of Quorum's local session rows.
+
 The built-in Claude-family local agent is named **Claude Code** because it uses
 the `claude-code` adapter and local Claude Code auth/session. Anthropic API
 models should be added as explicit API-model participants, for example a
