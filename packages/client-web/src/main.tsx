@@ -120,6 +120,17 @@ const zhText: Record<string, string> = {
   "Agents & Models": "智能体与模型",
   "In this room": "当前房间",
   "Available agent/model types": "可用智能体/模型类型",
+  "Agent profiles": "智能体配置档",
+  "Profile": "配置档",
+  "Provider": "Provider",
+  "Model": "模型",
+  "Role": "角色",
+  "local builder": "本地构建者",
+  "local reviewer": "本地审阅者",
+  "analysis model": "分析模型",
+  "fast model": "快速模型",
+  "vision reader": "视觉读取",
+  "placeholder agent": "占位智能体",
   "Configure API keys": "配置 API keys",
   "Connect to a room before editing API credentials.": "连接到房间后才能编辑 API 凭证。",
   "Agent/model selection is room-based; provider keys only unlock API-model agents.": "智能体/模型选择按房间生效；provider keys 只用于解锁 API 模型智能体。",
@@ -346,17 +357,19 @@ interface AgentModelPreset {
   detail: string;
   credential: string;
   providerId?: string;
+  model?: string;
+  role: string;
   vision?: boolean;
 }
 
 const agentModelPresets: AgentModelPreset[] = [
-  { id: "codex", display: "Codex", adapter: "codex", detail: "CLI agent; uses the local Codex session/auth", credential: "Codex CLI" },
-  { id: "claude-code", display: "Claude Code", adapter: "claude-code", detail: "CLI/SDK agent; uses Claude Code auth", credential: "Claude Code auth" },
-  { id: "openclaw", display: "OpenClaw", adapter: "openclaw", detail: "Agent adapter placeholder; not installed in this build", credential: "Agent-specific auth" },
-  { id: "deepseek-v4-pro", display: "DeepSeek V4 Pro", adapter: "api-model", detail: "Direct API model agent", credential: "DeepSeek API key", providerId: "deepseek" },
-  { id: "deepseek-v4-flash", display: "DeepSeek V4 Flash", adapter: "api-model", detail: "Direct API model agent", credential: "DeepSeek API key", providerId: "deepseek" },
-  { id: "glm-5.2", display: "GLM 5.2", adapter: "api-model", detail: "Direct API model agent", credential: "Zhipu API key", providerId: "zhipu" },
-  { id: "minimax-m3", display: "MiniMax M3", adapter: "api-model", detail: "Direct API model agent", credential: "MiniMax API key", providerId: "minimax", vision: true },
+  { id: "codex", display: "Codex", adapter: "codex", detail: "CLI agent; uses the local Codex session/auth", credential: "Codex CLI", role: "local builder" },
+  { id: "claude-code", display: "Claude Code", adapter: "claude-code", detail: "CLI/SDK agent; uses Claude Code auth", credential: "Claude Code auth", role: "local reviewer" },
+  { id: "openclaw", display: "OpenClaw", adapter: "openclaw", detail: "Agent adapter placeholder; not installed in this build", credential: "Agent-specific auth", role: "placeholder agent" },
+  { id: "deepseek-v4-pro", display: "DeepSeek V4 Pro", adapter: "api-model", detail: "Direct API model agent", credential: "DeepSeek API key", providerId: "deepseek", model: "deepseek-chat", role: "analysis model" },
+  { id: "deepseek-v4-flash", display: "DeepSeek V4 Flash", adapter: "api-model", detail: "Direct API model agent", credential: "DeepSeek API key", providerId: "deepseek", model: "deepseek-chat", role: "fast model" },
+  { id: "glm-5.2", display: "GLM 5.2", adapter: "api-model", detail: "Direct API model agent", credential: "Zhipu API key", providerId: "zhipu", model: "glm-4.6", role: "analysis model" },
+  { id: "minimax-m3", display: "MiniMax M3", adapter: "api-model", detail: "Direct API model agent", credential: "MiniMax API key", providerId: "minimax", model: "MiniMax-M3", role: "vision reader", vision: true },
 ];
 
 const defaultSettings: ClientSettings = {
@@ -496,7 +509,9 @@ function participantFromPreset(id: string): ParticipantDescriptor | undefined {
   if (preset.id === "codex") adapterConfig.sandbox = "workspace-write";
   if (preset.id === "claude-code") adapterConfig.permissionMode = "bypassPermissions";
   if (preset.adapter === "api-model") {
-    if (credential?.model) adapterConfig.model = credential.model;
+    adapterConfig.providerId = preset.providerId;
+    adapterConfig.role = preset.role;
+    if (preset.model || credential?.model) adapterConfig.model = preset.model ?? credential?.model;
     if (credential?.envVar) adapterConfig.apiKeyEnv = credential.envVar;
     if (credential?.baseUrl) adapterConfig.baseUrl = credential.baseUrl;
   }
@@ -506,6 +521,7 @@ function participantFromPreset(id: string): ParticipantDescriptor | undefined {
     display: preset.display,
     adapter: preset.adapter,
     adapterConfig,
+    persona: preset.role,
     status: "idle",
   };
 }
@@ -1729,7 +1745,7 @@ function AgentModelPanel({
         </div>
       </div>
       <div className="agent-model-section">
-        <div className="mini-heading">{t("Available agent/model types")}</div>
+        <div className="mini-heading">{t("Agent profiles")}</div>
         <div className="agent-model-list">
           {agentModelPresets.map((preset) => {
             const view = preset.providerId ? views.find((provider) => provider.providerId === preset.providerId) : undefined;
@@ -1743,7 +1759,7 @@ function AgentModelPanel({
                 <Bot size={15} />
                 <div>
                   <strong>{preset.display}</strong>
-                  <span>{t(preset.detail)}</span>
+                  <span>{profileSummary(preset, t)}</span>
                   <CapabilityBadges labels={capabilityBadgesForPreset(preset, !!configured)} t={t} />
                 </div>
                 <span className={statusClass}>{state}</span>
@@ -1765,7 +1781,18 @@ function AgentModelPanel({
 function formatAgentDetail(agent: ParticipantDescriptor): string {
   const adapter = agent.adapter ?? agent.kind;
   const model = typeof agent.adapterConfig?.model === "string" ? agent.adapterConfig.model : undefined;
-  return model ? `${adapter} / ${model}` : adapter;
+  const provider = typeof agent.adapterConfig?.providerId === "string" ? agent.adapterConfig.providerId : undefined;
+  const role = typeof agent.adapterConfig?.role === "string" ? agent.adapterConfig.role : agent.persona;
+  const parts = [adapter, provider, model, role].filter(Boolean);
+  return parts.join(" / ");
+}
+
+function profileSummary(preset: AgentModelPreset, t: Translate): string {
+  const parts = [`${t("Role")}: ${t(preset.role)}`];
+  if (preset.providerId) parts.push(`${t("Provider")}: ${preset.providerId}`);
+  if (preset.model) parts.push(`${t("Model")}: ${preset.model}`);
+  if (!preset.providerId) parts.push(t(preset.detail));
+  return parts.join(" · ");
 }
 
 function capabilityBadgesForAgent(agent: ParticipantDescriptor): string[] {
@@ -1943,7 +1970,7 @@ function SessionSetupModal({
     ...agentModelPresets.filter((preset) => !currentAgentIds.has(preset.id)).map((preset) => ({
       id: preset.id,
       display: preset.display,
-      detail: t(preset.detail),
+      detail: profileSummary(preset, t),
       active: false,
     })),
   ];

@@ -130,6 +130,12 @@ models, and placeholder/unknown adapter states. Full native-login verification
 still happens on the first real CLI turn because those tools own their local
 auth/session state.
 
+The Agents & Models panel now presents selectable **agent profiles** instead of
+provider rows. A profile binds a user-facing role, adapter type, provider, model,
+and capability labels, for example Codex local builder, Claude Code local
+reviewer, DeepSeek analysis model, or MiniMax vision reader. Provider credentials
+remain hidden credential sources used by API-model profiles.
+
 The session sidebar separates reversible cleanup from destructive deletion:
 Archive hides a session locally without deleting SQLite data, Export downloads a
 JSON bundle of the currently loaded room/events/memory summaries, and Delete
