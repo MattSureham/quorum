@@ -314,4 +314,29 @@ describe("Gateway", () => {
       await gateway.close();
     }
   });
+
+  it("broadcasts session lifecycle updates", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const archivedRoom = { ...room, lifecycle: "archived" as const };
+    const gateway = new Gateway({
+      log,
+      room,
+      humanId: "human",
+      setPolicy: () => {},
+      listSessions: () => [archivedRoom],
+      updateSessionLifecycle: (_sessionId, lifecycle) => [{ ...room, lifecycle }],
+    }, 0);
+    await gateway.ready;
+    const ws = await connect(gateway.url());
+
+    try {
+      ws.send(JSON.stringify({ t: "update_session_lifecycle", roomId: "room", sessionId: "room", lifecycle: "archived" }));
+      const message = await nextMessage(ws);
+      expect(message.t).toBe("sessions");
+      expect(message.rooms[0].lifecycle).toBe("archived");
+    } finally {
+      ws.close();
+      await gateway.close();
+    }
+  });
 });

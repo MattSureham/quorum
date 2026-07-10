@@ -251,6 +251,19 @@ export async function startSharedSessionRoom(
     return listRooms();
   }
 
+  function updateLifecycle(sessionId: string, lifecycle: NonNullable<Room["lifecycle"]>): Room[] {
+    const current = managed.get(sessionId)?.room ?? store.readSessionRoom(sessionId);
+    if (!current) throw new Error(`unknown session: ${sessionId}`);
+    const nextRoom: Room = { ...current, lifecycle };
+    store.upsertSessionRoom(nextRoom);
+    const existing = managed.get(sessionId);
+    if (existing) {
+      existing.room = nextRoom;
+      existing.gatewayDeps.room = nextRoom;
+    }
+    return listRooms();
+  }
+
   const gateway = new Gateway(
     {
       ...primary.gatewayDeps,
@@ -270,11 +283,13 @@ export async function startSharedSessionRoom(
           schedulerMode: input.mode === "round-robin" ? "round-robin" : "bid",
           participants: ensureHuman(input.participants),
           createdAt: Date.now(),
+          lifecycle: "active",
         };
         return createManaged(nextRoom).gatewayDeps;
       },
       continueSession: continueManaged,
       deleteSession: deleteManaged,
+      updateSessionLifecycle: updateLifecycle,
     },
     opts.port,
   );

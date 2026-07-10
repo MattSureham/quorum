@@ -103,6 +103,7 @@ export interface Room {
   branch: string;
   policy: ConductorPolicyConfig;
   schedulerMode?: "bid" | "round-robin";
+  lifecycle?: "draft" | "active" | "paused" | "completed" | "archived" | "deleted";
   primary?: string;           // who answers an opening message with no @
   participants: ParticipantDescriptor[];
   createdAt: number;

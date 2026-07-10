@@ -271,6 +271,11 @@ The following is the implementation trail from this session. It is written for t
     - Work: added local custom API-model profiles in the Agents & Models panel. Users can define profile id, display name, provider, model, role, and vision flag; profiles persist in `localStorage` under `quorum.client.agentProfiles`, can be deleted from the profile list, and appear in Session setup alongside built-in profiles. Creating a session from a custom profile writes provider/model/role metadata into participant config the same way built-in API profiles do.
     - Verification: run `pnpm typecheck`, `pnpm test`, and `pnpm --filter @quorum/client-web build` after this change.
 
+61. this change `feat: persist session lifecycle`
+    - Files: `packages/protocol/src/types.ts`, `packages/protocol/src/schema.ts`, `packages/daemon/src/gateway/ws-server.ts`, `packages/daemon/src/gateway/ws-server.test.ts`, `packages/daemon/src/shared-session-host.ts`, `packages/client-web/src/main.tsx`, `README.md`, `HANDOFF.md`.
+    - Work: added optional `Room.lifecycle` and a WebSocket `update_session_lifecycle` command. Shared-session rooms persist lifecycle changes by updating the stored room metadata; the gateway broadcasts refreshed session lists. The Web UI Archive/Unarchive action now uses the persisted lifecycle path when connected and keeps the previous local archive set as an offline/fallback compatibility layer. New Web-created rooms start as `active`.
+    - Verification: run `pnpm typecheck`, `pnpm test`, and `pnpm --filter @quorum/client-web build` after this change.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:
@@ -323,6 +328,7 @@ What is already implemented:
 - Session setup exposes a permission-policy selector and writes the selected policy into new participants' adapter config.
 - Chat image attachments now show per-session visibility: vision-capable agents versus metadata-only agents.
 - The Web UI supports locally persisted custom API-model profiles. They are available in Session setup and map to provider/model/role adapter config.
+- Session lifecycle is persisted in room metadata via `Room.lifecycle` and `update_session_lifecycle`; Archive/Unarchive uses this path when connected.
 - Shared-session editable agent turns now use `GitWorkspace` write-floor serialization and per-turn checkpointing. `SessionManager` acquires/releases the workspace lease for agents with `canEditFiles`, records checkpoints when files changed, and waits for workspace initialization before git operations.
 - Local CLI agents such as Claude Code use shell launching on Windows so `.cmd` shims work.
 - Claude Code and Codex native session/thread ids are stored in agent-private memory and resumed best-effort. Resume failure records a diagnostic warning and falls back to the Quorum context bundle. The context bundle includes checksum/seq/hash anchors and error-control rules so native hidden memory is treated as advisory when it conflicts with Quorum state.

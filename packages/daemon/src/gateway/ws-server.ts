@@ -31,9 +31,10 @@ export interface GatewayDeps {
   createSession?: (input: CreateSessionInput) => GatewaySessionDeps | Promise<GatewaySessionDeps>;
   continueSession?: (sessionId: string) => GatewaySessionDeps | Promise<GatewaySessionDeps>;
   deleteSession?: (sessionId: string) => Room[] | Promise<Room[]>;
+  updateSessionLifecycle?: (sessionId: string, lifecycle: NonNullable<Room["lifecycle"]>) => Room[] | Promise<Room[]>;
 }
 
-export type GatewaySessionDeps = Omit<GatewayDeps, "authToken" | "listSessions" | "createSession" | "continueSession" | "deleteSession">;
+export type GatewaySessionDeps = Omit<GatewayDeps, "authToken" | "listSessions" | "createSession" | "continueSession" | "deleteSession" | "updateSessionLifecycle">;
 
 /**
  * Thin WebSocket gateway. Clients render the event stream and send commands.
@@ -166,6 +167,19 @@ export class Gateway {
       }).catch((err) =>
         ws.send(JSON.stringify({ t: "error", text: `delete_session failed: ${err instanceof Error ? err.message : String(err)}` })),
       );
+      return;
+    }
+    if (m.t === "update_session_lifecycle") {
+      if (!this.deps.updateSessionLifecycle) {
+        ws.send(JSON.stringify({ t: "error", text: "session lifecycle updates are not available" }));
+        return;
+      }
+      void Promise.resolve()
+        .then(() => this.deps.updateSessionLifecycle!(m.sessionId, m.lifecycle))
+        .then((rooms) => this.broadcastToAll({ t: "sessions", rooms }))
+        .catch((err) =>
+          ws.send(JSON.stringify({ t: "error", text: `update_session_lifecycle failed: ${err instanceof Error ? err.message : String(err)}` })),
+        );
       return;
     }
     const session = this.session(m.roomId ?? this.deps.room.id);

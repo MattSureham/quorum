@@ -778,6 +778,7 @@ function buildTurnTraces(events: RoomEvent[]): TurnTrace[] {
 }
 
 function sessionLifecycle(room: Room, currentRoom: Room, events: RoomEvent[], archived: boolean, t: Translate): string {
+  if (room.lifecycle) return t(room.lifecycle);
   if (archived) return t("archived");
   if (room.id !== currentRoom.id) return t("active");
   const shared = projectSharedSession(events);
@@ -1058,7 +1059,7 @@ function App() {
     .filter((item) =>
       !deletingSessionIds.has(item.id) &&
       !deletedSessionIds.has(item.id) &&
-      (showArchived || !archivedSessionIds.has(item.id))
+      (showArchived || (item.lifecycle !== "archived" && !archivedSessionIds.has(item.id)))
     );
   const isPreview = status !== "connected";
   const displayEvents = isPreview ? previewEvents : events;
@@ -1301,6 +1302,17 @@ function App() {
   }
 
   function toggleArchiveSession(room: Room) {
+    const nextLifecycle = room.lifecycle === "archived" || archivedSessionIds.has(room.id) ? "active" : "archived";
+    if (send({ t: "update_session_lifecycle", sessionId: room.id, lifecycle: nextLifecycle })) {
+      setArchivedSessionIds((current) => {
+        const next = new Set(current);
+        if (nextLifecycle === "archived") next.add(room.id);
+        else next.delete(room.id);
+        saveArchivedSessionIds(next);
+        return next;
+      });
+      return;
+    }
     setArchivedSessionIds((current) => {
       const next = new Set(current);
       if (next.has(room.id)) next.delete(room.id);
@@ -1311,7 +1323,7 @@ function App() {
   }
 
   function exportSession(room: Room) {
-    const archived = archivedSessionIds.has(room.id);
+    const archived = room.lifecycle === "archived" || archivedSessionIds.has(room.id);
     const payload = {
       exportedAt: new Date().toISOString(),
       lifecycle: sessionLifecycle(room, displayRoom, displayEvents, archived, (text) => text),
@@ -1572,7 +1584,7 @@ function App() {
             </button>
           </div>
           {visibleRooms.map((item) => (
-            <div key={item.id} className={item.id === displayRoom.id ? "room-list-row active" : archivedSessionIds.has(item.id) ? "room-list-row archived" : "room-list-row"}>
+            <div key={item.id} className={item.id === displayRoom.id ? "room-list-row active" : item.lifecycle === "archived" || archivedSessionIds.has(item.id) ? "room-list-row archived" : "room-list-row"}>
             <button
               key={item.id}
               className={item.id === displayRoom.id ? "room-list-item active" : "room-list-item"}
@@ -1582,7 +1594,7 @@ function App() {
             >
               <span>{item.title}</span>
               <strong>{item.id}</strong>
-              <em>{sessionLifecycle(item, displayRoom, displayEvents, archivedSessionIds.has(item.id), t)}</em>
+              <em>{sessionLifecycle(item, displayRoom, displayEvents, item.lifecycle === "archived" || archivedSessionIds.has(item.id), t)}</em>
             </button>
             <button
               className="icon-action room-export-action"
@@ -1596,8 +1608,8 @@ function App() {
             <button
               className="icon-action room-archive-action"
               type="button"
-              title={archivedSessionIds.has(item.id) ? t("Unarchive session") : t("Archive session")}
-              aria-label={`${archivedSessionIds.has(item.id) ? t("Unarchive session") : t("Archive session")} ${item.title}`}
+              title={item.lifecycle === "archived" || archivedSessionIds.has(item.id) ? t("Unarchive session") : t("Archive session")}
+              aria-label={`${item.lifecycle === "archived" || archivedSessionIds.has(item.id) ? t("Unarchive session") : t("Archive session")} ${item.title}`}
               onClick={() => toggleArchiveSession(item)}
             >
               <Archive size={15} />

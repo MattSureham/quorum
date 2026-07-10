@@ -143,9 +143,10 @@ The session sidebar separates reversible cleanup from destructive deletion:
 Archive hides a session locally without deleting SQLite data, Export downloads a
 JSON bundle of the currently loaded room/events/memory summaries, and Delete
 still performs a confirmed hard delete of Quorum's local session rows.
-The sidebar also shows a first-pass lifecycle label (`active`, `completed`, or
-`archived`) derived from local UI/archive state and current shared-session
-events. Full persisted lifecycle states are still future work.
+The sidebar also shows session lifecycle (`active`, `completed`, or `archived`).
+Archive/Unarchive now uses a persisted room lifecycle field through the
+WebSocket gateway when connected, while retaining the older local archive state
+as a fallback for offline UI state.
 
 Context continuity is visible in shared-session diagnostics. The panel surfaces
 native-resume failure warnings, shows when the room is continuing from the

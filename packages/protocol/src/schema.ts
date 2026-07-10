@@ -13,6 +13,8 @@ const ParticipantDescriptorSchema = z.object({
   status: z.enum(["idle", "thinking", "active", "offline"]),
 });
 
+const SessionLifecycleSchema = z.enum(["draft", "active", "paused", "completed", "archived", "deleted"]);
+
 const ImageAttachmentSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -85,6 +87,7 @@ export const ClientMessageSchema = z.discriminatedUnion("t", [
   }),
   z.object({ t: z.literal("continue_session"), roomId: z.string().optional(), sessionId: z.string().optional() }),
   z.object({ t: z.literal("delete_session"), roomId: z.string().optional(), sessionId: z.string() }),
+  z.object({ t: z.literal("update_session_lifecycle"), roomId: z.string().optional(), sessionId: z.string(), lifecycle: SessionLifecycleSchema }),
   z.object({ t: z.literal("subscribe"), roomId: z.string(), sinceSeq: z.number().optional() }),
   z.object({
     t: z.literal("post_message"),
