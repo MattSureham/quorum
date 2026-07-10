@@ -746,6 +746,19 @@ function buildTurnTraces(events: RoomEvent[]): TurnTrace[] {
     const body = item.body as any;
     const turnId = item.turnId ?? body?.turnId;
     if (!turnId) continue;
+    if (item.type === "turn_trace") {
+      traces.set(turnId, {
+        turnId,
+        speakerId: String(body.speakerId ?? item.author.id),
+        startedSeq: item.seq,
+        startedAt: typeof body.startedAt === "number" ? body.startedAt : item.ts,
+        endedAt: typeof body.endedAt === "number" ? body.endedAt : item.ts,
+        outcome: body.outcome === "failed" ? "failed" : body.outcome === "cancelled" ? "cancelled" : body.outcome === "completed" ? "completed" : "running",
+        toolCalls: Number(body.toolCalls) || 0,
+        outputs: Number(body.outputs) || 0,
+      });
+      continue;
+    }
     let trace = traces.get(turnId);
     if (!trace) {
       trace = {
@@ -2831,6 +2844,7 @@ function iconFor(type: RoomEvent["type"]) {
     case "turn_completed": return CheckCircle2;
     case "turn_cancelled": return PauseCircle;
     case "turn_failed": return AlertTriangle;
+    case "turn_trace": return NotebookText;
     case "system": return AlertTriangle;
     default: return CircleDot;
   }
@@ -2896,6 +2910,10 @@ function renderBody(event: RoomEvent): React.ReactNode {
     case "turn_failed": {
       const body = event.body as any;
       return `${event.type.replace("turn_", "")}: ${body.turnId ?? ""}`;
+    }
+    case "turn_trace": {
+      const body = event.body as any;
+      return `${body.speakerId ?? "speaker"} · ${body.outcome ?? "done"} · ${Number(body.durationMs ?? 0)}ms · tools ${body.toolCalls ?? 0}`;
     }
     case "system":
       return (event.body as SystemBody).text;

@@ -21,6 +21,7 @@ export type EventType =
   | "turn_completed"
   | "turn_cancelled"
   | "turn_failed"
+  | "turn_trace"
   | "system";        // system / error / status change
 
 export interface EventAuthor {

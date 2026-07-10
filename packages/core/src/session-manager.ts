@@ -370,10 +370,13 @@ export class SessionManager {
 
   private async runTurn(agent: ISpeakerAgent, turnId: string, generation: number, ac: AbortController): Promise<void> {
     const timeout = setTimeout(() => ac.abort(), this.opts.turnTimeoutMs ?? 120_000);
+    const startedAt = Date.now();
     let offset = 0;
     let outcome: "done" | "cancelled" | "failed" = "done";
     const caps = this.agentCapabilities(agent);
     let lease: WriteLease | undefined;
+    let toolCalls = 0;
+    let outputs = 0;
 
     await this.mailbox.enqueue("turnStarted", async () => {
       await this.transition("speaking", { turnId, speakerId: agent.id, generation });
@@ -406,6 +409,8 @@ export class SessionManager {
         if (delta.type === "done") break;
         await this.mailbox.enqueue("turnDelta", async () => {
           if (!this.active || this.active.turnId !== turnId || this.active.generation !== generation) return;
+          if (delta.type === "tool_call") toolCalls++;
+          if (delta.type === "text" || delta.type === "thinking" || delta.type === "tool_result") outputs++;
           offset = await this.persistDelta(agent, turnId, generation, offset, delta);
         });
       }
@@ -421,6 +426,21 @@ export class SessionManager {
         this.recentSpeakerCounts.set(agent.id, (this.recentSpeakerCounts.get(agent.id) ?? 0) + 1);
         const eventType = outcome === "done" ? "turn_completed" : outcome === "cancelled" ? "turn_cancelled" : "turn_failed";
         const completed = await this.append(eventType, { turnId, speakerId: agent.id, generation, offset });
+        await this.append("turn_trace", {
+          turnId,
+          speakerId: agent.id,
+          generation,
+          startedAt,
+          endedAt: Date.now(),
+          durationMs: Math.max(0, Date.now() - startedAt),
+          outcome: outcome === "done" ? "completed" : outcome,
+          toolCalls,
+          outputs,
+          offset,
+        }, "debug", {
+          author: { kind: "system", id: "trace", display: "Trace" },
+          turnId,
+        });
         if (caps.canEditFiles && this.opts.workspace) {
           const checkpoint = await this.opts.workspace.checkpoint(turnId, agent.id, completed.id).catch(() => null);
           if (checkpoint) {

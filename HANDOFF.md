@@ -276,6 +276,11 @@ The following is the implementation trail from this session. It is written for t
     - Work: added optional `Room.lifecycle` and a WebSocket `update_session_lifecycle` command. Shared-session rooms persist lifecycle changes by updating the stored room metadata; the gateway broadcasts refreshed session lists. The Web UI Archive/Unarchive action now uses the persisted lifecycle path when connected and keeps the previous local archive set as an offline/fallback compatibility layer. New Web-created rooms start as `active`.
     - Verification: run `pnpm typecheck`, `pnpm test`, and `pnpm --filter @quorum/client-web build` after this change.
 
+62. this change `feat: emit turn trace events`
+    - Files: `packages/protocol/src/types.ts`, `packages/core/src/session-manager.ts`, `packages/client-web/src/main.tsx`, `README.md`, `HANDOFF.md`.
+    - Work: added `turn_trace` room events for shared-session turns. `SessionManager` records started/ended time, duration, outcome, tool-call count, output count, offset, speaker, and generation after each turn finishes. The Web UI Turn Trace panel now prefers these backend trace events and falls back to deriving traces from older event logs when they are missing. Token counts, native session id exposure, stdout/stderr aggregation, and structured failure categories are still future work.
+    - Verification: run `pnpm typecheck`, `pnpm test`, and `pnpm --filter @quorum/client-web build` after this change.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:
@@ -329,6 +334,7 @@ What is already implemented:
 - Chat image attachments now show per-session visibility: vision-capable agents versus metadata-only agents.
 - The Web UI supports locally persisted custom API-model profiles. They are available in Session setup and map to provider/model/role adapter config.
 - Session lifecycle is persisted in room metadata via `Room.lifecycle` and `update_session_lifecycle`; Archive/Unarchive uses this path when connected.
+- Shared-session turns emit `turn_trace` events; the Web UI Turn Trace panel prefers backend traces and falls back to event-derived traces.
 - Shared-session editable agent turns now use `GitWorkspace` write-floor serialization and per-turn checkpointing. `SessionManager` acquires/releases the workspace lease for agents with `canEditFiles`, records checkpoints when files changed, and waits for workspace initialization before git operations.
 - Local CLI agents such as Claude Code use shell launching on Windows so `.cmd` shims work.
 - Claude Code and Codex native session/thread ids are stored in agent-private memory and resumed best-effort. Resume failure records a diagnostic warning and falls back to the Quorum context bundle. The context bundle includes checksum/seq/hash anchors and error-control rules so native hidden memory is treated as advisory when it conflicts with Quorum state.

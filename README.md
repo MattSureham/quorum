@@ -154,10 +154,11 @@ Quorum context bundle, and displays the latest memory-summary sequence range.
 Context checksums are still embedded in the agent prompt bundle rather than
 exposed as a standalone UI field.
 
-Diagnostics include a first-pass **Turn Trace** panel derived from the event log.
-Each trace groups a turn by id and shows speaker, duration, tool-call count,
-output count, and outcome. This is an observable harness view over existing
-events; backend token/latency/native-session metrics are still future work.
+Diagnostics include a **Turn Trace** panel. Shared-session turns now emit
+`turn_trace` events with speaker, duration, tool-call count, output count, and
+outcome; the UI falls back to deriving the same view from older event logs when
+trace events are absent. Backend token counts, native session ids, and detailed
+failure categories are still future work.
 
 Session setup exposes a first-pass permission policy: read-only, workspace-write,
 approval-required, or full-auto. The selected policy is written into participant
