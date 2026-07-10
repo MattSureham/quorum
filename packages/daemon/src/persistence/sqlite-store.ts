@@ -325,6 +325,24 @@ export class SqliteStore implements EventStore {
     };
   }
 
+  deleteSession(sessionId: string): void {
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.db.prepare("DELETE FROM events WHERE room_id=?").run(sessionId);
+      this.db.prepare("DELETE FROM session_snapshots WHERE session_id=?").run(sessionId);
+      this.db.prepare("DELETE FROM turns WHERE session_id=?").run(sessionId);
+      this.db.prepare("DELETE FROM bids WHERE session_id=?").run(sessionId);
+      this.db.prepare("DELETE FROM working_memory_summaries WHERE session_id=?").run(sessionId);
+      this.db.prepare("DELETE FROM shared_memory WHERE session_id=?").run(sessionId);
+      this.db.prepare("DELETE FROM agent_private_memory WHERE session_id=?").run(sessionId);
+      this.db.prepare("DELETE FROM sessions WHERE session_id=?").run(sessionId);
+      this.db.exec("COMMIT");
+    } catch (err) {
+      this.db.exec("ROLLBACK");
+      throw err;
+    }
+  }
+
   readAgentPrivateMemory(sessionId: string, agentId: string, namespace: string, key: string): unknown | undefined {
     const row = this.db
       .prepare("SELECT value FROM agent_private_memory WHERE session_id=? AND agent_id=? AND namespace=? AND key=?")

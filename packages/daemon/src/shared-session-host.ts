@@ -128,6 +128,16 @@ export async function startSharedSessionRoom(
     return createManaged(storedRoom).gatewayDeps;
   }
 
+  async function deleteManaged(sessionId: string): Promise<Room[]> {
+    const existing = managed.get(sessionId);
+    if (existing) {
+      await existing.session.stop();
+      managed.delete(sessionId);
+    }
+    store.deleteSession(sessionId);
+    return listRooms();
+  }
+
   const gateway = new Gateway(
     {
       ...primary.gatewayDeps,
@@ -150,6 +160,7 @@ export async function startSharedSessionRoom(
         return createManaged(nextRoom).gatewayDeps;
       },
       continueSession: continueManaged,
+      deleteSession: deleteManaged,
     },
     opts.port,
   );

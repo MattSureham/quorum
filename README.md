@@ -255,6 +255,10 @@ QUORUM_SESSION_KERNEL=shared pnpm dev
 Then open `http://127.0.0.1:5173`, use **Configure API keys** only if direct API
 model agents need credentials, and send a room message.
 
+The `echo` adapter is a deterministic local fake agent, not a model. It returns
+configured script text and is intended for smoke tests, UI checks, and no-key
+demo sessions.
+
 ## Sessions and Modes
 
 The Web UI exposes session setup from the left **Sessions** panel via **New
@@ -266,6 +270,12 @@ session**. The setup modal supports:
 - per-session `Workspace path`; CLI/subprocess agents run from that path, and
   sandboxed tool execution is scoped there
 - mode selection for `自由讨论`, `抢麦/举手`, and `按序陈述`
+
+The left session list also has a delete action. Deleting a session removes its
+local transcript/events, projections, turns, bids, working-memory summaries,
+shared memory, and agent-private native session ids from Quorum's SQLite store.
+Use it for completed projects or throwaway test sessions to keep the sidebar and
+local cache small.
 
 The setup form keeps its editable draft local to the modal. Field handlers copy
 input values before updating state, so typing `Session id` / `Title`, switching

@@ -202,6 +202,42 @@ describe("SqliteStore", () => {
     }
   });
 
+  it("deletes a session and its cached session-scoped records", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "quorum-sqlite-delete-session-"));
+    const dbPath = join(dir, "delete-session.sqlite");
+    const store = new SqliteStore(dbPath);
+    const log = new EventLog("delete-me", store);
+    store.upsertSessionRoom({
+      id: "delete-me",
+      title: "Delete Me",
+      branch: "main",
+      policy: { name: "free-for-all", maxTurnsPerTopic: 3, noConsecutive: true, turnDeadlineMs: 1_000 },
+      participants: [{ id: "human", kind: "human", display: "Human", status: "idle" }],
+      createdAt: Date.now(),
+    });
+    await log.append({ ...human, body: { text: "remove this" } });
+    store.persistWorkingMemorySummary({
+      summaryId: "summary-delete",
+      sessionId: "delete-me",
+      sourceFromSeq: 1,
+      sourceToSeq: 1,
+      sourceHash: "hash",
+      model: "extractive-v1",
+      promptVersion: "working-memory-v1",
+      createdAt: new Date().toISOString(),
+      content: "delete summary",
+    });
+    store.writeAgentPrivateMemory("delete-me", "agent", "native_session", "id", "native-delete");
+
+    store.deleteSession("delete-me");
+
+    expect(store.readSessionRoom("delete-me")).toBeUndefined();
+    expect(store.read("delete-me", 0)).toEqual([]);
+    expect(store.readWorkingMemorySummaries("delete-me")).toEqual([]);
+    expect(store.readAgentPrivateMemory("delete-me", "agent", "native_session", "id")).toBeUndefined();
+    store.close();
+  });
+
   it("persists provider credentials as masked views and applies env vars", async () => {
     const dir = await mkdtemp(join(tmpdir(), "quorum-sqlite-credentials-"));
     const dbPath = join(dir, "credentials.sqlite");

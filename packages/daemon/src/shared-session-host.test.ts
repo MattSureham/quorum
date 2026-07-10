@@ -259,4 +259,52 @@ describe("SharedSessionHost", () => {
       await second.stop();
     }
   });
+
+  it("deletes a session from the gateway and removes it from the session list", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "quorum-shared-session-delete-"));
+    const room: Room = {
+      id: "main-room",
+      title: "Main room",
+      branch: "main",
+      policy: { name: "free-for-all", maxTurnsPerTopic: 3, noConsecutive: true, turnDeadlineMs: 1_000 },
+      participants: [
+        { id: "human", kind: "human", display: "Human", status: "idle" },
+        { id: "echo", kind: "agent", display: "Echo", adapter: "echo", adapterConfig: { text: "main response" }, status: "idle" },
+      ],
+      createdAt: Date.now(),
+    };
+    const host = await startSharedSessionRoom(room, { dbPath: join(dir, "room.sqlite"), port: 0 });
+    const ws = await connect(host.gateway.url());
+
+    try {
+      ws.send(JSON.stringify({
+        t: "create_session",
+        roomId: "main-room",
+        session: {
+          id: "delete-room",
+          title: "Delete room",
+          mode: "open-discussion",
+          participants: [
+            { id: "human", kind: "human", display: "Human", status: "idle" },
+            { id: "echo2", kind: "agent", display: "Echo Two", adapter: "echo", adapterConfig: { text: "delete response" }, status: "idle" },
+          ],
+        },
+      }));
+      expect((await nextMessage(ws)).t).toBe("session_created");
+
+      ws.send(JSON.stringify({ t: "delete_session", roomId: "main-room", sessionId: "delete-room" }));
+      const deleted = await nextMessage(ws);
+      expect(deleted.t).toBe("session_deleted");
+      expect(deleted.sessionId).toBe("delete-room");
+      expect(deleted.rooms.map((item: Room) => item.id)).not.toContain("delete-room");
+
+      ws.send(JSON.stringify({ t: "continue_session", sessionId: "delete-room" }));
+      const failed = await nextMessage(ws);
+      expect(failed.t).toBe("error");
+      expect(failed.text).toContain("unknown session");
+    } finally {
+      ws.close();
+      await host.stop();
+    }
+  });
 });

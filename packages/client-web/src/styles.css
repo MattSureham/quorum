@@ -159,6 +159,27 @@ button {
   cursor: pointer;
 }
 
+.room-list-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.room-list-row .room-list-item {
+  min-width: 0;
+}
+
+.room-delete-action {
+  align-self: center;
+  color: #8a3636;
+}
+
+.room-delete-action:hover {
+  color: #6f2424;
+  background: #f4dfdc;
+}
+
 .room-list-item.active {
   border-color: #8bc6b2;
   background: #eaf7f2;

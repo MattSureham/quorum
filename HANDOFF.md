@@ -187,6 +187,10 @@ The following is the implementation trail from this session. It is written for t
     - Files: `packages/core/src/session-manager.ts`, `packages/core/src/session-manager.test.ts`, `README.md`, `HANDOFF.md`.
     - Work: strengthened hidden-state error control by adding a context checksum, seq/hash continuity anchors, and explicit conflict/uncertainty rules to the Quorum context bundle. This does not export model hidden state; it reduces drift by making the authoritative event log and working memory the calibration layer for resumed native sessions.
 
+43. this change `feat: delete persisted sessions from web ui`
+    - Files: `packages/protocol/src/schema.ts`, `packages/daemon/src/persistence/sqlite-store.ts`, `packages/daemon/src/gateway/ws-server.ts`, `packages/daemon/src/shared-session-host.ts`, `packages/client-web/src/main.tsx`, `packages/client-web/src/styles.css`, tests, `README.md`, `HANDOFF.md`.
+    - Work: added `delete_session` and a left-sidebar delete action. Deleting a session stops any in-memory manager, removes it from the registry/sidebar, and deletes session-scoped SQLite rows for events, snapshots, turns, bids, working memory, shared memory, agent-private native session ids, and the session metadata row. The `echo` adapter remains a deterministic local fake agent with no model/API call.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:
@@ -206,6 +210,7 @@ What is already implemented:
   snapshots, turns, bids, memory, agent configs, provider configs, and migrations.
 - `@quorum/daemon` now has `startSharedSessionRoom()`, which wraps existing adapters through `LegacyAgentAdapter` and routes human prompts through `SessionManager`.
 - Shared-session room metadata is persisted, and `continue_session` can rebuild prior sessions from SQLite without copying events or changing session ids.
+- Persisted sessions can be deleted from the Web UI; deletion clears Quorum's local session cache/transcript/memory/native-session rows for that session.
 - The CLI can choose the new kernel with `QUORUM_SESSION_KERNEL=shared`; without that env var it keeps the legacy `Conductor` path.
 - `quorum.webui-smoke.config.json` provides a no-credential echo-agent config for manual Web UI testing. Use `QUORUM_SESSION_KERNEL=shared QUORUM_CONFIG=quorum.webui-smoke.config.json QUORUM_DB_PATH=.quorum/webui-smoke.sqlite pnpm dev`.
 - `@quorum/client-web` can now detect shared-session events and display phase, active speaker, bid queue, selected speaker, and debug events.

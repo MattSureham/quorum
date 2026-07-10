@@ -27,9 +27,10 @@ export interface GatewayDeps {
   listSessions?: () => Room[];
   createSession?: (input: CreateSessionInput) => GatewaySessionDeps | Promise<GatewaySessionDeps>;
   continueSession?: (sessionId: string) => GatewaySessionDeps | Promise<GatewaySessionDeps>;
+  deleteSession?: (sessionId: string) => Room[] | Promise<Room[]>;
 }
 
-export type GatewaySessionDeps = Omit<GatewayDeps, "authToken" | "listSessions" | "createSession" | "continueSession">;
+export type GatewaySessionDeps = Omit<GatewayDeps, "authToken" | "listSessions" | "createSession" | "continueSession" | "deleteSession">;
 
 /**
  * Thin WebSocket gateway. Clients render the event stream and send commands.
@@ -122,7 +123,7 @@ export class Gateway {
         ws.send(JSON.stringify({ t: "error", text: "session creation is not available" }));
         return;
       }
-      void Promise.resolve(this.deps.createSession(m.session)).then((session) => {
+      void Promise.resolve().then(() => this.deps.createSession!(m.session)).then((session) => {
         const registered = this.registerSession(session);
         ws.send(JSON.stringify({ t: "session_created", room: registered.room, rooms: this.rooms() }));
       }).catch((err) =>
@@ -140,11 +141,27 @@ export class Gateway {
         ws.send(JSON.stringify({ t: "error", text: "session continuation is not available" }));
         return;
       }
-      void Promise.resolve(this.deps.continueSession(sessionId)).then((session) => {
+      void Promise.resolve().then(() => this.deps.continueSession!(sessionId)).then((session) => {
         const registered = this.registerSession(session);
         ws.send(JSON.stringify({ t: "session_continued", room: registered.room, rooms: this.rooms() }));
       }).catch((err) =>
         ws.send(JSON.stringify({ t: "error", text: `continue_session failed: ${err instanceof Error ? err.message : String(err)}` })),
+      );
+      return;
+    }
+    if (m.t === "delete_session") {
+      if (!this.deps.deleteSession) {
+        ws.send(JSON.stringify({ t: "error", text: "session deletion is not available" }));
+        return;
+      }
+      void Promise.resolve().then(() => this.deps.deleteSession!(m.sessionId)).then((rooms) => {
+        this.sessions.delete(m.sessionId);
+        for (const [client, roomId] of this.subscriptions.entries()) {
+          if (roomId === m.sessionId) this.subscriptions.delete(client);
+        }
+        ws.send(JSON.stringify({ t: "session_deleted", sessionId: m.sessionId, rooms }));
+      }).catch((err) =>
+        ws.send(JSON.stringify({ t: "error", text: `delete_session failed: ${err instanceof Error ? err.message : String(err)}` })),
       );
       return;
     }

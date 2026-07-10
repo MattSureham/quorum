@@ -23,6 +23,7 @@ import {
   Settings2,
   ShieldQuestion,
   SquareTerminal,
+  Trash2,
   Undo2,
   UserRound,
   Wrench,
@@ -59,6 +60,7 @@ type ServerMessage =
   | { t: "sessions"; rooms: Room[] }
   | { t: "session_created"; room: Room; rooms: Room[] }
   | { t: "session_continued"; room: Room; rooms: Room[] }
+  | { t: "session_deleted"; sessionId: string; rooms: Room[] }
   | { t: "replay_projection"; afterSeq: number; headSeq: number; eventCount: number; projection: SharedSessionProjectionResult }
   | { t: "memory_compacted"; summary?: MemorySummary; summaries: MemorySummary[] }
   | { t: "credentials"; providers: ProviderConfigView[] }
@@ -585,6 +587,17 @@ function App() {
           setSettings(nextSettings);
           setDraftSettings(nextSettings);
           socket.send(JSON.stringify({ t: "subscribe", roomId: message.room.id, sinceSeq: 0 }));
+        } else if (message.t === "session_deleted") {
+          setRooms(message.rooms);
+          if (message.sessionId === settings.roomId || message.sessionId === displayRoom.id) {
+            const fallback = message.rooms[0];
+            if (fallback) {
+              switchSession(fallback.id);
+            } else {
+              setEvents([]);
+              setMemorySummaries([]);
+            }
+          }
         } else if (message.t === "replay_projection") {
           setReplayResult(message);
         } else if (message.t === "memory_compacted") {
@@ -657,6 +670,11 @@ function App() {
     setLastSubmittedAt(undefined);
     lastSeqRef.current = 0;
     send({ t: "continue_session", sessionId: roomId });
+  }
+
+  function deleteSession(room: Room) {
+    if (!window.confirm(`Delete session "${room.title}"?\n\nThis removes its local transcript, memory summaries, tool/cache records, and native session ids from Quorum storage.`)) return;
+    send({ t: "delete_session", sessionId: room.id });
   }
 
   function send(payload: Record<string, unknown>): boolean {
@@ -855,6 +873,7 @@ function App() {
             <span>Sessions</span>
           </div>
           {(rooms.length ? rooms : [displayRoom]).map((item) => (
+            <div key={item.id} className={item.id === displayRoom.id ? "room-list-row active" : "room-list-row"}>
             <button
               key={item.id}
               className={item.id === displayRoom.id ? "room-list-item active" : "room-list-item"}
@@ -865,6 +884,16 @@ function App() {
               <span>{item.title}</span>
               <strong>{item.id}</strong>
             </button>
+            <button
+              className="icon-action room-delete-action"
+              type="button"
+              title="Delete session"
+              aria-label={`Delete session ${item.title}`}
+              onClick={() => deleteSession(item)}
+            >
+              <Trash2 size={15} />
+            </button>
+            </div>
           ))}
           <button className="secondary-action full-width-action" type="button" onClick={openSessionSetup}>
             <Plus size={15} />
