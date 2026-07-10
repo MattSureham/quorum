@@ -251,6 +251,11 @@ The following is the implementation trail from this session. It is written for t
     - Work: added first-pass session lifecycle visibility in the Web UI. Sidebar rows now show `active`, `completed`, or `archived` labels derived from local archive state and current shared-session events; exported JSON includes the same lifecycle label. This is UI-derived state only, not a persisted lifecycle schema.
     - Verification: run `pnpm typecheck`, `pnpm test`, and `pnpm --filter @quorum/client-web build` after this change.
 
+57. this change `feat: add turn trace diagnostics`
+    - Files: `packages/client-web/src/main.tsx`, `packages/client-web/src/styles.css`, `README.md`, `HANDOFF.md`.
+    - Work: added a first-pass observable harness view in the Web UI diagnostics. `Turn Trace` groups existing event-log events by `turnId` and shows speaker, duration, tool-call count, output count, and outcome for recent turns. This is derived from existing room events; backend-native token counts, stdout/stderr, native session ids, and detailed failure categories remain future work.
+    - Verification: run `pnpm typecheck`, `pnpm test`, and `pnpm --filter @quorum/client-web build` after this change.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:
@@ -299,6 +304,7 @@ What is already implemented:
 - Shared-session diagnostics include a Continuity card for native resume fallback warnings and latest memory-summary seq ranges.
 - Agents & Models now presents agent profiles with role/provider/model/capability summaries. Provider credentials remain separate hidden credential sources for API-model profiles.
 - Session rows show a first-pass lifecycle label (`active`, `completed`, `archived`) and exports include that lifecycle. The label is derived in the Web UI and is not yet a persisted lifecycle field.
+- Diagnostics include a derived Turn Trace panel that groups recent turns by `turnId` and shows speaker, duration, tool count, output count, and outcome.
 - Shared-session editable agent turns now use `GitWorkspace` write-floor serialization and per-turn checkpointing. `SessionManager` acquires/releases the workspace lease for agents with `canEditFiles`, records checkpoints when files changed, and waits for workspace initialization before git operations.
 - Local CLI agents such as Claude Code use shell launching on Windows so `.cmd` shims work.
 - Claude Code and Codex native session/thread ids are stored in agent-private memory and resumed best-effort. Resume failure records a diagnostic warning and falls back to the Quorum context bundle. The context bundle includes checksum/seq/hash anchors and error-control rules so native hidden memory is treated as advisory when it conflicts with Quorum state.

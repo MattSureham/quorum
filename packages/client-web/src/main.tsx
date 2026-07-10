@@ -70,6 +70,9 @@ const zhText: Record<string, string> = {
   "Show archived": "显示归档",
   "Hide archived": "隐藏归档",
   "completed": "已完成",
+  "running": "运行中",
+  "cancelled": "已取消",
+  "failed": "失败",
   "archived": "已归档",
   "Connection": "连接",
   "WebSocket": "WebSocket",
@@ -138,6 +141,12 @@ const zhText: Record<string, string> = {
   "Agent/model selection is room-based; provider keys only unlock API-model agents.": "智能体/模型选择按房间生效；provider keys 只用于解锁 API 模型智能体。",
   "Session diagnostics": "会话诊断",
   "Tool Activity": "工具活动",
+  "Turn Trace": "发言追踪",
+  "No turn traces": "没有发言追踪",
+  "duration": "耗时",
+  "tools": "工具",
+  "outputs": "输出",
+  "outcome": "结果",
   "Recent Activity": "最近活动",
   "Checkpoints": "检查点",
   "API model credentials": "API 模型凭证",
@@ -468,6 +477,17 @@ interface ModeView {
   remainingAgentIds: string[];
 }
 
+interface TurnTrace {
+  turnId: string;
+  speakerId: string;
+  startedSeq: number;
+  startedAt: number;
+  endedAt?: number;
+  outcome: "running" | "completed" | "cancelled" | "failed";
+  toolCalls: number;
+  outputs: number;
+}
+
 function event(
   seq: number,
   id: string,
@@ -665,6 +685,43 @@ function nativeResumeWarning(events: RoomEvent[]): RoomEvent | undefined {
     const text = String((item.body as SystemBody).text ?? "");
     return text.includes("native session resume failed");
   });
+}
+
+function buildTurnTraces(events: RoomEvent[]): TurnTrace[] {
+  const traces = new Map<string, TurnTrace>();
+  for (const item of events) {
+    const body = item.body as any;
+    const turnId = item.turnId ?? body?.turnId;
+    if (!turnId) continue;
+    let trace = traces.get(turnId);
+    if (!trace) {
+      trace = {
+        turnId,
+        speakerId: String(body?.speakerId ?? item.author.id),
+        startedSeq: item.seq,
+        startedAt: item.ts,
+        outcome: "running",
+        toolCalls: 0,
+        outputs: 0,
+      };
+      traces.set(turnId, trace);
+    }
+    trace.startedSeq = Math.min(trace.startedSeq, item.seq);
+    trace.startedAt = Math.min(trace.startedAt, item.ts);
+    if (item.type === "turn_started") {
+      trace.speakerId = String(body?.speakerId ?? trace.speakerId);
+      trace.startedAt = item.ts;
+      trace.startedSeq = item.seq;
+    } else if (item.type === "tool_call") {
+      trace.toolCalls++;
+    } else if (item.type === "message" || item.type === "thinking" || item.type === "turn_output_chunk") {
+      trace.outputs++;
+    } else if (item.type === "turn_completed" || item.type === "turn_cancelled" || item.type === "turn_failed") {
+      trace.endedAt = item.ts;
+      trace.outcome = item.type === "turn_completed" ? "completed" : item.type === "turn_cancelled" ? "cancelled" : "failed";
+    }
+  }
+  return [...traces.values()].sort((a, b) => b.startedSeq - a.startedSeq);
 }
 
 function sessionLifecycle(room: Room, currentRoom: Room, events: RoomEvent[], archived: boolean, t: Translate): string {
@@ -1663,6 +1720,7 @@ function App() {
                 <ToolRow key={item.id} event={item} />
               ))}
             </div>
+            <TurnTracePanel traces={buildTurnTraces(displayEvents)} t={t} />
             <div className="section-heading compact">
               <Activity size={16} />
               <span>{t("Recent Activity")}</span>
@@ -2345,6 +2403,38 @@ function SharedSessionPanel({
             <strong>{event.type}</strong>
           </div>
         )) : <div className="empty-row">{t("No debug events")}</div>}
+      </div>
+    </section>
+  );
+}
+
+function TurnTracePanel({ traces, t }: { traces: TurnTrace[]; t: Translate }) {
+  return (
+    <section className="trace-panel">
+      <div className="section-heading compact">
+        <NotebookText size={16} />
+        <span>{t("Turn Trace")}</span>
+        <ChevronDown size={15} />
+      </div>
+      <div className="trace-list">
+        {traces.length ? traces.slice(0, 8).map((trace) => {
+          const durationMs = trace.endedAt ? Math.max(0, trace.endedAt - trace.startedAt) : undefined;
+          const duration = durationMs === undefined ? "running" : `${(durationMs / 1000).toFixed(1)}s`;
+          return (
+            <div key={trace.turnId} className={`trace-row ${trace.outcome}`}>
+              <div>
+                <strong>{trace.speakerId}</strong>
+                <span>{trace.turnId}</span>
+              </div>
+              <dl>
+                <div><dt>{t("duration")}</dt><dd>{duration}</dd></div>
+                <div><dt>{t("tools")}</dt><dd>{trace.toolCalls}</dd></div>
+                <div><dt>{t("outputs")}</dt><dd>{trace.outputs}</dd></div>
+                <div><dt>{t("outcome")}</dt><dd>{t(trace.outcome)}</dd></div>
+              </dl>
+            </div>
+          );
+        }) : <div className="empty-row">{t("No turn traces")}</div>}
       </div>
     </section>
   );
