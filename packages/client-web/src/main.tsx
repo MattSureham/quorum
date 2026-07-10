@@ -169,6 +169,16 @@ const previewRoom: Room = {
   createdAt: Date.now(),
 };
 
+const emptyRoom: Room = {
+  id: "no-session",
+  title: "No session selected",
+  workspacePath: "",
+  branch: "main",
+  policy: { name: "free-for-all", maxTurnsPerTopic: 6, noConsecutive: true, turnDeadlineMs: 180_000 },
+  participants: [{ id: "matt", kind: "human", display: "You", status: "idle" }],
+  createdAt: Date.now(),
+};
+
 const previewEvents: RoomEvent[] = [
   event(1, "matt", "You", "human", "message", { text: "Review the daemon and make the UI easier to run." }),
   event(2, "conductor", "Conductor", "system", "floor_grant", { participantId: "claude-code", turnId: "turn-1", reason: "open floor" }),
@@ -456,6 +466,9 @@ function App() {
   const [error, setError] = useState<string>("");
   const [room, setRoom] = useState<Room | undefined>();
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [sessionsLoaded, setSessionsLoaded] = useState(false);
+  const [deletingSessionIds, setDeletingSessionIds] = useState<Set<string>>(() => new Set());
+  const [deletedSessionIds, setDeletedSessionIds] = useState<Set<string>>(() => new Set());
   const [events, setEvents] = useState<RoomEvent[]>([]);
   const [selectedTargets, setSelectedTargets] = useState<string[]>([]);
   const [composer, setComposer] = useState("");
@@ -475,6 +488,7 @@ function App() {
   const [sessionDraftSeed, setSessionDraftSeed] = useState<SessionDraft>(defaultSessionDraft);
   const wsRef = useRef<WebSocket | null>(null);
   const lastSeqRef = useRef(0);
+  const deletedSessionIdsRef = useRef<Set<string>>(new Set());
   const attemptRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const teardownRef = useRef(false);
@@ -482,7 +496,9 @@ function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const stickRef = useRef(true); // keep pinned to newest unless the user scrolls up
 
-  const displayRoom = room ?? previewRoom;
+  const displayRoom = room ?? (sessionsLoaded ? emptyRoom : previewRoom);
+  const visibleRooms = (sessionsLoaded ? rooms : rooms.length ? rooms : [displayRoom])
+    .filter((item) => !deletingSessionIds.has(item.id) && !deletedSessionIds.has(item.id));
   const isPreview = status !== "connected";
   const displayEvents = isPreview ? previewEvents : events;
   const chatEvents = displayEvents.filter((item) => item.type === "message");
@@ -561,16 +577,25 @@ function App() {
       socket.addEventListener("message", (raw) => {
         const message = JSON.parse(String(raw.data)) as ServerMessage;
         if (message.t === "snapshot") {
+          if (deletedSessionIdsRef.current.has(message.room.id)) return;
           setRoom(message.room);
-          setRooms((current) => upsertRoom(current, message.room));
+          setRooms((current) => upsertRoom(current, message.room).filter((item) => !deletedSessionIdsRef.current.has(item.id)));
           setEvents((current) => ingest(mergeEvents(current, message.events)));
           if (message.summaries) setMemorySummaries(message.summaries);
         } else if (message.t === "event") {
           setEvents((current) => ingest(mergeEvents(current, [message.event])));
         } else if (message.t === "sessions") {
-          setRooms(message.rooms);
+          setRooms(message.rooms.filter((item) => !deletedSessionIdsRef.current.has(item.id)));
+          setSessionsLoaded(true);
         } else if (message.t === "session_created") {
-          setRooms(message.rooms);
+          deletedSessionIdsRef.current.delete(message.room.id);
+          setDeletedSessionIds((current) => {
+            const nextDeleted = new Set(current);
+            nextDeleted.delete(message.room.id);
+            return nextDeleted;
+          });
+          setRooms(message.rooms.filter((item) => !deletedSessionIdsRef.current.has(item.id)));
+          setSessionsLoaded(true);
           setRoom(message.room);
           setEvents([]);
           lastSeqRef.current = 0;
@@ -579,7 +604,14 @@ function App() {
           setDraftSettings(nextSettings);
           socket.send(JSON.stringify({ t: "subscribe", roomId: message.room.id, sinceSeq: 0 }));
         } else if (message.t === "session_continued") {
-          setRooms(message.rooms);
+          deletedSessionIdsRef.current.delete(message.room.id);
+          setDeletedSessionIds((current) => {
+            const nextDeleted = new Set(current);
+            nextDeleted.delete(message.room.id);
+            return nextDeleted;
+          });
+          setRooms(message.rooms.filter((item) => !deletedSessionIdsRef.current.has(item.id)));
+          setSessionsLoaded(true);
           setRoom(message.room);
           setEvents([]);
           lastSeqRef.current = 0;
@@ -588,12 +620,21 @@ function App() {
           setDraftSettings(nextSettings);
           socket.send(JSON.stringify({ t: "subscribe", roomId: message.room.id, sinceSeq: 0 }));
         } else if (message.t === "session_deleted") {
-          setRooms(message.rooms);
+          deletedSessionIdsRef.current.add(message.sessionId);
+          setDeletedSessionIds((current) => new Set(current).add(message.sessionId));
+          setDeletingSessionIds((current) => {
+            const next = new Set(current);
+            next.delete(message.sessionId);
+            return next;
+          });
+          setRooms(message.rooms.filter((item) => item.id !== message.sessionId && !deletedSessionIdsRef.current.has(item.id)));
+          setSessionsLoaded(true);
           if (message.sessionId === settings.roomId || message.sessionId === displayRoom.id) {
-            const fallback = message.rooms[0];
+            const fallback = message.rooms.find((item) => item.id !== message.sessionId && !deletedSessionIdsRef.current.has(item.id));
             if (fallback) {
               switchSession(fallback.id);
             } else {
+              setRoom(undefined);
               setEvents([]);
               setMemorySummaries([]);
             }
@@ -610,6 +651,9 @@ function App() {
           setCredentialViews(message.providers);
           mergeCredentialViews(message.providers);
         } else if (message.t === "error") {
+          deletedSessionIdsRef.current.clear();
+          setDeletedSessionIds(new Set());
+          setDeletingSessionIds(new Set());
           setError(message.text);
         }
       });
@@ -674,7 +718,11 @@ function App() {
 
   function deleteSession(room: Room) {
     if (!window.confirm(`Delete session "${room.title}"?\n\nThis removes its local transcript, memory summaries, tool/cache records, and native session ids from Quorum storage.`)) return;
-    send({ t: "delete_session", sessionId: room.id });
+    if (send({ t: "delete_session", sessionId: room.id })) {
+      deletedSessionIdsRef.current.add(room.id);
+      setDeletedSessionIds((current) => new Set(current).add(room.id));
+      setDeletingSessionIds((current) => new Set(current).add(room.id));
+    }
   }
 
   function send(payload: Record<string, unknown>): boolean {
@@ -872,7 +920,7 @@ function App() {
             <MessageSquare size={16} />
             <span>Sessions</span>
           </div>
-          {(rooms.length ? rooms : [displayRoom]).map((item) => (
+          {visibleRooms.map((item) => (
             <div key={item.id} className={item.id === displayRoom.id ? "room-list-row active" : "room-list-row"}>
             <button
               key={item.id}
@@ -1395,7 +1443,7 @@ function SessionSetupModal({
   const modes: Array<{ id: SessionMode; label: string; detail: string }> = [
     { id: "open-discussion", label: "自由讨论", detail: "Agents can take turns through bids; best for exploration." },
     { id: "raise-hand", label: "抢麦/举手", detail: "Agents request the floor and must wait for the active speaker to finish." },
-    { id: "round-robin", label: "按序陈述", detail: "A fixed speaking order; best for structured reports." },
+    { id: "round-robin", label: "按序陈述", detail: "Agents speak once each in the selected participant order." },
   ];
 
   function toggleParticipant(id: string) {
@@ -1503,12 +1551,6 @@ function SessionSetupModal({
           </section>
         </div>
 
-        {draft.mode === "round-robin" ? (
-          <div className="inline-alert session-setup-alert">
-            <AlertTriangle size={14} />
-            <span>Round-robin sessions can be created now, but strict ordered speaking still needs a dedicated scheduler. Current execution uses the shared-session bid kernel.</span>
-          </div>
-        ) : null}
         <div className="credential-modal-actions">
           <button type="button" className="secondary-action" onClick={onClose}>Close</button>
           <button type="button" className="primary-action" disabled={!connected} onClick={() => onStart(draft)}>Start session</button>

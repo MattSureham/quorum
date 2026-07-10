@@ -181,6 +181,67 @@ describe("SharedSessionHost", () => {
     }
   });
 
+  it("creates round-robin sessions with strict ordered speaking", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "quorum-shared-session-round-robin-"));
+    const room: Room = {
+      id: "main-room",
+      title: "Main room",
+      branch: "main",
+      policy: { name: "free-for-all", maxTurnsPerTopic: 3, noConsecutive: true, turnDeadlineMs: 1_000 },
+      participants: [
+        { id: "human", kind: "human", display: "Human", status: "idle" },
+        { id: "echo", kind: "agent", display: "Echo", adapter: "echo", adapterConfig: { text: "main response" }, status: "idle" },
+      ],
+      createdAt: Date.now(),
+    };
+    const host = await startSharedSessionRoom(room, { dbPath: join(dir, "room.sqlite"), port: 0 });
+    const ws = await connect(host.gateway.url());
+
+    try {
+      ws.send(JSON.stringify({
+        t: "create_session",
+        roomId: "main-room",
+        session: {
+          id: "ordered-room",
+          title: "Ordered room",
+          mode: "round-robin",
+          participants: [
+            { id: "human", kind: "human", display: "Human", status: "idle" },
+            { id: "alpha", kind: "agent", display: "Alpha", adapter: "echo", adapterConfig: { text: "alpha response" }, status: "idle" },
+            { id: "bravo", kind: "agent", display: "Bravo", adapter: "echo", adapterConfig: { text: "bravo response" }, status: "idle" },
+            { id: "charlie", kind: "agent", display: "Charlie", adapter: "echo", adapterConfig: { text: "charlie response" }, status: "idle" },
+          ],
+        },
+      }));
+      const created = await nextMessage(ws);
+      expect(created.t).toBe("session_created");
+      expect(created.room.schedulerMode).toBe("round-robin");
+
+      ws.send(JSON.stringify({ t: "subscribe", roomId: "ordered-room", sinceSeq: 0 }));
+      expect((await nextMessage(ws)).t).toBe("snapshot");
+
+      const seen: RoomEvent[] = [];
+      const collect = (data: WebSocket.RawData) => {
+        const message = JSON.parse(String(data));
+        if (message.t === "event") seen.push(message.event);
+      };
+      ws.on("message", collect);
+      ws.send(JSON.stringify({ t: "post_message", roomId: "ordered-room", text: "ordered prompt" }));
+      await waitFor(() => seen.filter((event) => event.type === "turn_completed").length === 3, 2_500);
+      ws.off("message", collect);
+
+      expect(seen.filter((event) => event.type === "turn_started").map((event) => (event.body as any).speakerId)).toEqual([
+        "alpha",
+        "bravo",
+        "charlie",
+      ]);
+      expect(seen.some((event) => event.type === "bid_submitted")).toBe(false);
+    } finally {
+      ws.close();
+      await host.stop();
+    }
+  });
+
   it("lists and continues a persisted session after host restart", async () => {
     const dir = await mkdtemp(join(tmpdir(), "quorum-shared-session-continue-"));
     const dbPath = join(dir, "room.sqlite");

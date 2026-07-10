@@ -102,6 +102,7 @@ export interface Room {
   workspacePath?: string;
   branch: string;
   policy: ConductorPolicyConfig;
+  schedulerMode?: "bid" | "round-robin";
   primary?: string;           // who answers an opening message with no @
   participants: ParticipantDescriptor[];
   createdAt: number;

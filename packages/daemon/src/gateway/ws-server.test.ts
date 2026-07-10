@@ -236,4 +236,32 @@ describe("Gateway", () => {
       await gateway.close();
     }
   });
+
+  it("broadcasts session deletion to all connected clients", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const gateway = new Gateway({
+      log,
+      room,
+      humanId: "human",
+      setPolicy: () => {},
+      listSessions: () => [],
+      deleteSession: () => [],
+    }, 0);
+    await gateway.ready;
+    const ws1 = await connect(gateway.url());
+    const ws2 = await connect(gateway.url());
+
+    try {
+      const deleted1 = nextMessage(ws1);
+      const deleted2 = nextMessage(ws2);
+      ws1.send(JSON.stringify({ t: "delete_session", roomId: "room", sessionId: "room" }));
+
+      await expect(deleted1).resolves.toMatchObject({ t: "session_deleted", sessionId: "room", rooms: [] });
+      await expect(deleted2).resolves.toMatchObject({ t: "session_deleted", sessionId: "room", rooms: [] });
+    } finally {
+      ws1.close();
+      ws2.close();
+      await gateway.close();
+    }
+  });
 });

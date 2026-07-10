@@ -79,6 +79,7 @@ export async function startSharedSessionRoom(
       agents,
       humans,
       workspacePath: nextRoom.workspacePath,
+      schedulerMode: nextRoom.schedulerMode,
       toolExecutor: nextRoom.workspacePath ? createLocalSandboxToolExecutor({ workspacePath: nextRoom.workspacePath }) : undefined,
       settlingWindowMs: 400,
       turnTimeoutMs: nextRoom.policy.turnDeadlineMs,
@@ -154,6 +155,7 @@ export async function startSharedSessionRoom(
           branch: room.branch,
           primary: input.participants.find((participant) => participant.kind === "agent")?.id,
           policy: policyForMode(input.mode, room.policy),
+          schedulerMode: input.mode === "round-robin" ? "round-robin" : "bid",
           participants: ensureHuman(input.participants),
           createdAt: Date.now(),
         };

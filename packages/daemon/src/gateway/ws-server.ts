@@ -159,7 +159,7 @@ export class Gateway {
         for (const [client, roomId] of this.subscriptions.entries()) {
           if (roomId === m.sessionId) this.subscriptions.delete(client);
         }
-        ws.send(JSON.stringify({ t: "session_deleted", sessionId: m.sessionId, rooms }));
+        this.broadcastToAll({ t: "session_deleted", sessionId: m.sessionId, rooms });
       }).catch((err) =>
         ws.send(JSON.stringify({ t: "error", text: `delete_session failed: ${err instanceof Error ? err.message : String(err)}` })),
       );
@@ -272,6 +272,13 @@ export class Gateway {
     const s = JSON.stringify(msg);
     for (const ws of this.clients) {
       if (this.subscriptions.get(ws) !== roomId) continue;
+      try { ws.send(s); } catch { /* drop */ }
+    }
+  }
+
+  private broadcastToAll(msg: unknown): void {
+    const s = JSON.stringify(msg);
+    for (const ws of this.clients) {
       try { ws.send(s); } catch { /* drop */ }
     }
   }

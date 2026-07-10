@@ -44,6 +44,7 @@ export interface SessionManagerOptions {
     minSeqGap?: number;
     keepRecentEvents?: number;
   };
+  schedulerMode?: "bid" | "round-robin";
 }
 
 export interface SessionSnapshot {
@@ -88,6 +89,7 @@ export class SessionManager {
   private active?: { turnId: string; speakerId: string; generation: number; ac: AbortController };
   private lastTurnId?: string;
   private lastPrompt = "";
+  private roundRobinQueue: string[] = [];
   private running = false;
   private readonly pendingToolApprovals = new Map<string, { tool: string; resolve: (allow: boolean) => void }>();
   private lastCompactedSeq = 0;
@@ -140,6 +142,14 @@ export class SessionManager {
         addressedTo,
       });
 
+      if (this.isRoundRobin()) {
+        this.roundRobinQueue = this.orderedAgentIds();
+        if (!this.active && this.phase !== "speaking" && this.phase !== "speaker_granted") {
+          await this.grantNextRoundRobinSpeaker();
+        }
+        return;
+      }
+
       if (this.phase === "speaking" || this.phase === "speaker_granted") {
         return;
       }
@@ -147,6 +157,7 @@ export class SessionManager {
       await this.transition("collecting_bids", { epoch: this.epoch });
     });
 
+    if (this.isRoundRobin()) return;
     await this.collectAndMaybeArbitrate(text);
   }
 
@@ -305,17 +316,20 @@ export class SessionManager {
     if (!winner) return;
     const agent = this.byId.get(winner.bid.agentId);
     if (!agent) return;
+    await this.grantAgent(agent, winner.bid.kind, winner.bid);
+  }
 
+  private async grantAgent(agent: ISpeakerAgent, reason: string, bid?: Bid): Promise<void> {
     const turnId = ulid();
     const generation = Date.now();
     const ac = new AbortController();
     this.active = { turnId, speakerId: agent.id, generation, ac };
     this.bumpWaiting(agent.id);
-    await this.transition("speaker_granted", { turnId, speakerId: agent.id, bid: winner.bid });
+    await this.transition("speaker_granted", { turnId, speakerId: agent.id, ...(bid ? { bid } : {}) });
     await this.append("floor_grant", {
       participantId: agent.id,
       turnId,
-      reason: winner.bid.kind,
+      reason,
       deadlineMs: this.opts.turnTimeoutMs ?? 120_000,
     });
     void this.runTurn(agent, turnId, generation, ac);
@@ -386,8 +400,70 @@ export class SessionManager {
           author: { kind: "agent", id: bid.agentId, display: bid.agentId },
         });
       }
+      if (this.isRoundRobin()) {
+        await this.grantNextRoundRobinSpeaker();
+        return;
+      }
       await this.arbitrateIfPossible();
     }).catch(() => undefined);
+  }
+
+  private isRoundRobin(): boolean {
+    return this.opts.schedulerMode === "round-robin";
+  }
+
+  private orderedAgentIds(): string[] {
+    return [...this.byId.keys()];
+  }
+
+  private async grantNextRoundRobinSpeaker(): Promise<void> {
+    if (this.active || this.phase === "speaking" || this.phase === "speaker_granted") return;
+    const nextAgentId = this.roundRobinQueue.shift();
+    if (!nextAgentId) {
+      await this.transition("idle", { reason: "round-robin complete" });
+      return;
+    }
+    const agent = this.byId.get(nextAgentId);
+    if (!agent) {
+      await this.grantNextRoundRobinSpeaker();
+      return;
+    }
+    const bid = this.roundRobinBid(agent);
+    if (this.phase === "idle") await this.transition("collecting_bids", { epoch: this.epoch, scheduler: "round-robin" });
+    await this.transition("arbitrating", { epoch: this.epoch, scheduler: "round-robin" });
+    await this.append("speaker_selected", {
+      policyVersion: "round-robin-v1",
+      winner: {
+        bid,
+        score: 1,
+        components: {
+          base: 1,
+          capability: 0,
+          userMention: 0,
+          waiting: 0,
+          recentSpeakerPenalty: 0,
+          rebuttalBonus: 0,
+          confidenceTieBreaker: 0,
+        },
+      },
+      candidates: [],
+      scheduler: "round-robin",
+    }, "debug");
+    await this.grantAgent(agent, "round-robin", bid);
+  }
+
+  private roundRobinBid(agent: ISpeakerAgent): Bid {
+    return {
+      bidId: ulid(),
+      agentId: agent.id,
+      epoch: this.epoch,
+      kind: "answer",
+      confidence: 1,
+      createdAtSeq: this.opts.log.headSeq,
+      expiresAfterRound: this.epoch + 1,
+      revision: 0,
+      rationale: "round-robin scheduler",
+    };
   }
 
   private async persistDelta(

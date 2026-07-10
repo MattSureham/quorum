@@ -207,6 +207,45 @@ describe("SessionManager", () => {
     }
   });
 
+  it("runs round-robin sessions in fixed agent order without collecting bids", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const events: RoomEvent[] = [];
+    log.on((event) => events.push(event));
+
+    const alpha = new StubSpeaker("alpha", { confidence: 0.1, text: "alpha" });
+    const bravo = new StubSpeaker("bravo", { confidence: 1, text: "bravo" });
+    const charlie = new StubSpeaker("charlie", { confidence: 0.5, text: "charlie" });
+    const session = new SessionManager({
+      sessionId: "room",
+      title: "Round robin test",
+      log,
+      agents: [alpha, bravo, charlie],
+      schedulerMode: "round-robin",
+      settlingWindowMs: 20,
+      turnTimeoutMs: 1_000,
+    });
+
+    session.start();
+    try {
+      await session.submitUserPrompt("state your positions");
+      await waitFor(() => events.filter((event) => event.type === "turn_completed").length === 3, 2_000);
+      await waitFor(() => session.snapshot().phase === "idle");
+
+      const started = events
+        .filter((event) => event.type === "turn_started")
+        .map((event) => (event.body as any).speakerId);
+      expect(started).toEqual(["alpha", "bravo", "charlie"]);
+      expect(events.some((event) => event.type === "bid_submitted")).toBe(false);
+      expect(events.filter((event) => event.type === "speaker_selected").map((event) => (event.body as any).scheduler)).toEqual([
+        "round-robin",
+        "round-robin",
+        "round-robin",
+      ]);
+    } finally {
+      await session.stop();
+    }
+  });
+
   it("caps rebuttal bonus at 20 percent of base score", () => {
     const arbiter = new Arbiter();
     const decision = arbiter.decide({

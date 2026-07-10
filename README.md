@@ -275,7 +275,10 @@ The left session list also has a delete action. Deleting a session removes its
 local transcript/events, projections, turns, bids, working-memory summaries,
 shared memory, and agent-private native session ids from Quorum's SQLite store.
 Use it for completed projects or throwaway test sessions to keep the sidebar and
-local cache small.
+local cache small. The sidebar records a local deleted-session marker as soon as
+delete is requested, ignores stale snapshots for that id, and no longer falls
+back to showing a deleted final session. The daemon broadcasts `session_deleted`
+to every connected Web UI client.
 
 The setup form keeps its editable draft local to the modal. Field handlers copy
 input values before updating state, so typing `Session id` / `Title`, switching
@@ -285,9 +288,10 @@ modes, and toggling participants do not close the modal or blank the app.
 host keeps an in-memory multi-session registry, creates a new `SessionManager`
 for the selected roster, and the gateway routes `subscribe/post_message` by
 session id. Dynamically-created sessions persist their room metadata and can be
-continued after daemon restart. Current limitation: `按序陈述` currently creates
-a session but still executes on the shared bid kernel until a strict round-robin
-scheduler is added.
+continued after daemon restart. `按序陈述` now uses a strict round-robin
+scheduler: each agent speaks once in the selected participant order, the next
+speaker is granted only after the previous turn releases the floor, and routine
+bid collection is skipped for that mode.
 
 After a message is sent, the composer shows a run-status banner derived from the
 event stream. It reports submitted/waiting, bid collection, speaker selection,
