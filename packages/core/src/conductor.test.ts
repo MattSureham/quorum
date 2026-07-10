@@ -163,6 +163,34 @@ describe("Conductor", () => {
     }
   });
 
+  it("explicitly releases the human write floor", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const events: RoomEvent[] = [];
+    log.on((event) => events.push(event));
+
+    const agent = new ScriptedAgent("alpha", async function* () {
+      yield { type: "message", body: { text: "released" } };
+    });
+    const conductor = new Conductor({
+      roomId: "room", roomTitle: "Test", log,
+      participants: [agent], policy: freeForAll, config, primary: "alpha",
+    });
+
+    conductor.start();
+    try {
+      await conductor.takeWriteFloor();
+      await waitFor(() => events.some((e) => e.type === "system" && String((e.body as any).text).includes("human holds the write floor")));
+
+      conductor.releaseWriteFloor();
+      await waitFor(() => events.some((e) => e.type === "system" && String((e.body as any).text).includes("write floor released")));
+
+      await log.append({ author: { kind: "agent", id: "alpha", display: "alpha" }, type: "floor_request", body: { reason: "go", intent: "act" } });
+      await waitFor(() => events.some((e) => e.type === "floor_grant"));
+    } finally {
+      await conductor.stop();
+    }
+  });
+
   it("gates a tool call on human approval (approve_tool)", async () => {
     const log = new EventLog("room", new InMemoryStore());
     const events: RoomEvent[] = [];

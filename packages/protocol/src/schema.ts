@@ -115,6 +115,7 @@ export const ClientMessageSchema = z.discriminatedUnion("t", [
     model: z.string().optional(),
   }),
   z.object({ t: z.literal("take_write_floor"), roomId: z.string() }),
+  z.object({ t: z.literal("release_write_floor"), roomId: z.string() }),
   z.object({ t: z.literal("rollback"), roomId: z.string(), toHead: z.string() }),
 ]);
 

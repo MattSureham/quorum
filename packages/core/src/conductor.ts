@@ -106,6 +106,10 @@ export class Conductor {
     });
   }
 
+  releaseWriteFloor(reason = "human released the write floor"): void {
+    this.releaseHumanWriteFloor(reason);
+  }
+
   /** Resolve a pending tool-approval request (driven by the gateway's approve_tool). */
   resolveToolApproval(callId: string, allow: boolean): void {
     const pending = this.pendingApprovals.get(callId);

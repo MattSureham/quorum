@@ -22,6 +22,8 @@ export interface GatewayDeps {
   interrupt?: (hard: boolean) => Promise<void> | void;
   /** Let the human take the write floor to edit files directly (take_write_floor). */
   takeWriteFloor?: () => Promise<void> | void;
+  /** Explicitly release the human write floor without requiring a chat message. */
+  releaseWriteFloor?: () => Promise<void> | void;
   /** Roll the workspace back to a prior head (rollback); destructive git reset. */
   rollback?: (toHead: string) => Promise<void>;
   listSessions?: () => Room[];
@@ -253,6 +255,9 @@ export class Gateway {
         break;
       case "take_write_floor":
         void Promise.resolve(session.takeWriteFloor?.()).catch(() => {});
+        break;
+      case "release_write_floor":
+        void Promise.resolve(session.releaseWriteFloor?.()).catch(() => {});
         break;
       case "rollback":
         void session.rollback?.(m.toHead).catch((err) =>

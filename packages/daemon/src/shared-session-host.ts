@@ -95,6 +95,22 @@ export async function startSharedSessionRoom(
       compactMemory: (fromSeq, toSeq) => session.compactWorkingMemory(fromSeq, toSeq),
       listCredentials: () => store.readProviderConfigViews(),
       setCredential: (input) => store.upsertProviderConfig(input),
+      takeWriteFloor: async () => {
+        await log.append({
+          author: { kind: "system", id: "session", display: "SessionManager" },
+          type: "system",
+          body: { level: "info", text: "human holds the write floor — agent turns paused" },
+          visibility: "system",
+        });
+      },
+      releaseWriteFloor: async () => {
+        await log.append({
+          author: { kind: "system", id: "session", display: "SessionManager" },
+          type: "system",
+          body: { level: "info", text: "write floor released — human released the write floor" },
+          visibility: "system",
+        });
+      },
       setPolicy: () => {
         void log.append({
           author: { kind: "system", id: "session", display: "SessionManager" },

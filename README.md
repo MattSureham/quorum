@@ -99,6 +99,11 @@ selected language is stored in `localStorage` as `quorum.client.language` and
 applies immediately to the primary session, chat, participant, credential, and
 diagnostics controls.
 
+The composer's **Take write floor** action pauses agent file editing while the
+human edits the workspace directly. When held, the button changes to **Release
+write floor** and stays clickable; releasing it or sending a chat message lets
+agents continue.
+
 The built-in Claude-family local agent is named **Claude Code** because it uses
 the `claude-code` adapter and local Claude Code auth/session. Anthropic API
 models should be added as explicit API-model participants, for example a

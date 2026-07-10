@@ -70,6 +70,7 @@ export async function startRoom(room: Room, opts: { dbPath?: string; port?: numb
       setPolicy: (cfg) => conductor.setPolicy(policyFor(cfg), cfg),
       approveTool: (callId, allow) => conductor.resolveToolApproval(callId, allow),
       takeWriteFloor: () => conductor.takeWriteFloor(),
+      releaseWriteFloor: () => conductor.releaseWriteFloor(),
       rollback: ws
         ? async (toHead) => {
             // Serialize behind any active edit, then reset, then announce (SPEC §7.4).

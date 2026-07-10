@@ -116,6 +116,32 @@ describe("Gateway", () => {
     }
   });
 
+  it("routes write-floor take and release commands to host dependencies", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const calls: string[] = [];
+    const gateway = new Gateway({
+      log,
+      room,
+      humanId: "human",
+      setPolicy: () => {},
+      takeWriteFloor: () => { calls.push("take"); },
+      releaseWriteFloor: () => { calls.push("release"); },
+    }, 0);
+    await gateway.ready;
+    const ws = await connect(gateway.url());
+
+    try {
+      ws.send(JSON.stringify({ t: "take_write_floor", roomId: "room" }));
+      await waitFor(() => calls.includes("take"));
+      ws.send(JSON.stringify({ t: "release_write_floor", roomId: "room" }));
+      await waitFor(() => calls.includes("release"));
+      expect(calls).toEqual(["take", "release"]);
+    } finally {
+      ws.close();
+      await gateway.close();
+    }
+  });
+
   it("returns a replay projection from persisted events", async () => {
     const log = new EventLog("room", new InMemoryStore());
     await log.append({

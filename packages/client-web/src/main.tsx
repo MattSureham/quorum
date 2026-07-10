@@ -91,7 +91,10 @@ const zhText: Record<string, string> = {
   "Send": "发送",
   "Write floor held": "已持有写入权",
   "Take write floor": "获取写入权",
+  "Release write floor": "释放写入权",
   "Pause agents and edit files directly. Sending a message hands the floor back.": "暂停智能体并直接编辑文件。发送消息会交还发言权。",
+  "Release the write floor so agents can edit files again.": "释放写入权，让智能体可以继续编辑文件。",
+  "You hold the write floor. Release it or send a message to let agents continue editing.": "你正在持有写入权。点击释放或发送消息，让智能体继续编辑。",
   "Participants": "参与者",
   "Agents & Models": "智能体与模型",
   "In this room": "当前房间",
@@ -979,6 +982,10 @@ function App() {
     send({ t: "take_write_floor" });
   }
 
+  function releaseWriteFloor() {
+    send({ t: "release_write_floor" });
+  }
+
   function replayProjection() {
     const afterSeq = Math.max(0, Number.parseInt(replayAfterSeq, 10) || 0);
     setReplayAfterSeq(String(afterSeq));
@@ -1285,14 +1292,15 @@ function App() {
             <button
               className={holdsWriteFloor ? "write-floor-action holding" : "write-floor-action"}
               type="button"
-              disabled={!connected || holdsWriteFloor}
-              onClick={takeWriteFloor}
-              title={t("Pause agents and edit files directly. Sending a message hands the floor back.")}
+              disabled={!connected}
+              onClick={holdsWriteFloor ? releaseWriteFloor : takeWriteFloor}
+              title={holdsWriteFloor ? t("Release the write floor so agents can edit files again.") : t("Pause agents and edit files directly. Sending a message hands the floor back.")}
             >
               <PenLine size={16} />
-              <span>{holdsWriteFloor ? t("Write floor held") : t("Take write floor")}</span>
+              <span>{holdsWriteFloor ? t("Release write floor") : t("Take write floor")}</span>
             </button>
           </div>
+          {holdsWriteFloor ? <div className="write-floor-hint">{t("You hold the write floor. Release it or send a message to let agents continue editing.")}</div> : null}
         </section>
       </section>
 
