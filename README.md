@@ -269,7 +269,7 @@ session**. The setup modal supports:
 - session creation fields (`Session id`, `Title`)
 - per-session `Workspace path`; CLI/subprocess agents run from that path, and
   sandboxed tool execution is scoped there
-- mode selection for `自由讨论`, `抢麦/举手`, and `按序陈述`
+- mode selection for `Open discussion`, `Raise hand`, and `Round robin`
 
 The left session list also has a delete action. Deleting a session removes its
 local transcript/events, projections, turns, bids, working-memory summaries,
@@ -288,7 +288,7 @@ modes, and toggling participants do not close the modal or blank the app.
 host keeps an in-memory multi-session registry, creates a new `SessionManager`
 for the selected roster, and the gateway routes `subscribe/post_message` by
 session id. Dynamically-created sessions persist their room metadata and can be
-continued after daemon restart. `按序陈述` now uses a strict round-robin
+continued after daemon restart. `Round robin` now uses a strict round-robin
 scheduler: each agent speaks once in the selected participant order, the next
 speaker is granted only after the previous turn releases the floor, and routine
 bid collection is skipped for that mode.

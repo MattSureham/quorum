@@ -121,7 +121,7 @@ The following is the implementation trail from this session. It is written for t
 
 26. this change `feat: surface session setup flow`
     - Files: `packages/client-web/src/main.tsx`, `packages/client-web/src/styles.css`, `README.md`, `HANDOFF.md`.
-    - Work: added a left-sidebar New session entry and Session setup modal. The modal exposes participant selection, session id/title fields, and three intended modes: open discussion, raise-hand/抢麦, and round-robin/按序陈述. In the initial UI-only step Start was disabled; the next entry wires it to the backend.
+    - Work: added a left-sidebar New session entry and Session setup modal. The modal exposes participant selection, session id/title fields, and three intended modes: Open discussion, Raise hand, and Round robin. In the initial UI-only step Start was disabled; the next entry wires it to the backend.
 
 27. this change `feat: create sessions from web ui`
     - Files: `packages/protocol/src/types.ts`, `packages/protocol/src/schema.ts`, `packages/daemon/src/gateway/ws-server.ts`, `packages/daemon/src/shared-session-host.ts`, `packages/daemon/src/shared-session-host.test.ts`, `packages/client-web/src/main.tsx`, docs.
@@ -197,7 +197,11 @@ The following is the implementation trail from this session. It is written for t
 
 45. this change `feat: add strict round-robin scheduler`
     - Files: `packages/protocol/src/types.ts`, `packages/core/src/session-manager.ts`, `packages/core/src/session-manager.test.ts`, `packages/daemon/src/shared-session-host.ts`, `packages/daemon/src/shared-session-host.test.ts`, `packages/client-web/src/main.tsx`, `README.md`, `HANDOFF.md`.
-    - Work: implemented real `按序陈述` execution. Round-robin sessions persist `schedulerMode: "round-robin"` in room metadata, so continue/restart preserves the mode. `SessionManager` now skips routine bid collection in this mode and grants turns directly in selected participant order, one agent at a time, waiting for each floor release before selecting the next speaker. Tests cover core ordering and WebSocket-created shared sessions with no `bid_submitted` events.
+    - Work: implemented real `Round robin` execution. Round-robin sessions persist `schedulerMode: "round-robin"` in room metadata, so continue/restart preserves the mode. `SessionManager` now skips routine bid collection in this mode and grants turns directly in selected participant order, one agent at a time, waiting for each floor release before selecting the next speaker. Tests cover core ordering and WebSocket-created shared sessions with no `bid_submitted` events.
+
+46. this change `fix: use english mode labels in web ui`
+    - Files: `packages/client-web/src/main.tsx`, `README.md`, `HANDOFF.md`.
+    - Work: removed mixed Chinese/English labels from the Web UI Session setup modal. Mode choices now display as `Open discussion`, `Raise hand`, and `Round robin`; docs were updated to use the same English labels.
 
 What is already implemented:
 
@@ -328,7 +332,7 @@ SPEC.md       full design (Chinese): data model, Conductor state machine, adapte
 
 ## Where to change common things
 - **Agent/model config**: the Web UI right sidebar should be agent/model oriented. Users select or configure participants such as `codex`, `claude-code`, OpenClaw-style adapters, or direct API model agents such as DeepSeek/GLM/MiniMax. `claude-code` is the local Claude Code agent and should be displayed as `Claude Code`, not generic `Claude`; Anthropic API models should use explicit model names and the `api-model` adapter. Provider credentials are only hidden credential sources for API-model agents; do not put API key inputs directly in the persistent sidebar. The credential modal has built-in presets for OpenAI, DeepSeek, Zhipu, MiniMax, and Anthropic, and must support custom providers beyond presets. Credentials are persisted locally in SQLite and applied to daemon `process.env`; the browser only receives masked previews.
-- **Session creation**: the Web UI Session setup modal calls `create_session`; the shared-session host keeps an in-memory multi-session registry and the gateway routes snapshots/events by room id. The modal can set a per-session `workspacePath`; CLI agents run from that path and sandboxed tool execution is scoped there. Dynamically-created sessions persist room metadata and can be continued after daemon restart. `round-robin` / `按序陈述` persists `schedulerMode: "round-robin"` and uses the strict ordered scheduler in `SessionManager`; open discussion and raise-hand continue to use the shared bid kernel.
+- **Session creation**: the Web UI Session setup modal calls `create_session`; the shared-session host keeps an in-memory multi-session registry and the gateway routes snapshots/events by room id. The modal can set a per-session `workspacePath`; CLI agents run from that path and sandboxed tool execution is scoped there. Dynamically-created sessions persist room metadata and can be continued after daemon restart. `Round robin` persists `schedulerMode: "round-robin"` and uses the strict ordered scheduler in `SessionManager`; Open discussion and Raise hand continue to use the shared bid kernel.
 - **Session setup form state**: keep editable form state local to `SessionSetupModal`. Do not pass React event objects into function-style state updaters; copy `input.currentTarget.value` first, then update state with the plain value. Otherwise React can null `currentTarget` before the updater runs and the modal can crash while typing.
 - **Run visibility**: message sends should never appear silent. `packages/client-web/src/main.tsx` derives `RunStatus` from local submit time and room events; keep this banner updated when adding new phases or schedulers.
 - **Chat vs log**: the central Chat transcript should remain message-only. Keep non-message room/session events in diagnostics, recent activity, tool activity, memory, replay, or checkpoint panels; do not reintroduce raw event rows into the primary chat stream.

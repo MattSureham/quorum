@@ -1441,9 +1441,9 @@ function SessionSetupModal({
     })),
   ];
   const modes: Array<{ id: SessionMode; label: string; detail: string }> = [
-    { id: "open-discussion", label: "自由讨论", detail: "Agents can take turns through bids; best for exploration." },
-    { id: "raise-hand", label: "抢麦/举手", detail: "Agents request the floor and must wait for the active speaker to finish." },
-    { id: "round-robin", label: "按序陈述", detail: "Agents speak once each in the selected participant order." },
+    { id: "open-discussion", label: "Open discussion", detail: "Agents can take turns through bids; best for exploration." },
+    { id: "raise-hand", label: "Raise hand", detail: "Agents request the floor and must wait for the active speaker to finish." },
+    { id: "round-robin", label: "Round robin", detail: "Agents speak once each in the selected participant order." },
   ];
 
   function toggleParticipant(id: string) {
