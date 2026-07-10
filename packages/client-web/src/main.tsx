@@ -69,6 +69,8 @@ const zhText: Record<string, string> = {
   "Export session": "导出会话",
   "Show archived": "显示归档",
   "Hide archived": "隐藏归档",
+  "completed": "已完成",
+  "archived": "已归档",
   "Connection": "连接",
   "WebSocket": "WebSocket",
   "Room": "房间",
@@ -665,6 +667,14 @@ function nativeResumeWarning(events: RoomEvent[]): RoomEvent | undefined {
   });
 }
 
+function sessionLifecycle(room: Room, currentRoom: Room, events: RoomEvent[], archived: boolean, t: Translate): string {
+  if (archived) return t("archived");
+  if (room.id !== currentRoom.id) return t("active");
+  const shared = projectSharedSession(events);
+  if (shared.enabled && shared.phase === "idle" && shared.lastCompleted) return t("completed");
+  return t("active");
+}
+
 function projectSharedSession(events: RoomEvent[]): SharedSessionProjection {
   const pending = new Map<string, Bid>();
   let phase = "legacy";
@@ -1152,8 +1162,10 @@ function App() {
   }
 
   function exportSession(room: Room) {
+    const archived = archivedSessionIds.has(room.id);
     const payload = {
       exportedAt: new Date().toISOString(),
+      lifecycle: sessionLifecycle(room, displayRoom, displayEvents, archived, (text) => text),
       room,
       events: room.id === displayRoom.id ? displayEvents : [],
       memorySummaries: room.id === displayRoom.id ? memorySummaries : [],
@@ -1389,6 +1401,7 @@ function App() {
             >
               <span>{item.title}</span>
               <strong>{item.id}</strong>
+              <em>{sessionLifecycle(item, displayRoom, displayEvents, archivedSessionIds.has(item.id), t)}</em>
             </button>
             <button
               className="icon-action room-export-action"
