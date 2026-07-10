@@ -57,6 +57,7 @@ import "./styles.css";
 
 type ConnectionState = "idle" | "connecting" | "connected" | "offline" | "error";
 type SessionMode = "open-discussion" | "raise-hand" | "round-robin";
+type PermissionPolicy = "read-only" | "workspace-write" | "approval-required" | "full-auto";
 type Language = "en" | "zh";
 type Translate = (text: string) => string;
 
@@ -170,6 +171,15 @@ const zhText: Record<string, string> = {
   "Workspace path": "工作路径",
   "Optional absolute path for this session": "当前会话可选的绝对路径",
   "Mode": "模式",
+  "Permission policy": "权限策略",
+  "Read only": "只读",
+  "Workspace write": "工作区写入",
+  "Approval required": "需要审批",
+  "Full auto": "全自动",
+  "Agents can read context but should not edit files.": "智能体可读取上下文，但不应编辑文件。",
+  "Agents may edit the session workspace through the write floor.": "智能体可通过写入权编辑会话工作区。",
+  "External commands/tools should require human approval.": "外部命令/工具应要求人工审批。",
+  "Agents may run with their least restrictive local automation mode.": "智能体可使用最宽松的本地自动化模式。",
   "Open discussion": "自由讨论",
   "Agents can take turns through bids; best for exploration.": "智能体通过抢麦轮流发言，适合探索。",
   "Raise hand": "举手/抢麦",
@@ -349,6 +359,7 @@ interface SessionDraft {
   roomId: string;
   title: string;
   mode: SessionMode;
+  permissionPolicy: PermissionPolicy;
   workspacePath: string;
   participantIds: string[];
 }
@@ -392,6 +403,7 @@ const defaultSessionDraft: SessionDraft = {
   roomId: "new-session",
   title: "New session",
   mode: "open-discussion",
+  permissionPolicy: "workspace-write",
   workspacePath: "",
   participantIds: ["codex", "claude-code"],
 };
@@ -553,9 +565,23 @@ function buildSessionParticipants(draft: SessionDraft, currentRoom: Room): Parti
   for (const id of draft.participantIds) {
     const existing = currentRoom.participants.find((participant) => participant.id === id && participant.kind === "agent");
     const participant = existing ?? participantFromPreset(id);
-    if (participant && !participants.some((item) => item.id === participant.id)) participants.push({ ...participant, status: "idle" });
+    if (participant && !participants.some((item) => item.id === participant.id)) {
+      participants.push(withPermissionPolicy({ ...participant, status: "idle" }, draft.permissionPolicy));
+    }
   }
   return participants;
+}
+
+function withPermissionPolicy(participant: ParticipantDescriptor, policy: PermissionPolicy): ParticipantDescriptor {
+  const adapterConfig: Record<string, unknown> = { ...(participant.adapterConfig ?? {}), permissionPolicy: policy };
+  if (participant.adapter === "codex") {
+    adapterConfig.sandbox = policy === "read-only" ? "read-only" : policy === "full-auto" ? "danger-full-access" : "workspace-write";
+  } else if (participant.adapter === "claude-code") {
+    adapterConfig.permissionMode = policy === "full-auto" ? "bypassPermissions" : policy === "read-only" ? "default" : "acceptEdits";
+  } else if (participant.adapter === "api-model") {
+    adapterConfig.permissionPolicy = "read-only";
+  }
+  return { ...participant, adapterConfig };
 }
 
 function readImageAttachment(file: File): Promise<ImageAttachment> {
@@ -1422,6 +1448,7 @@ function App() {
       roomId: nextId,
       title: "New session",
       mode: "open-discussion",
+      permissionPolicy: "workspace-write",
       workspacePath: displayRoom.workspacePath ?? "",
       participantIds: agents.map((agent) => agent.id),
     });
@@ -2050,6 +2077,12 @@ function SessionSetupModal({
     { id: "raise-hand", label: t("Raise hand"), detail: t("Agents request the floor and must wait for the active speaker to finish.") },
     { id: "round-robin", label: t("Round robin"), detail: t("Agents speak once each in the selected participant order.") },
   ];
+  const permissionPolicies: Array<{ id: PermissionPolicy; label: string; detail: string }> = [
+    { id: "read-only", label: t("Read only"), detail: t("Agents can read context but should not edit files.") },
+    { id: "workspace-write", label: t("Workspace write"), detail: t("Agents may edit the session workspace through the write floor.") },
+    { id: "approval-required", label: t("Approval required"), detail: t("External commands/tools should require human approval.") },
+    { id: "full-auto", label: t("Full auto"), detail: t("Agents may run with their least restrictive local automation mode.") },
+  ];
 
   function toggleParticipant(id: string) {
     setDraft((current) => ({
@@ -2130,6 +2163,23 @@ function SessionSetupModal({
                 >
                   <strong>{mode.label}</strong>
                   <span>{mode.detail}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="session-setup-section">
+            <div className="mini-heading">{t("Permission policy")}</div>
+            <div className="mode-list">
+              {permissionPolicies.map((policy) => (
+                <button
+                  key={policy.id}
+                  className={draft.permissionPolicy === policy.id ? "mode-option selected" : "mode-option"}
+                  type="button"
+                  onClick={() => setDraft((current) => ({ ...current, permissionPolicy: policy.id }))}
+                >
+                  <strong>{policy.label}</strong>
+                  <span>{policy.detail}</span>
                 </button>
               ))}
             </div>

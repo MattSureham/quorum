@@ -256,6 +256,11 @@ The following is the implementation trail from this session. It is written for t
     - Work: added a first-pass observable harness view in the Web UI diagnostics. `Turn Trace` groups existing event-log events by `turnId` and shows speaker, duration, tool-call count, output count, and outcome for recent turns. This is derived from existing room events; backend-native token counts, stdout/stderr, native session ids, and detailed failure categories remain future work.
     - Verification: run `pnpm typecheck`, `pnpm test`, and `pnpm --filter @quorum/client-web build` after this change.
 
+58. this change `feat: configure session permission policy`
+    - Files: `packages/client-web/src/main.tsx`, `README.md`, `HANDOFF.md`.
+    - Work: added a permission-policy selector to Session setup with `read-only`, `workspace-write`, `approval-required`, and `full-auto`. New session participants receive `adapterConfig.permissionPolicy`; Codex maps it to `sandbox`, Claude Code maps it to `permissionMode`, and API-model participants remain read-only. This is the first UI/config slice; complete enforcement across every native tool path remains future work.
+    - Verification: run `pnpm typecheck`, `pnpm test`, and `pnpm --filter @quorum/client-web build` after this change.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:
@@ -305,6 +310,7 @@ What is already implemented:
 - Agents & Models now presents agent profiles with role/provider/model/capability summaries. Provider credentials remain separate hidden credential sources for API-model profiles.
 - Session rows show a first-pass lifecycle label (`active`, `completed`, `archived`) and exports include that lifecycle. The label is derived in the Web UI and is not yet a persisted lifecycle field.
 - Diagnostics include a derived Turn Trace panel that groups recent turns by `turnId` and shows speaker, duration, tool count, output count, and outcome.
+- Session setup exposes a permission-policy selector and writes the selected policy into new participants' adapter config.
 - Shared-session editable agent turns now use `GitWorkspace` write-floor serialization and per-turn checkpointing. `SessionManager` acquires/releases the workspace lease for agents with `canEditFiles`, records checkpoints when files changed, and waits for workspace initialization before git operations.
 - Local CLI agents such as Claude Code use shell launching on Windows so `.cmd` shims work.
 - Claude Code and Codex native session/thread ids are stored in agent-private memory and resumed best-effort. Resume failure records a diagnostic warning and falls back to the Quorum context bundle. The context bundle includes checksum/seq/hash anchors and error-control rules so native hidden memory is treated as advisory when it conflicts with Quorum state.

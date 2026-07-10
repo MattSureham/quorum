@@ -155,6 +155,11 @@ Each trace groups a turn by id and shows speaker, duration, tool-call count,
 output count, and outcome. This is an observable harness view over existing
 events; backend token/latency/native-session metrics are still future work.
 
+Session setup exposes a first-pass permission policy: read-only, workspace-write,
+approval-required, or full-auto. The selected policy is written into participant
+adapter config; Codex sandbox and Claude Code permission mode are mapped from it.
+Full policy enforcement across every native tool path is still ongoing.
+
 The built-in Claude-family local agent is named **Claude Code** because it uses
 the `claude-code` adapter and local Claude Code auth/session. Anthropic API
 models should be added as explicit API-model participants, for example a
