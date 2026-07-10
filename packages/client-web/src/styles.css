@@ -1981,6 +1981,48 @@ h1 {
   line-height: 1.35;
 }
 
+.continuity-card {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid #d6e4e7;
+  border-radius: 7px;
+  background: #ffffff;
+}
+
+.continuity-card.warning {
+  border-color: #e8c4bc;
+  background: #fff7f4;
+}
+
+.continuity-card div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.continuity-card span {
+  color: #60716b;
+  font-size: 11px;
+  font-weight: 720;
+}
+
+.continuity-card strong {
+  overflow: hidden;
+  color: #1e3036;
+  font-size: 12px;
+  font-weight: 780;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.continuity-card p {
+  margin: 0;
+  color: #60716b;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .speaker-order-row {
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr) auto;

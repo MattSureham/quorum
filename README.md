@@ -135,6 +135,12 @@ Archive hides a session locally without deleting SQLite data, Export downloads a
 JSON bundle of the currently loaded room/events/memory summaries, and Delete
 still performs a confirmed hard delete of Quorum's local session rows.
 
+Context continuity is visible in shared-session diagnostics. The panel surfaces
+native-resume failure warnings, shows when the room is continuing from the
+Quorum context bundle, and displays the latest memory-summary sequence range.
+Context checksums are still embedded in the agent prompt bundle rather than
+exposed as a standalone UI field.
+
 The built-in Claude-family local agent is named **Claude Code** because it uses
 the `claude-code` adapter and local Claude Code auth/session. Anthropic API
 models should be added as explicit API-model participants, for example a

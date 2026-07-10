@@ -163,6 +163,14 @@ const zhText: Record<string, string> = {
   "Speaking order": "发言顺序",
   "Completed speakers": "已发言",
   "Remaining speakers": "未发言",
+  "Continuity": "上下文继承",
+  "Native resume": "原生恢复",
+  "Fallback context": "上下文重建",
+  "Quorum context": "Quorum 上下文",
+  "No resume warning observed.": "未观察到恢复失败警告。",
+  "Latest memory": "最近记忆",
+  "No memory summary yet": "还没有记忆摘要",
+  "seq": "seq",
   "next": "下一位",
   "Agents speak once each in the selected participant order.": "智能体按所选参与者顺序各发言一次。",
   "current room": "当前房间",
@@ -631,6 +639,14 @@ function modeView(room: Room, events: RoomEvent[], t: Translate): ModeView {
     completedAgentIds: [],
     remainingAgentIds: [],
   };
+}
+
+function nativeResumeWarning(events: RoomEvent[]): RoomEvent | undefined {
+  return [...events].reverse().find((item) => {
+    if (item.type !== "system") return false;
+    const text = String((item.body as SystemBody).text ?? "");
+    return text.includes("native session resume failed");
+  });
 }
 
 function projectSharedSession(events: RoomEvent[]): SharedSessionProjection {
@@ -1585,7 +1601,7 @@ function App() {
         <details className="debug-details">
           <summary><SquareTerminal size={16} /> {t("Session diagnostics")}</summary>
           <div className="diagnostics-stack">
-            {shared.enabled ? <SharedSessionPanel shared={shared} room={displayRoom} events={displayEvents} t={t} /> : null}
+            {shared.enabled ? <SharedSessionPanel shared={shared} room={displayRoom} events={displayEvents} summaries={memorySummaries} t={t} /> : null}
             {shared.enabled ? (
               <ReplayPanel
                 afterSeq={replayAfterSeq}
@@ -2178,11 +2194,25 @@ function Metric({ icon, label, value }: { icon: React.ReactNode; label: string; 
   );
 }
 
-function SharedSessionPanel({ shared, room, events, t }: { shared: SharedSessionProjection; room: Room; events: RoomEvent[]; t: Translate }) {
+function SharedSessionPanel({
+  shared,
+  room,
+  events,
+  summaries,
+  t,
+}: {
+  shared: SharedSessionProjection;
+  room: Room;
+  events: RoomEvent[];
+  summaries: MemorySummary[];
+  t: Translate;
+}) {
   const scoreComponents = Object.entries(shared.selected?.components ?? {})
     .filter(([, value]) => Number.isFinite(value));
   const mode = modeView(room, events, t);
   const participantName = (id: string) => mode.orderedAgents.find((agent) => agent.id === id)?.display ?? id;
+  const resumeWarning = nativeResumeWarning(events);
+  const latestSummary = summaries.at(-1);
   return (
     <section className="shared-panel shared-session-panel">
       <div className="shared-panel-head">
@@ -2230,6 +2260,18 @@ function SharedSessionPanel({ shared, room, events, t }: { shared: SharedSession
           </div>
         </>
       ) : null}
+      <div className="mini-heading mode-heading">{t("Continuity")}</div>
+      <div className={resumeWarning ? "continuity-card warning" : "continuity-card"}>
+        <div>
+          <span>{resumeWarning ? t("Fallback context") : t("Native resume")}</span>
+          <strong>{resumeWarning ? `#${resumeWarning.seq}` : t("Quorum context")}</strong>
+        </div>
+        <p>{resumeWarning ? String((resumeWarning.body as SystemBody).text ?? "") : t("No resume warning observed.")}</p>
+        <div>
+          <span>{t("Latest memory")}</span>
+          <strong>{latestSummary ? `${t("seq")} ${latestSummary.sourceFromSeq}-${latestSummary.sourceToSeq}` : t("No memory summary yet")}</strong>
+        </div>
+      </div>
       {scoreComponents.length ? (
         <>
           <div className="mini-heading score-heading">{t("Score components")}</div>
