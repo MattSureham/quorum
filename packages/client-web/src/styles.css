@@ -1107,26 +1107,44 @@ h1 {
   white-space: nowrap;
 }
 
+.run-status-banner.queued,
 .run-status-banner.submitted,
 .run-status-banner.collecting,
-.run-status-banner.arbitrating {
+.run-status-banner.arbitrating,
+.run-status-banner.contacting {
   border-color: #cbdcf4;
   background: #f2f6fc;
 }
 
+.run-status-banner.queued .run-status-dot,
 .run-status-banner.submitted .run-status-dot,
 .run-status-banner.collecting .run-status-dot,
-.run-status-banner.arbitrating .run-status-dot {
+.run-status-banner.arbitrating .run-status-dot,
+.run-status-banner.contacting .run-status-dot {
   background: #4f79b8;
 }
 
+.run-status-banner.thinking,
 .run-status-banner.speaking {
   border-color: #b7ddcf;
   background: #eff9f5;
 }
 
+.run-status-banner.thinking .run-status-dot,
 .run-status-banner.speaking .run-status-dot {
   background: #2f8f68;
+  animation: pulse 1.1s ease-in-out infinite;
+}
+
+.run-status-banner.tool,
+.run-status-banner.approval {
+  border-color: #e3cf9e;
+  background: #fff9ea;
+}
+
+.run-status-banner.tool .run-status-dot,
+.run-status-banner.approval .run-status-dot {
+  background: #b8842f;
   animation: pulse 1.1s ease-in-out infinite;
 }
 

@@ -170,6 +170,18 @@ const zhText: Record<string, string> = {
   "Compact": "压缩",
   "No memory summaries": "没有记忆摘要",
   "Still waiting": "仍在等待",
+  "Queued": "已排队",
+  "Contacting agent": "正在联系智能体",
+  "Agent thinking": "智能体思考中",
+  "Tool running": "工具运行中",
+  "Waiting approval": "等待审批",
+  "Completed without reply": "已完成但无回复",
+  "Message accepted by the daemon; waiting for the scheduler.": "daemon 已接收消息，等待调度器处理。",
+  "Agent turn granted; waiting for the first output.": "智能体已获得发言权，等待首个输出。",
+  "Agent is producing intermediate output.": "智能体正在产生中间输出。",
+  "Tool call is running:": "工具调用正在运行：",
+  "Approve or deny the requested tool call:": "请批准或拒绝工具调用：",
+  "The last turn completed, but no agent message was added after your prompt.": "上一轮已完成，但你的 prompt 之后没有新增智能体消息。",
   "agent bid(s) received so far.": "个智能体抢麦已收到。",
   "selected.": "已选择。",
   "is responding.": "正在回复。",
@@ -381,7 +393,21 @@ interface SharedSessionProjection {
 }
 
 interface RunStatus {
-  state: "offline" | "submitted" | "collecting" | "arbitrating" | "speaking" | "settling" | "completed" | "idle" | "error";
+  state:
+    | "offline"
+    | "queued"
+    | "submitted"
+    | "collecting"
+    | "arbitrating"
+    | "contacting"
+    | "thinking"
+    | "tool"
+    | "approval"
+    | "speaking"
+    | "settling"
+    | "completed"
+    | "idle"
+    | "error";
   label: string;
   detail: string;
   lastEvent?: string;
@@ -492,6 +518,45 @@ function humanHoldsWriteFloor(events: RoomEvent[]): boolean {
   return held;
 }
 
+function latestHumanMessage(events: RoomEvent[]): RoomEvent | undefined {
+  return [...events].reverse().find((item) => item.type === "message" && item.author.kind === "human");
+}
+
+function hasAgentMessageAfter(events: RoomEvent[], seq: number): boolean {
+  return events.some((item) => item.seq > seq && item.type === "message" && item.author.kind === "agent");
+}
+
+function unresolvedToolCall(events: RoomEvent[], afterSeq: number): ToolCallBody | undefined {
+  const calls = new Map<string, ToolCallBody>();
+  for (const item of events) {
+    if (item.seq <= afterSeq) continue;
+    if (item.type === "tool_call") {
+      const body = item.body as ToolCallBody;
+      calls.set(body.callId, body);
+    } else if (item.type === "tool_result") {
+      const body = item.body as ToolResultBody;
+      calls.delete(body.callId);
+    }
+  }
+  return [...calls.values()].at(-1);
+}
+
+function latestTurnFailedAfter(events: RoomEvent[], seq: number): RoomEvent | undefined {
+  return [...events].reverse().find((item) => item.seq > seq && item.type === "turn_failed");
+}
+
+function latestTurnCompletedAfter(events: RoomEvent[], seq: number): RoomEvent | undefined {
+  return [...events].reverse().find((item) => item.seq > seq && item.type === "turn_completed");
+}
+
+function latestAgentOutputAfter(events: RoomEvent[], seq: number): RoomEvent | undefined {
+  return [...events].reverse().find((item) =>
+    item.seq > seq &&
+    item.author.kind === "agent" &&
+    (item.type === "thinking" || item.type === "turn_output_chunk" || item.type === "message")
+  );
+}
+
 function projectSharedSession(events: RoomEvent[]): SharedSessionProjection {
   const pending = new Map<string, Bid>();
   let phase = "legacy";
@@ -579,15 +644,28 @@ function describeRunStatus({
   t: Translate;
 }): RunStatus {
   const latest = events[events.length - 1];
-  const lastEvent = latest ? `${latest.type} by ${latest.author.display}` : undefined;
+  const lastEvent = latest ? `#${latest.seq} ${latest.type} by ${latest.author.display}` : undefined;
   const waitMs = lastSubmittedAt ? Math.max(0, now - lastSubmittedAt) : 0;
   const waitSeconds = Math.floor(waitMs / 1000);
   const waitingPrefix = waitMs > 5_000 ? `${t("Still waiting")} (${waitSeconds}s). ` : "";
   if (!connected) return { state: "offline", label: t("Offline"), detail: t("Connect to a room before sending."), lastEvent };
   if (lastSubmittedAt && (!latest || latest.ts < lastSubmittedAt)) {
-    return { state: "submitted", label: t("Submitted"), detail: `${waitingPrefix}${t("Message sent locally; waiting for daemon acknowledgement.")}`, lastEvent };
+    return { state: "queued", label: t("Queued"), detail: `${waitingPrefix}${t("Message sent locally; waiting for daemon acknowledgement.")}`, lastEvent };
   }
-  if (latest?.type === "turn_failed") return { state: "error", label: t("Turn failed"), detail: t("The latest agent turn failed. Check diagnostics for details."), lastEvent };
+  const humanMessage = latestHumanMessage(events);
+  const afterPromptSeq = humanMessage?.seq ?? 0;
+  const pendingApproval = pendingApprovals(events).at(-1);
+  const toolCall = unresolvedToolCall(events, afterPromptSeq);
+  const failed = latestTurnFailedAfter(events, afterPromptSeq);
+  const completed = latestTurnCompletedAfter(events, afterPromptSeq);
+  const agentOutput = latestAgentOutputAfter(events, afterPromptSeq);
+  if (failed) return { state: "error", label: t("Turn failed"), detail: t("The latest agent turn failed. Check diagnostics for details."), lastEvent };
+  if (pendingApproval) {
+    return { state: "approval", label: t("Waiting approval"), detail: `${waitingPrefix}${t("Approve or deny the requested tool call:")} ${pendingApproval.tool}`, lastEvent };
+  }
+  if (toolCall) {
+    return { state: "tool", label: t("Tool running"), detail: `${waitingPrefix}${t("Tool call is running:")} ${toolCall.tool}`, lastEvent };
+  }
   if (shared.enabled) {
     if (shared.phase === "collecting_bids") {
       return { state: "collecting", label: t("Collecting bids"), detail: `${waitingPrefix}${shared.pendingBids.length} ${t("agent bid(s) received so far.")}`, lastEvent };
@@ -596,17 +674,26 @@ function describeRunStatus({
       return { state: "arbitrating", label: t("Selecting speaker"), detail: shared.selected?.agentId ? `${shared.selected.agentId} ${t("selected.")}` : t("Choosing who speaks next."), lastEvent };
     }
     if (shared.phase === "speaking") {
+      if (!agentOutput) {
+        return { state: "contacting", label: t("Contacting agent"), detail: `${waitingPrefix}${t("Agent turn granted; waiting for the first output.")}`, lastEvent };
+      }
+      if (agentOutput.type === "thinking" || agentOutput.type === "turn_output_chunk") {
+        return { state: "thinking", label: t("Agent thinking"), detail: `${waitingPrefix}${t("Agent is producing intermediate output.")}`, lastEvent };
+      }
       return { state: "speaking", label: t("Speaking"), detail: `${waitingPrefix}${shared.activeSpeaker ? `${shared.activeSpeaker} ${t("is responding.")}` : t("An agent is responding.")}`, lastEvent };
     }
     if (shared.phase === "settling") {
       return { state: "settling", label: t("Settling"), detail: t("Finalizing the turn and checking for follow-up bids."), lastEvent };
     }
     if (shared.phase === "idle" && shared.lastCompleted) {
+      if (humanMessage && completed && !hasAgentMessageAfter(events, humanMessage.seq)) {
+        return { state: "error", label: t("Completed without reply"), detail: t("The last turn completed, but no agent message was added after your prompt."), lastEvent };
+      }
       return { state: "completed", label: t("Completed"), detail: `${t("Last turn completed:")} ${shared.lastCompleted}.`, lastEvent };
     }
   }
   if (latest?.type === "message" && latest.author.kind === "human") {
-    return { state: "submitted", label: t("Waiting for agents"), detail: t("Human message is in the room; waiting for an agent to react."), lastEvent };
+    return { state: "submitted", label: t("Waiting for agents"), detail: `${waitingPrefix}${t("Message accepted by the daemon; waiting for the scheduler.")}`, lastEvent };
   }
   return { state: "idle", label: t("Idle"), detail: latest ? t("No active agent turn.") : t("No messages in this session yet."), lastEvent };
 }

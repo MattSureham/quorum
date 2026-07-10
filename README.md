@@ -112,6 +112,12 @@ agents are distinguished from direct API models, and badges surface file-edit,
 command/tool, vision, placeholder, key-required, and health-unknown states so
 the participant list is not just a name roster.
 
+The run-status banner explains the current execution stage rather than only
+showing a final phase. It distinguishes local queueing, daemon acknowledgement,
+bid collection, speaker selection, agent contact, agent thinking/output, running
+tools, waiting for tool approval, normal completion, failure, and the important
+"completed without visible reply" case.
+
 The built-in Claude-family local agent is named **Claude Code** because it uses
 the `claude-code` adapter and local Claude Code auth/session. Anthropic API
 models should be added as explicit API-model participants, for example a
