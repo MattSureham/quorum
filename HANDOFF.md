@@ -203,6 +203,10 @@ The following is the implementation trail from this session. It is written for t
     - Files: `packages/client-web/src/main.tsx`, `README.md`, `HANDOFF.md`.
     - Work: removed mixed Chinese/English labels from the Web UI Session setup modal. Mode choices now display as `Open discussion`, `Raise hand`, and `Round robin`; docs were updated to use the same English labels.
 
+47. this change `feat: add web ui language switcher`
+    - Files: `packages/client-web/src/main.tsx`, `packages/client-web/src/styles.css`, `README.md`, `HANDOFF.md`.
+    - Work: added a lightweight English/Chinese language switcher in the left Connection panel. The selected language is persisted in `localStorage` under `quorum.client.language` and is applied immediately to the main session/chat controls, participants, agent/model panel, credentials modal, session setup modal, and diagnostics panels. The implementation uses a local dictionary and `t()` helper without adding an i18n dependency.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:
@@ -336,6 +340,7 @@ SPEC.md       full design (Chinese): data model, Conductor state machine, adapte
 - **Session setup form state**: keep editable form state local to `SessionSetupModal`. Do not pass React event objects into function-style state updaters; copy `input.currentTarget.value` first, then update state with the plain value. Otherwise React can null `currentTarget` before the updater runs and the modal can crash while typing.
 - **Run visibility**: message sends should never appear silent. `packages/client-web/src/main.tsx` derives `RunStatus` from local submit time and room events; keep this banner updated when adding new phases or schedulers.
 - **Chat vs log**: the central Chat transcript should remain message-only. Keep non-message room/session events in diagnostics, recent activity, tool activity, memory, replay, or checkpoint panels; do not reintroduce raw event rows into the primary chat stream.
+- **Web UI language**: `packages/client-web/src/main.tsx` has a lightweight local `zhText` dictionary and `t()` helper. The language switcher lives in the left Connection panel and persists `quorum.client.language` in `localStorage`. When adding user-visible Web UI text, route it through `t()` or add a dictionary entry.
 - **Image chat**: `MessageBody.attachments` supports image data URLs. The Web UI handles upload/preview/display, `post_message` transports attachments, and `api-model` turns convert images to OpenAI-compatible `image_url` content. CLI agents currently see image metadata/data URLs in text projection; add a file bridge before claiming full local CLI vision support.
 - **API-model failures**: `packages/daemon/src/adapters/api-model.ts` must never silently complete on missing keys, HTTP errors, or empty model responses. It should emit a visible message so the run-status banner and transcript explain what happened.
 - **The room (agents, policy, workspace)**: the initial room is still defined in `quorum.config.json` at the repo root (or `QUORUM_CONFIG=<path>`). `packages/cli/src/index.ts` loads it via `loadConfig()` and falls back to built-in defaults if the file is missing. New Web UI sessions may override `workspacePath` per session.

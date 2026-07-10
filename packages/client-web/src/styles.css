@@ -114,6 +114,38 @@ button {
   background: #ffffff;
 }
 
+.language-toggle {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.language-toggle span {
+  color: #64716d;
+  font-size: 12px;
+  font-weight: 720;
+}
+
+.language-toggle button {
+  min-width: 42px;
+  height: 28px;
+  border: 1px solid #d5dedb;
+  border-radius: 7px;
+  color: #26322f;
+  background: #ffffff;
+  font-size: 12px;
+  font-weight: 760;
+  cursor: pointer;
+}
+
+.language-toggle button.selected {
+  border-color: #8bc6b2;
+  color: #14533f;
+  background: #eaf7f2;
+}
+
 .panel-title,
 .section-heading {
   display: flex;

@@ -53,6 +53,168 @@ import "./styles.css";
 
 type ConnectionState = "idle" | "connecting" | "connected" | "offline" | "error";
 type SessionMode = "open-discussion" | "raise-hand" | "round-robin";
+type Language = "en" | "zh";
+type Translate = (text: string) => string;
+
+const zhText: Record<string, string> = {
+  "Sessions": "会话",
+  "New session": "新建会话",
+  "Delete session": "删除会话",
+  "Connection": "连接",
+  "WebSocket": "WebSocket",
+  "Room": "房间",
+  "Connecting": "连接中",
+  "Connect": "连接",
+  "Language": "语言",
+  "No workspace selected": "未选择工作路径",
+  "Interrupt": "中断",
+  "Events": "事件",
+  "Speaker": "发言者",
+  "Floor": "发言权",
+  "Phase": "阶段",
+  "Last turn": "上一轮",
+  "Activity": "活动",
+  "Kernel": "内核",
+  "Chat": "聊天",
+  "No messages in this session yet.": "当前会话还没有消息。",
+  "messages": "条消息",
+  "Approve": "批准",
+  "Deny": "拒绝",
+  "No agents in this session": "当前会话没有智能体",
+  "This session includes": "当前会话包含",
+  "CLI agent; uses the local Codex session/auth": "CLI 智能体；使用本地 Codex 会话/认证",
+  "CLI/SDK agent; uses Claude Code auth": "CLI/SDK 智能体；使用 Claude Code 认证",
+  "Agent adapter placeholder; not installed in this build": "智能体 adapter 占位；当前构建未安装",
+  "Direct API model agent": "直接 API 模型智能体",
+  "Message the session": "发送消息到会话",
+  "Image": "图片",
+  "Send": "发送",
+  "Write floor held": "已持有写入权",
+  "Take write floor": "获取写入权",
+  "Pause agents and edit files directly. Sending a message hands the floor back.": "暂停智能体并直接编辑文件。发送消息会交还发言权。",
+  "Participants": "参与者",
+  "Agents & Models": "智能体与模型",
+  "In this room": "当前房间",
+  "Available agent/model types": "可用智能体/模型类型",
+  "Configure API keys": "配置 API keys",
+  "Connect to a room before editing API credentials.": "连接到房间后才能编辑 API 凭证。",
+  "Agent/model selection is room-based; provider keys only unlock API-model agents.": "智能体/模型选择按房间生效；provider keys 只用于解锁 API 模型智能体。",
+  "Session diagnostics": "会话诊断",
+  "Tool Activity": "工具活动",
+  "Recent Activity": "最近活动",
+  "Checkpoints": "检查点",
+  "API model credentials": "API 模型凭证",
+  "These keys are credential sources for API-model agents. CLI agents such as Codex and Claude Code use their own local auth/session.": "这些 key 是 API 模型智能体的凭证来源。Codex 和 Claude Code 等 CLI 智能体使用自己的本地登录/会话。",
+  "Add provider": "添加 provider",
+  "Close credentials": "关闭凭证",
+  "New provider": "新 provider",
+  "not set": "未设置",
+  "Provider id": "Provider id",
+  "API key": "API key",
+  "Env var": "环境变量",
+  "Base URL": "Base URL",
+  "Default model": "默认模型",
+  "Save": "保存",
+  "Saving": "正在保存",
+  "Done": "完成",
+  "Session setup": "会话设置",
+  "Choose participants and a discussion mode, then start a new shared session.": "选择参与者和讨论模式，然后启动新的共享会话。",
+  "Session id": "会话 id",
+  "Title": "标题",
+  "Workspace path": "工作路径",
+  "Optional absolute path for this session": "当前会话可选的绝对路径",
+  "Mode": "模式",
+  "Open discussion": "自由讨论",
+  "Agents can take turns through bids; best for exploration.": "智能体通过抢麦轮流发言，适合探索。",
+  "Raise hand": "举手/抢麦",
+  "Agents request the floor and must wait for the active speaker to finish.": "智能体申请发言权，并等待当前发言者结束。",
+  "Round robin": "按序陈述",
+  "Agents speak once each in the selected participant order.": "智能体按所选参与者顺序各发言一次。",
+  "current room": "当前房间",
+  "available": "可用",
+  "Close": "关闭",
+  "Start session": "启动会话",
+  "Close session setup": "关闭会话设置",
+  "Shared Session": "共享会话",
+  "active": "活跃",
+  "selected": "已选择",
+  "Score components": "评分组成",
+  "Bid queue": "抢麦队列",
+  "No pending bids": "没有待处理抢麦",
+  "Debug events": "调试事件",
+  "No debug events": "没有调试事件",
+  "Replay": "重放",
+  "after seq": "起始 seq",
+  "Run": "运行",
+  "events": "事件",
+  "head": "head",
+  "phase": "阶段",
+  "speaker": "发言者",
+  "bids": "抢麦",
+  "last": "最后",
+  "Memory": "记忆",
+  "from": "从",
+  "to": "到",
+  "Compact": "压缩",
+  "No memory summaries": "没有记忆摘要",
+  "Still waiting": "仍在等待",
+  "agent bid(s) received so far.": "个智能体抢麦已收到。",
+  "selected.": "已选择。",
+  "is responding.": "正在回复。",
+  "Last turn completed:": "上一轮完成：",
+  "Offline": "离线",
+  "Connect to a room before sending.": "连接到房间后才能发送。",
+  "Submitted": "已提交",
+  "Message sent locally; waiting for daemon acknowledgement.": "消息已在本地提交，等待 daemon 确认。",
+  "Turn failed": "发言失败",
+  "The latest agent turn failed. Check diagnostics for details.": "最近一次智能体发言失败。请查看诊断信息。",
+  "Collecting bids": "收集抢麦",
+  "Selecting speaker": "选择发言者",
+  "Choosing who speaks next.": "正在选择下一位发言者。",
+  "Speaking": "发言中",
+  "An agent is responding.": "智能体正在回复。",
+  "Settling": "结算中",
+  "Finalizing the turn and checking for follow-up bids.": "正在结束本轮并检查后续抢麦。",
+  "Completed": "已完成",
+  "Waiting for agents": "等待智能体",
+  "Human message is in the room; waiting for an agent to react.": "人工消息已进入房间，等待智能体响应。",
+  "Idle": "空闲",
+  "No active agent turn.": "当前没有活跃的智能体发言。",
+  "live": "在线",
+  "idle": "空闲",
+  "thinking": "思考中",
+  "offline": "离线",
+  "connected": "已连接",
+  "connecting": "连接中",
+  "error": "错误",
+  "open": "开放",
+  "pending": "等待中",
+  "preview": "预览",
+  "reconnecting": "重连中",
+  "none": "无",
+  "room": "房间",
+  "key": "key",
+  "set": "已设置",
+  "needs key": "需要 key",
+  "adapter TBD": "adapter 待定",
+  "local auth": "本地认证",
+  "Custom API provider credential": "自定义 API provider 凭证",
+  "Used by": "用于",
+  "Credential source for API-model agents": "API 模型智能体的凭证来源",
+  "Leave blank to keep existing key": "留空以保留现有 key",
+  "Paste API key": "粘贴 API key",
+  "Provider default": "Provider 默认值",
+  "This removes its local transcript, memory summaries, tool/cache records, and native session ids from Quorum storage.": "这会从 Quorum 本地存储中删除该会话的 transcript、记忆摘要、工具/缓存记录和原生 session id。",
+  "Session id is required": "必须填写会话 id",
+  "Select at least one agent/model": "至少选择一个智能体/模型",
+  "Provider id is required": "必须填写 provider id",
+  "Roll the workspace back to": "将工作区回滚到",
+  "This is a hard git reset — commits after it are discarded.": "这是 hard git reset，之后的提交会被丢弃。",
+};
+
+function translate(language: Language, text: string): string {
+  return language === "zh" ? zhText[text] ?? text : text;
+}
 
 type ServerMessage =
   | { t: "snapshot"; room: Room; events: RoomEvent[]; summaries?: MemorySummary[] }
@@ -394,44 +556,46 @@ function describeRunStatus({
   shared,
   lastSubmittedAt,
   now,
+  t,
 }: {
   connected: boolean;
   events: RoomEvent[];
   shared: SharedSessionProjection;
   lastSubmittedAt?: number;
   now: number;
+  t: Translate;
 }): RunStatus {
   const latest = events[events.length - 1];
   const lastEvent = latest ? `${latest.type} by ${latest.author.display}` : undefined;
   const waitMs = lastSubmittedAt ? Math.max(0, now - lastSubmittedAt) : 0;
   const waitSeconds = Math.floor(waitMs / 1000);
-  const waitingPrefix = waitMs > 5_000 ? `Still waiting (${waitSeconds}s). ` : "";
-  if (!connected) return { state: "offline", label: "Offline", detail: "Connect to a room before sending.", lastEvent };
+  const waitingPrefix = waitMs > 5_000 ? `${t("Still waiting")} (${waitSeconds}s). ` : "";
+  if (!connected) return { state: "offline", label: t("Offline"), detail: t("Connect to a room before sending."), lastEvent };
   if (lastSubmittedAt && (!latest || latest.ts < lastSubmittedAt)) {
-    return { state: "submitted", label: "Submitted", detail: `${waitingPrefix}Message sent locally; waiting for daemon acknowledgement.`, lastEvent };
+    return { state: "submitted", label: t("Submitted"), detail: `${waitingPrefix}${t("Message sent locally; waiting for daemon acknowledgement.")}`, lastEvent };
   }
-  if (latest?.type === "turn_failed") return { state: "error", label: "Turn failed", detail: "The latest agent turn failed. Check diagnostics for details.", lastEvent };
+  if (latest?.type === "turn_failed") return { state: "error", label: t("Turn failed"), detail: t("The latest agent turn failed. Check diagnostics for details."), lastEvent };
   if (shared.enabled) {
     if (shared.phase === "collecting_bids") {
-      return { state: "collecting", label: "Collecting bids", detail: `${waitingPrefix}${shared.pendingBids.length} agent bid(s) received so far.`, lastEvent };
+      return { state: "collecting", label: t("Collecting bids"), detail: `${waitingPrefix}${shared.pendingBids.length} ${t("agent bid(s) received so far.")}`, lastEvent };
     }
     if (shared.phase === "arbitrating" || shared.phase === "speaker_granted") {
-      return { state: "arbitrating", label: "Selecting speaker", detail: shared.selected?.agentId ? `${shared.selected.agentId} selected.` : "Choosing who speaks next.", lastEvent };
+      return { state: "arbitrating", label: t("Selecting speaker"), detail: shared.selected?.agentId ? `${shared.selected.agentId} ${t("selected.")}` : t("Choosing who speaks next."), lastEvent };
     }
     if (shared.phase === "speaking") {
-      return { state: "speaking", label: "Speaking", detail: `${waitingPrefix}${shared.activeSpeaker ? `${shared.activeSpeaker} is responding.` : "An agent is responding."}`, lastEvent };
+      return { state: "speaking", label: t("Speaking"), detail: `${waitingPrefix}${shared.activeSpeaker ? `${shared.activeSpeaker} ${t("is responding.")}` : t("An agent is responding.")}`, lastEvent };
     }
     if (shared.phase === "settling") {
-      return { state: "settling", label: "Settling", detail: "Finalizing the turn and checking for follow-up bids.", lastEvent };
+      return { state: "settling", label: t("Settling"), detail: t("Finalizing the turn and checking for follow-up bids."), lastEvent };
     }
     if (shared.phase === "idle" && shared.lastCompleted) {
-      return { state: "completed", label: "Completed", detail: `Last turn completed: ${shared.lastCompleted}.`, lastEvent };
+      return { state: "completed", label: t("Completed"), detail: `${t("Last turn completed:")} ${shared.lastCompleted}.`, lastEvent };
     }
   }
   if (latest?.type === "message" && latest.author.kind === "human") {
-    return { state: "submitted", label: "Waiting for agents", detail: "Human message is in the room; waiting for an agent to react.", lastEvent };
+    return { state: "submitted", label: t("Waiting for agents"), detail: t("Human message is in the room; waiting for an agent to react."), lastEvent };
   }
-  return { state: "idle", label: "Idle", detail: latest ? "No active agent turn." : "No messages in this session yet.", lastEvent };
+  return { state: "idle", label: t("Idle"), detail: latest ? t("No active agent turn.") : t("No messages in this session yet."), lastEvent };
 }
 
 function loadSettings(): ClientSettings {
@@ -448,6 +612,15 @@ function saveSettings(settings: ClientSettings): void {
   localStorage.setItem("quorum.client.settings", JSON.stringify(settings));
 }
 
+function loadLanguage(): Language {
+  const raw = localStorage.getItem("quorum.client.language");
+  return raw === "zh" ? "zh" : "en";
+}
+
+function saveLanguage(language: Language): void {
+  localStorage.setItem("quorum.client.language", language);
+}
+
 function isTauriRuntime(): boolean {
   return "__TAURI_INTERNALS__" in window;
 }
@@ -462,6 +635,7 @@ async function resolveDesktopSettings(settings: ClientSettings): Promise<ClientS
 function App() {
   const [settings, setSettings] = useState<ClientSettings>(() => loadSettings());
   const [draftSettings, setDraftSettings] = useState<ClientSettings>(() => loadSettings());
+  const [language, setLanguage] = useState<Language>(() => loadLanguage());
   const [status, setStatus] = useState<ConnectionState>("idle");
   const [error, setError] = useState<string>("");
   const [room, setRoom] = useState<Room | undefined>();
@@ -513,14 +687,19 @@ function App() {
   const approvals = isPreview ? [] : pendingApprovals(events);
   const holdsWriteFloor = isPreview ? false : humanHoldsWriteFloor(events);
   const shared = useMemo(() => projectSharedSession(displayEvents), [displayEvents]);
+  const t = useMemo<Translate>(() => (text) => translate(language, text), [language]);
   const runStatus = useMemo(
-    () => describeRunStatus({ connected, events: displayEvents, shared, lastSubmittedAt, now }),
-    [connected, displayEvents, shared, lastSubmittedAt, now],
+    () => describeRunStatus({ connected, events: displayEvents, shared, lastSubmittedAt, now, t }),
+    [connected, displayEvents, shared, lastSubmittedAt, now, t],
   );
 
   useEffect(() => {
     saveSettings(settings);
   }, [settings]);
+
+  useEffect(() => {
+    saveLanguage(language);
+  }, [language]);
 
   useEffect(() => {
     if (!lastSubmittedAt) return undefined;
@@ -717,7 +896,7 @@ function App() {
   }
 
   function deleteSession(room: Room) {
-    if (!window.confirm(`Delete session "${room.title}"?\n\nThis removes its local transcript, memory summaries, tool/cache records, and native session ids from Quorum storage.`)) return;
+    if (!window.confirm(`${t("Delete session")} "${room.title}"?\n\n${t("This removes its local transcript, memory summaries, tool/cache records, and native session ids from Quorum storage.")}`)) return;
     if (send({ t: "delete_session", sessionId: room.id })) {
       deletedSessionIdsRef.current.add(room.id);
       setDeletedSessionIds((current) => new Set(current).add(room.id));
@@ -734,12 +913,12 @@ function App() {
   function createSessionFromDraft(draft: SessionDraft) {
     const id = draft.roomId.trim();
     if (!id) {
-      setError("Session id is required");
+      setError(t("Session id is required"));
       return;
     }
     const participants = buildSessionParticipants(draft, displayRoom);
     if (!participants.some((participant) => participant.kind === "agent")) {
-      setError("Select at least one agent/model");
+      setError(t("Select at least one agent/model"));
       return;
     }
     if (send({
@@ -867,7 +1046,7 @@ function App() {
   function saveCredential(draft: CredentialDraft) {
     const providerId = draft.providerId.trim();
     if (!providerId) {
-      setCredentialStatus("Provider id is required");
+      setCredentialStatus(t("Provider id is required"));
       return;
     }
     const payload: Record<string, unknown> = {
@@ -878,11 +1057,11 @@ function App() {
       model: draft.model.trim() || undefined,
     };
     if (draft.apiKey.trim()) payload.apiKey = draft.apiKey.trim();
-    if (send(payload)) setCredentialStatus(`Saving ${providerId}...`);
+    if (send(payload)) setCredentialStatus(`${t("Saving")} ${providerId}...`);
   }
 
   function rollback(toHead: string) {
-    if (!window.confirm(`Roll the workspace back to ${toHead.slice(0, 7)}?\nThis is a hard git reset — commits after it are discarded.`)) return;
+    if (!window.confirm(`${t("Roll the workspace back to")} ${toHead.slice(0, 7)}?\n${t("This is a hard git reset — commits after it are discarded.")}`)) return;
     send({ t: "rollback", toHead });
   }
 
@@ -918,7 +1097,7 @@ function App() {
         <section className="panel room-list-panel">
           <div className="panel-title">
             <MessageSquare size={16} />
-            <span>Sessions</span>
+            <span>{t("Sessions")}</span>
           </div>
           {visibleRooms.map((item) => (
             <div key={item.id} className={item.id === displayRoom.id ? "room-list-row active" : "room-list-row"}>
@@ -935,8 +1114,8 @@ function App() {
             <button
               className="icon-action room-delete-action"
               type="button"
-              title="Delete session"
-              aria-label={`Delete session ${item.title}`}
+              title={t("Delete session")}
+              aria-label={`${t("Delete session")} ${item.title}`}
               onClick={() => deleteSession(item)}
             >
               <Trash2 size={15} />
@@ -945,25 +1124,25 @@ function App() {
           ))}
           <button className="secondary-action full-width-action" type="button" onClick={openSessionSetup}>
             <Plus size={15} />
-            <span>New session</span>
+            <span>{t("New session")}</span>
           </button>
         </section>
 
         <section className="panel connection-panel">
           <div className="panel-title">
             <Plug size={16} />
-            <span>Connection</span>
-            <StatusPill status={status} preview={isPreview} />
+            <span>{t("Connection")}</span>
+            <StatusPill status={status} preview={isPreview} t={t} />
           </div>
           <label>
-            <span>WebSocket</span>
+            <span>{t("WebSocket")}</span>
             <input
               value={draftSettings.url}
               onChange={(input) => setDraftSettings((current) => ({ ...current, url: input.currentTarget.value }))}
             />
           </label>
           <label>
-            <span>Room</span>
+            <span>{t("Room")}</span>
             <input
               value={draftSettings.roomId}
               onChange={(input) => setDraftSettings((current) => ({ ...current, roomId: input.currentTarget.value }))}
@@ -971,9 +1150,14 @@ function App() {
           </label>
           <button className="primary-action" type="button" onClick={applyConnection}>
             <Radio size={16} />
-            <span>{status === "connecting" ? "Connecting" : "Connect"}</span>
+            <span>{status === "connecting" ? t("Connecting") : t("Connect")}</span>
           </button>
           {error ? <div className="inline-alert"><AlertTriangle size={14} />{error}</div> : null}
+          <div className="language-toggle" aria-label={t("Language")}>
+            <span>{t("Language")}</span>
+            <button type="button" className={language === "en" ? "selected" : ""} onClick={() => setLanguage("en")}>EN</button>
+            <button type="button" className={language === "zh" ? "selected" : ""} onClick={() => setLanguage("zh")}>中文</button>
+          </div>
         </section>
       </aside>
 
@@ -981,30 +1165,30 @@ function App() {
         <header className="topbar chat-topbar">
           <div>
             <h1>{displayRoom.title}</h1>
-            <div className="workspace-path">{displayRoom.workspacePath ?? "No workspace selected"}</div>
+            <div className="workspace-path">{displayRoom.workspacePath ?? t("No workspace selected")}</div>
           </div>
           <div className="topbar-actions">
             <SegmentedControl current={policy.name} disabled={status !== "connected" || shared.enabled} onChange={setPolicy} />
             <button className="danger-action" type="button" disabled={status !== "connected"} onClick={sendInterrupt}>
               <Zap size={16} />
-              <span>Interrupt</span>
+              <span>{t("Interrupt")}</span>
             </button>
           </div>
         </header>
 
         <section className="status-strip compact-status">
-          <Metric icon={<Activity size={16} />} label="Events" value={String(displayEvents.length)} />
-          <Metric icon={<Hand size={16} />} label={shared.enabled ? "Speaker" : "Floor"} value={shared.activeSpeaker ?? activeTurn?.participantId ?? "open"} />
-          <Metric icon={<PauseCircle size={16} />} label={shared.enabled ? "Phase" : "Last turn"} value={shared.enabled ? shared.phase : latestRelease?.reason ?? "pending"} />
-          <Metric icon={<Radio size={16} />} label="Activity" value={runStatus.label} />
-          <Metric icon={<Settings2 size={16} />} label="Kernel" value={shared.enabled ? "shared-session" : policy.name} />
+          <Metric icon={<Activity size={16} />} label={t("Events")} value={String(displayEvents.length)} />
+          <Metric icon={<Hand size={16} />} label={shared.enabled ? t("Speaker") : t("Floor")} value={shared.activeSpeaker ?? activeTurn?.participantId ?? t("open")} />
+          <Metric icon={<PauseCircle size={16} />} label={shared.enabled ? t("Phase") : t("Last turn")} value={shared.enabled ? shared.phase : latestRelease?.reason ?? t("pending")} />
+          <Metric icon={<Radio size={16} />} label={t("Activity")} value={runStatus.label} />
+          <Metric icon={<Settings2 size={16} />} label={t("Kernel")} value={shared.enabled ? "shared-session" : policy.name} />
         </section>
 
         <section className="transcript chat-transcript">
           <div className="section-heading">
             <MessageSquare size={17} />
-            <span>Chat</span>
-            <small>{chatEvents.length} messages</small>
+            <span>{t("Chat")}</span>
+            <small>{chatEvents.length} {t("messages")}</small>
           </div>
           <div className="event-feed" ref={feedRef} onScroll={onFeedScroll}>
             {chatEvents.length ? (
@@ -1012,7 +1196,7 @@ function App() {
             ) : (
               <div className="empty-chat">
                 <MessageSquare size={18} />
-                <span>No messages in this session yet.</span>
+                <span>{t("No messages in this session yet.")}</span>
               </div>
             )}
           </div>
@@ -1029,10 +1213,10 @@ function App() {
                 </div>
                 <div className="approval-actions">
                   <button type="button" className="approve" disabled={!connected} onClick={() => approveTool(signal.callId, true)}>
-                    <Check size={14} /> Approve
+                    <Check size={14} /> {t("Approve")}
                   </button>
                   <button type="button" className="deny" disabled={!connected} onClick={() => approveTool(signal.callId, false)}>
-                    <XCircle size={14} /> Deny
+                    <XCircle size={14} /> {t("Deny")}
                   </button>
                 </div>
               </div>
@@ -1044,7 +1228,7 @@ function App() {
           <RunStatusBanner status={runStatus} />
           <div className="session-participant-summary">
             <Bot size={14} />
-            <span>{agents.length ? `This session includes ${agents.map((agent) => agent.display).join(", ")}` : "No agents in this session"}</span>
+            <span>{agents.length ? `${t("This session includes")} ${agents.map((agent) => agent.display).join(", ")}` : t("No agents in this session")}</span>
           </div>
           <div className="agent-targets">
             {agents.map((agent) => (
@@ -1066,7 +1250,7 @@ function App() {
             onKeyDown={(key) => {
               if (key.key === "Enter" && (key.metaKey || key.ctrlKey)) sendMessage();
             }}
-            placeholder="Message the session"
+            placeholder={t("Message the session")}
           />
           {composerAttachments.length ? (
             <div className="composer-attachments">
@@ -1092,21 +1276,21 @@ function App() {
             />
             <button className="secondary-action attach-action" type="button" disabled={!connected} onClick={() => fileInputRef.current?.click()}>
               <Plus size={16} />
-              <span>Image</span>
+              <span>{t("Image")}</span>
             </button>
             <button className="send-action" type="button" disabled={!connected || (!composer.trim() && !composerAttachments.length)} onClick={sendMessage}>
               <Send size={16} />
-              <span>Send</span>
+              <span>{t("Send")}</span>
             </button>
             <button
               className={holdsWriteFloor ? "write-floor-action holding" : "write-floor-action"}
               type="button"
               disabled={!connected || holdsWriteFloor}
               onClick={takeWriteFloor}
-              title="Pause agents and edit files directly. Sending a message hands the floor back."
+              title={t("Pause agents and edit files directly. Sending a message hands the floor back.")}
             >
               <PenLine size={16} />
-              <span>{holdsWriteFloor ? "Write floor held" : "Take write floor"}</span>
+              <span>{holdsWriteFloor ? t("Write floor held") : t("Take write floor")}</span>
             </button>
           </div>
         </section>
@@ -1114,10 +1298,10 @@ function App() {
 
       <aside className="config-sidebar">
         <section className="panel">
-          <div className="panel-title"><Bot size={16} /><span>Participants</span></div>
+          <div className="panel-title"><Bot size={16} /><span>{t("Participants")}</span></div>
           <div className="participant-list">
             {participants.map((participant) => (
-              <ParticipantRow key={participant.id} participant={participant} active={activeTurn?.participantId === participant.id} />
+              <ParticipantRow key={participant.id} participant={participant} active={activeTurn?.participantId === participant.id} t={t} />
             ))}
           </div>
         </section>
@@ -1127,12 +1311,13 @@ function App() {
           participants={participants}
           views={credentialViews}
           onConfigure={() => setCredentialsOpen(true)}
+          t={t}
         />
 
         <details className="debug-details">
-          <summary><SquareTerminal size={16} /> Session diagnostics</summary>
+          <summary><SquareTerminal size={16} /> {t("Session diagnostics")}</summary>
           <div className="diagnostics-stack">
-            {shared.enabled ? <SharedSessionPanel shared={shared} /> : null}
+            {shared.enabled ? <SharedSessionPanel shared={shared} t={t} /> : null}
             {shared.enabled ? (
               <ReplayPanel
                 afterSeq={replayAfterSeq}
@@ -1140,6 +1325,7 @@ function App() {
                 disabled={!connected}
                 onAfterSeq={setReplayAfterSeq}
                 onReplay={replayProjection}
+                t={t}
               />
             ) : null}
             {shared.enabled ? (
@@ -1151,11 +1337,12 @@ function App() {
                 onFromSeq={setMemoryFromSeq}
                 onToSeq={setMemoryToSeq}
                 onCompact={compactMemory}
+                t={t}
               />
             ) : null}
             <div className="section-heading compact">
               <Wrench size={16} />
-              <span>Tool Activity</span>
+              <span>{t("Tool Activity")}</span>
               <ChevronDown size={15} />
             </div>
             <div className="tool-list">
@@ -1165,7 +1352,7 @@ function App() {
             </div>
             <div className="section-heading compact">
               <Activity size={16} />
-              <span>Recent Activity</span>
+              <span>{t("Recent Activity")}</span>
               <ChevronDown size={15} />
             </div>
             <div className="activity-list">
@@ -1177,7 +1364,7 @@ function App() {
         </details>
 
         <details className="debug-details">
-          <summary><GitCommitHorizontal size={16} /> Checkpoints</summary>
+          <summary><GitCommitHorizontal size={16} /> {t("Checkpoints")}</summary>
           <div className="checkpoint-list diagnostics-stack">
             {checkpoints.slice(-4).reverse().map((item) => (
               <CheckpointRow key={item.id} event={item} canRollback={connected} onRollback={rollback} />
@@ -1196,6 +1383,7 @@ function App() {
           onSave={saveCredential}
           onAddProvider={addCredentialDraft}
           onClose={() => setCredentialsOpen(false)}
+          t={t}
         />
       ) : null}
 
@@ -1206,6 +1394,7 @@ function App() {
           onStart={createSessionFromDraft}
           connected={connected}
           onClose={() => setSessionSetupOpen(false)}
+          t={t}
         />
       ) : null}
     </main>
@@ -1217,21 +1406,23 @@ function AgentModelPanel({
   participants,
   views,
   onConfigure,
+  t,
 }: {
   connected: boolean;
   participants: ParticipantDescriptor[];
   views: ProviderConfigView[];
   onConfigure: () => void;
+  t: Translate;
 }) {
   const roomAgents = participants.filter((participant) => participant.kind === "agent");
   return (
     <section className="panel agent-model-panel">
       <div className="panel-title">
         <Settings2 size={16} />
-        <span>Agents & Models</span>
+        <span>{t("Agents & Models")}</span>
       </div>
       <div className="agent-model-section">
-        <div className="mini-heading">In this room</div>
+        <div className="mini-heading">{t("In this room")}</div>
         <div className="agent-model-list">
           {roomAgents.map((agent) => (
             <div key={agent.id} className="agent-model-row active">
@@ -1240,27 +1431,27 @@ function AgentModelPanel({
                 <strong>{agent.display}</strong>
                 <span>{formatAgentDetail(agent)}</span>
               </div>
-              <span className="credential-state configured">room</span>
+              <span className="credential-state configured">{t("room")}</span>
             </div>
           ))}
         </div>
       </div>
       <div className="agent-model-section">
-        <div className="mini-heading">Available agent/model types</div>
+        <div className="mini-heading">{t("Available agent/model types")}</div>
         <div className="agent-model-list">
           {agentModelPresets.map((preset) => {
             const view = preset.providerId ? views.find((provider) => provider.providerId === preset.providerId) : undefined;
             const configured = preset.providerId ? view?.configured : preset.id !== "openclaw";
             const state = preset.providerId
-              ? (configured ? `key ${view?.apiKeyPreview ?? "set"}` : "needs key")
-              : preset.id === "openclaw" ? "adapter TBD" : "local auth";
+              ? (configured ? `${t("key")} ${view?.apiKeyPreview ?? t("set")}` : t("needs key"))
+              : preset.id === "openclaw" ? t("adapter TBD") : t("local auth");
             const statusClass = configured ? "credential-state configured" : "credential-state";
             return (
               <div key={preset.id} className="agent-model-row">
                 <Bot size={15} />
                 <div>
                   <strong>{preset.display}</strong>
-                  <span>{preset.detail}</span>
+                  <span>{t(preset.detail)}</span>
                 </div>
                 <span className={statusClass}>{state}</span>
               </div>
@@ -1270,10 +1461,10 @@ function AgentModelPanel({
       </div>
       <button type="button" className="secondary-action provider-config-action" disabled={!connected} onClick={onConfigure}>
         <KeyRound size={15} />
-        <span>Configure API keys</span>
+        <span>{t("Configure API keys")}</span>
       </button>
-      {!connected ? <div className="muted-note">Connect to a room before editing API credentials.</div> : null}
-      <div className="muted-note">Agent/model selection is room-based; provider keys only unlock API-model agents.</div>
+      {!connected ? <div className="muted-note">{t("Connect to a room before editing API credentials.")}</div> : null}
+      <div className="muted-note">{t("Agent/model selection is room-based; provider keys only unlock API-model agents.")}</div>
     </section>
   );
 }
@@ -1284,12 +1475,12 @@ function formatAgentDetail(agent: ParticipantDescriptor): string {
   return model ? `${adapter} / ${model}` : adapter;
 }
 
-function modelsUsingProvider(providerId: string): string {
-  if (!providerId) return "Custom API provider credential";
+function modelsUsingProvider(providerId: string, t: Translate): string {
+  if (!providerId) return t("Custom API provider credential");
   const models = agentModelPresets
     .filter((preset) => preset.providerId === providerId)
     .map((preset) => preset.display);
-  return models.length ? `Used by ${models.join(", ")}` : "Credential source for API-model agents";
+  return models.length ? `${t("Used by")} ${models.join(", ")}` : t("Credential source for API-model agents");
 }
 
 function CredentialsModal({
@@ -1301,6 +1492,7 @@ function CredentialsModal({
   onSave,
   onAddProvider,
   onClose,
+  t,
 }: {
   connected: boolean;
   drafts: CredentialDraft[];
@@ -1310,6 +1502,7 @@ function CredentialsModal({
   onSave: (draft: CredentialDraft) => void;
   onAddProvider: () => void;
   onClose: () => void;
+  t: Translate;
 }) {
   return (
     <div className="credential-modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -1324,16 +1517,16 @@ function CredentialsModal({
           <div>
             <div className="panel-title" id="credential-modal-title">
               <KeyRound size={16} />
-              <span>API model credentials</span>
+              <span>{t("API model credentials")}</span>
             </div>
-            <p>These keys are credential sources for API-model agents. CLI agents such as Codex and Claude Code use their own local auth/session.</p>
+            <p>{t("These keys are credential sources for API-model agents. CLI agents such as Codex and Claude Code use their own local auth/session.")}</p>
           </div>
           <div className="credential-modal-head-actions">
             <button type="button" className="secondary-action compact-action" onClick={onAddProvider}>
               <Plus size={15} />
-              <span>Add provider</span>
+              <span>{t("Add provider")}</span>
             </button>
-            <button type="button" className="icon-action" onClick={onClose} aria-label="Close credentials">
+            <button type="button" className="icon-action" onClick={onClose} aria-label={t("Close credentials")}>
               <XCircle size={18} />
             </button>
           </div>
@@ -1346,15 +1539,15 @@ function CredentialsModal({
               <div key={draft.draftId} className="credential-card">
                 <div className="credential-card-head">
                   <div>
-                    <strong>{draft.providerId || "New provider"}</strong>
-                    <span>{modelsUsingProvider(draft.providerId)}</span>
+                    <strong>{draft.providerId || t("New provider")}</strong>
+                    <span>{modelsUsingProvider(draft.providerId, t)}</span>
                   </div>
                   <span className={view?.configured ? "credential-state configured" : "credential-state"}>
-                    {view?.configured ? `set ${view.apiKeyPreview ?? ""}` : "not set"}
+                    {view?.configured ? `${t("set")} ${view.apiKeyPreview ?? ""}` : t("not set")}
                   </span>
                 </div>
                 <label>
-                  <span>Provider id</span>
+                  <span>{t("Provider id")}</span>
                   <input
                     disabled={draft.locked}
                     placeholder="zhipu, moonshot, openrouter..."
@@ -1363,32 +1556,32 @@ function CredentialsModal({
                   />
                 </label>
                 <label>
-                  <span>API key</span>
+                  <span>{t("API key")}</span>
                   <input
                     type="password"
                     autoComplete="off"
-                    placeholder={view?.configured ? "Leave blank to keep existing key" : "Paste API key"}
+                    placeholder={view?.configured ? t("Leave blank to keep existing key") : t("Paste API key")}
                     value={draft.apiKey}
                     onChange={(input) => onChange(draft.draftId, { apiKey: input.currentTarget.value })}
                   />
                 </label>
                 <label>
-                  <span>Env var</span>
+                  <span>{t("Env var")}</span>
                   <input
                     value={draft.envVar}
                     onChange={(input) => onChange(draft.draftId, { envVar: input.currentTarget.value })}
                   />
                 </label>
                 <label>
-                  <span>Base URL</span>
+                  <span>{t("Base URL")}</span>
                   <input
-                    placeholder="Provider default"
+                    placeholder={t("Provider default")}
                     value={draft.baseUrl}
                     onChange={(input) => onChange(draft.draftId, { baseUrl: input.currentTarget.value })}
                   />
                 </label>
                 <label>
-                  <span>Default model</span>
+                  <span>{t("Default model")}</span>
                   <input
                     value={draft.model}
                     onChange={(input) => onChange(draft.draftId, { model: input.currentTarget.value })}
@@ -1396,7 +1589,7 @@ function CredentialsModal({
                 </label>
                 <button type="button" className="secondary-action" disabled={!connected} onClick={() => onSave(draft)}>
                   <Check size={14} />
-                  <span>Save</span>
+                  <span>{t("Save")}</span>
                 </button>
               </div>
             );
@@ -1404,7 +1597,7 @@ function CredentialsModal({
         </div>
         {status ? <div className="credential-status">{status}</div> : null}
         <div className="credential-modal-actions">
-          <button type="button" className="primary-action" onClick={onClose}>Done</button>
+          <button type="button" className="primary-action" onClick={onClose}>{t("Done")}</button>
         </div>
       </section>
     </div>
@@ -1417,12 +1610,14 @@ function SessionSetupModal({
   connected,
   onStart,
   onClose,
+  t,
 }: {
   initialDraft: SessionDraft;
   currentRoom: Room;
   connected: boolean;
   onStart: (draft: SessionDraft) => void;
   onClose: () => void;
+  t: Translate;
 }) {
   const [draft, setDraft] = useState<SessionDraft>(initialDraft);
   const currentAgentIds = new Set(currentRoom.participants.filter((participant) => participant.kind === "agent").map((participant) => participant.id));
@@ -1436,14 +1631,14 @@ function SessionSetupModal({
     ...agentModelPresets.filter((preset) => !currentAgentIds.has(preset.id)).map((preset) => ({
       id: preset.id,
       display: preset.display,
-      detail: preset.detail,
+      detail: t(preset.detail),
       active: false,
     })),
   ];
   const modes: Array<{ id: SessionMode; label: string; detail: string }> = [
-    { id: "open-discussion", label: "Open discussion", detail: "Agents can take turns through bids; best for exploration." },
-    { id: "raise-hand", label: "Raise hand", detail: "Agents request the floor and must wait for the active speaker to finish." },
-    { id: "round-robin", label: "Round robin", detail: "Agents speak once each in the selected participant order." },
+    { id: "open-discussion", label: t("Open discussion"), detail: t("Agents can take turns through bids; best for exploration.") },
+    { id: "raise-hand", label: t("Raise hand"), detail: t("Agents request the floor and must wait for the active speaker to finish.") },
+    { id: "round-robin", label: t("Round robin"), detail: t("Agents speak once each in the selected participant order.") },
   ];
 
   function toggleParticipant(id: string) {
@@ -1468,20 +1663,20 @@ function SessionSetupModal({
           <div>
             <div className="panel-title" id="session-setup-title">
               <MessageSquare size={16} />
-              <span>Session setup</span>
+              <span>{t("Session setup")}</span>
             </div>
-            <p>Choose participants and a discussion mode, then start a new shared session.</p>
+            <p>{t("Choose participants and a discussion mode, then start a new shared session.")}</p>
           </div>
-          <button type="button" className="icon-action" onClick={onClose} aria-label="Close session setup">
+          <button type="button" className="icon-action" onClick={onClose} aria-label={t("Close session setup")}>
             <XCircle size={18} />
           </button>
         </div>
 
         <div className="session-setup-grid">
           <section className="session-setup-section">
-            <div className="mini-heading">New session</div>
+            <div className="mini-heading">{t("New session")}</div>
             <label>
-              <span>Session id</span>
+              <span>{t("Session id")}</span>
               <input
                 value={draft.roomId}
                 onChange={(input) => {
@@ -1491,7 +1686,7 @@ function SessionSetupModal({
               />
             </label>
             <label>
-              <span>Title</span>
+              <span>{t("Title")}</span>
               <input
                 value={draft.title}
                 onChange={(input) => {
@@ -1501,10 +1696,10 @@ function SessionSetupModal({
               />
             </label>
             <label>
-              <span>Workspace path</span>
+              <span>{t("Workspace path")}</span>
               <input
                 value={draft.workspacePath}
-                placeholder={currentRoom.workspacePath ?? "Optional absolute path for this session"}
+                placeholder={currentRoom.workspacePath ?? t("Optional absolute path for this session")}
                 onChange={(input) => {
                   const value = input.currentTarget.value;
                   setDraft((current) => ({ ...current, workspacePath: value }));
@@ -1514,7 +1709,7 @@ function SessionSetupModal({
           </section>
 
           <section className="session-setup-section">
-            <div className="mini-heading">Mode</div>
+            <div className="mini-heading">{t("Mode")}</div>
             <div className="mode-list">
               {modes.map((mode) => (
                 <button
@@ -1531,7 +1726,7 @@ function SessionSetupModal({
           </section>
 
           <section className="session-setup-section wide">
-            <div className="mini-heading">Participants</div>
+            <div className="mini-heading">{t("Participants")}</div>
             <div className="participant-picker-list">
               {participantOptions.map((participant) => (
                 <label key={participant.id} className="participant-picker-row">
@@ -1544,7 +1739,7 @@ function SessionSetupModal({
                     <strong>{participant.display}</strong>
                     <span>{participant.detail}</span>
                   </div>
-                  <i>{participant.active ? "current room" : "available"}</i>
+                  <i>{participant.active ? t("current room") : t("available")}</i>
                 </label>
               ))}
             </div>
@@ -1552,21 +1747,21 @@ function SessionSetupModal({
         </div>
 
         <div className="credential-modal-actions">
-          <button type="button" className="secondary-action" onClick={onClose}>Close</button>
-          <button type="button" className="primary-action" disabled={!connected} onClick={() => onStart(draft)}>Start session</button>
+          <button type="button" className="secondary-action" onClick={onClose}>{t("Close")}</button>
+          <button type="button" className="primary-action" disabled={!connected} onClick={() => onStart(draft)}>{t("Start session")}</button>
         </div>
       </section>
     </div>
   );
 }
 
-function StatusPill({ status, preview }: { status: ConnectionState; preview: boolean }) {
+function StatusPill({ status, preview, t }: { status: ConnectionState; preview: boolean; t: Translate }) {
   const reconnecting = status === "offline";
   const label = reconnecting ? "reconnecting" : preview ? "preview" : status;
   return (
     <span className={`status-pill ${status}`}>
       {reconnecting ? <RefreshCcw size={11} className="spin" /> : null}
-      {label}
+      {t(label)}
     </span>
   );
 }
@@ -1584,7 +1779,7 @@ function RunStatusBanner({ status }: { status: RunStatus }) {
   );
 }
 
-function ParticipantRow({ participant, active }: { participant: ParticipantDescriptor; active: boolean }) {
+function ParticipantRow({ participant, active, t }: { participant: ParticipantDescriptor; active: boolean; t: Translate }) {
   const Icon = participant.kind === "human" ? UserRound : Bot;
   return (
     <div className={active ? "participant-row active" : "participant-row"}>
@@ -1593,7 +1788,7 @@ function ParticipantRow({ participant, active }: { participant: ParticipantDescr
         <strong>{participant.display}</strong>
         <span>{participant.adapter ?? participant.kind}</span>
       </div>
-      <i>{active ? "live" : participant.status}</i>
+      <i>{active ? t("live") : t(participant.status)}</i>
     </div>
   );
 }
@@ -1661,27 +1856,27 @@ function Metric({ icon, label, value }: { icon: React.ReactNode; label: string; 
   );
 }
 
-function SharedSessionPanel({ shared }: { shared: SharedSessionProjection }) {
+function SharedSessionPanel({ shared, t }: { shared: SharedSessionProjection; t: Translate }) {
   const scoreComponents = Object.entries(shared.selected?.components ?? {})
     .filter(([, value]) => Number.isFinite(value));
   return (
     <section className="shared-panel shared-session-panel">
       <div className="shared-panel-head">
         <Activity size={15} />
-        <strong>Shared Session</strong>
+        <strong>{t("Shared Session")}</strong>
         <span>{shared.phase}</span>
       </div>
       <div className="shared-kv">
-        <span>active</span>
-        <strong>{shared.activeSpeaker ?? "open"}</strong>
+        <span>{t("active")}</span>
+        <strong>{shared.activeSpeaker ?? t("open")}</strong>
       </div>
       <div className="shared-kv">
-        <span>selected</span>
-        <strong>{shared.selected?.agentId ? `${shared.selected.agentId} · ${shared.selected.kind} · ${shared.selected.score?.toFixed(3) ?? "n/a"}` : "none"}</strong>
+        <span>{t("selected")}</span>
+        <strong>{shared.selected?.agentId ? `${shared.selected.agentId} · ${shared.selected.kind} · ${shared.selected.score?.toFixed(3) ?? "n/a"}` : t("none")}</strong>
       </div>
       {scoreComponents.length ? (
         <>
-          <div className="mini-heading score-heading">Score components</div>
+          <div className="mini-heading score-heading">{t("Score components")}</div>
           <div className="score-grid">
             {scoreComponents.map(([name, value]) => (
               <div key={name} className="score-row">
@@ -1692,7 +1887,7 @@ function SharedSessionPanel({ shared }: { shared: SharedSessionProjection }) {
           </div>
         </>
       ) : null}
-      <div className="mini-heading bid-heading">Bid queue</div>
+      <div className="mini-heading bid-heading">{t("Bid queue")}</div>
       <div className="bid-list">
         {shared.pendingBids.length ? shared.pendingBids.map((bid) => (
           <div key={bid.bidId} className="bid-row">
@@ -1702,16 +1897,16 @@ function SharedSessionPanel({ shared }: { shared: SharedSessionProjection }) {
               <span>{bid.kind} · conf {bid.confidence.toFixed(2)}</span>
             </div>
           </div>
-        )) : <div className="empty-row">No pending bids</div>}
+        )) : <div className="empty-row">{t("No pending bids")}</div>}
       </div>
-      <div className="mini-heading debug-heading">Debug events</div>
+      <div className="mini-heading debug-heading">{t("Debug events")}</div>
       <div className="debug-list">
         {shared.debugEvents.length ? shared.debugEvents.map((event) => (
           <div key={event.id} className="debug-row">
             <span>#{event.seq}</span>
             <strong>{event.type}</strong>
           </div>
-        )) : <div className="empty-row">No debug events</div>}
+        )) : <div className="empty-row">{t("No debug events")}</div>}
       </div>
     </section>
   );
@@ -1723,22 +1918,24 @@ function ReplayPanel({
   disabled,
   onAfterSeq,
   onReplay,
+  t,
 }: {
   afterSeq: string;
   result?: ServerMessage & { t: "replay_projection" };
   disabled: boolean;
   onAfterSeq: (value: string) => void;
   onReplay: () => void;
+  t: Translate;
 }) {
   return (
     <section className="replay-panel">
       <div className="replay-head">
         <RefreshCcw size={15} />
-        <strong>Replay</strong>
+        <strong>{t("Replay")}</strong>
       </div>
       <div className="replay-controls">
         <label>
-          <span>after seq</span>
+          <span>{t("after seq")}</span>
           <input
             inputMode="numeric"
             value={afterSeq}
@@ -1747,17 +1944,17 @@ function ReplayPanel({
         </label>
         <button type="button" disabled={disabled} onClick={onReplay}>
           <RefreshCcw size={14} />
-          <span>Run</span>
+          <span>{t("Run")}</span>
         </button>
       </div>
       {result ? (
         <div className="replay-result">
-          <div><span>events</span><strong>{result.eventCount}</strong></div>
-          <div><span>head</span><strong>{result.headSeq}</strong></div>
-          <div><span>phase</span><strong>{result.projection.phase}</strong></div>
-          <div><span>speaker</span><strong>{result.projection.activeTurn?.speakerId ?? "open"}</strong></div>
-          <div><span>bids</span><strong>{result.projection.pendingBids.length}</strong></div>
-          <div><span>last</span><strong>{result.projection.lastTurnId?.slice(0, 8) ?? "none"}</strong></div>
+          <div><span>{t("events")}</span><strong>{result.eventCount}</strong></div>
+          <div><span>{t("head")}</span><strong>{result.headSeq}</strong></div>
+          <div><span>{t("phase")}</span><strong>{result.projection.phase}</strong></div>
+          <div><span>{t("speaker")}</span><strong>{result.projection.activeTurn?.speakerId ?? t("open")}</strong></div>
+          <div><span>{t("bids")}</span><strong>{result.projection.pendingBids.length}</strong></div>
+          <div><span>{t("last")}</span><strong>{result.projection.lastTurnId?.slice(0, 8) ?? t("none")}</strong></div>
         </div>
       ) : null}
     </section>
@@ -1772,6 +1969,7 @@ function MemoryPanel({
   onFromSeq,
   onToSeq,
   onCompact,
+  t,
 }: {
   fromSeq: string;
   toSeq: string;
@@ -1780,27 +1978,28 @@ function MemoryPanel({
   onFromSeq: (value: string) => void;
   onToSeq: (value: string) => void;
   onCompact: () => void;
+  t: Translate;
 }) {
   const latest = summaries.at(-1);
   return (
     <section className="memory-panel">
       <div className="memory-head">
         <NotebookText size={15} />
-        <strong>Memory</strong>
+        <strong>{t("Memory")}</strong>
         <span>{summaries.length}</span>
       </div>
       <div className="memory-controls">
         <label>
-          <span>from</span>
+          <span>{t("from")}</span>
           <input inputMode="numeric" value={fromSeq} onChange={(input) => onFromSeq(input.currentTarget.value)} />
         </label>
         <label>
-          <span>to</span>
-          <input inputMode="numeric" placeholder="head" value={toSeq} onChange={(input) => onToSeq(input.currentTarget.value)} />
+          <span>{t("to")}</span>
+          <input inputMode="numeric" placeholder={t("head")} value={toSeq} onChange={(input) => onToSeq(input.currentTarget.value)} />
         </label>
         <button type="button" disabled={disabled} onClick={onCompact}>
           <NotebookText size={14} />
-          <span>Compact</span>
+          <span>{t("Compact")}</span>
         </button>
       </div>
       {latest ? (
@@ -1811,7 +2010,7 @@ function MemoryPanel({
           </div>
           <pre>{latest.content}</pre>
         </div>
-      ) : <div className="empty-row">No memory summaries</div>}
+      ) : <div className="empty-row">{t("No memory summaries")}</div>}
     </section>
   );
 }

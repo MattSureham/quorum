@@ -94,6 +94,11 @@ credential sources for API-model agents; they are not webchat sessions and are
 not shown as the primary selection surface. Diagnostics such as replay, memory,
 tools, and checkpoints are collapsed so they do not dominate normal use.
 
+The Web UI supports English and Chinese from the left **Connection** panel. The
+selected language is stored in `localStorage` as `quorum.client.language` and
+applies immediately to the primary session, chat, participant, credential, and
+diagnostics controls.
+
 The built-in Claude-family local agent is named **Claude Code** because it uses
 the `claude-code` adapter and local Claude Code auth/session. Anthropic API
 models should be added as explicit API-model participants, for example a
