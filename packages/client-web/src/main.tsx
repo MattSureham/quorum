@@ -136,6 +136,7 @@ const zhText: Record<string, string> = {
   "Profile": "配置档",
   "Provider": "Provider",
   "Model": "模型",
+  "Flagship": "旗舰模型",
   "Role": "角色",
   "local builder": "本地构建者",
   "local reviewer": "本地审阅者",
