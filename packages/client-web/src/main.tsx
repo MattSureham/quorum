@@ -182,6 +182,10 @@ const zhText: Record<string, string> = {
   "Choose folder": "选择文件夹",
   "Choosing folder": "正在选择文件夹",
   "Folder picker is available in the desktop app. You can still enter an absolute path here.": "文件夹选择器仅在桌面应用中可用，你仍可在此输入绝对路径。",
+  "Select this folder": "选择当前文件夹",
+  "Parent folder": "上一级文件夹",
+  "No subfolders": "没有子文件夹",
+  "Browse folders on the daemon machine": "浏览 daemon 所在机器的文件夹",
   "Optional absolute path for this session": "当前会话可选的绝对路径",
   "Mode": "模式",
   "Permission policy": "权限策略",
@@ -328,7 +332,11 @@ type ServerMessage =
   | { t: "credentials"; providers: ProviderConfigView[] }
   | { t: "credential_saved"; provider: ProviderConfigView; providers: ProviderConfigView[] }
   | { t: "agent_health"; roomId: string; health: Record<string, AgentHealth> }
+  | { t: "workspace_directories"; requestId: string; path: string; parent?: string; directories: Array<{ name: string; path: string }> }
+  | { t: "workspace_directories_error"; requestId: string; text: string }
   | { t: "error"; text: string };
+
+type WorkspaceDirectoryListing = Extract<ServerMessage, { t: "workspace_directories" }>;
 
 interface SharedSessionProjectionResult {
   phase: string;
@@ -1138,6 +1146,11 @@ function App() {
   const teardownRef = useRef(false);
   const feedRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const directoryRequestsRef = useRef(new Map<string, {
+    resolve: (listing: WorkspaceDirectoryListing) => void;
+    reject: (error: Error) => void;
+    timer: ReturnType<typeof setTimeout>;
+  }>());
   const stickRef = useRef(true); // keep pinned to newest unless the user scrolls up
 
   const displayRoom = room ?? (sessionsLoaded ? emptyRoom : previewRoom);
@@ -1326,6 +1339,13 @@ function App() {
           socket.send(JSON.stringify({ t: "check_agents", roomId: settings.roomId }));
         } else if (message.t === "agent_health") {
           if (message.roomId === settings.roomId || message.roomId === displayRoom.id) setAgentHealth(message.health);
+        } else if (message.t === "workspace_directories" || message.t === "workspace_directories_error") {
+          const pending = directoryRequestsRef.current.get(message.requestId);
+          if (!pending) return;
+          clearTimeout(pending.timer);
+          directoryRequestsRef.current.delete(message.requestId);
+          if (message.t === "workspace_directories") pending.resolve(message);
+          else pending.reject(new Error(message.text));
         } else if (message.t === "error") {
           deletedSessionIdsRef.current.clear();
           setDeletedSessionIds(new Set());
@@ -1485,6 +1505,22 @@ function App() {
     })) {
       setSessionSetupOpen(false);
     }
+  }
+
+  function listWorkspaceDirectories(path?: string): Promise<WorkspaceDirectoryListing> {
+    return new Promise((resolve, reject) => {
+      const requestId = `dirs-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const timer = setTimeout(() => {
+        directoryRequestsRef.current.delete(requestId);
+        reject(new Error("folder browsing timed out"));
+      }, 10_000);
+      directoryRequestsRef.current.set(requestId, { resolve, reject, timer });
+      if (!send({ t: "list_workspace_directories", requestId, path: path?.trim() || undefined })) {
+        clearTimeout(timer);
+        directoryRequestsRef.current.delete(requestId);
+        reject(new Error("not connected to the Quorum daemon"));
+      }
+    });
   }
 
   function sendMessage() {
@@ -2017,6 +2053,7 @@ function App() {
           currentRoom={displayRoom}
           profiles={agentProfiles}
           onStart={createSessionFromDraft}
+          onListDirectories={listWorkspaceDirectories}
           connected={connected}
           onClose={() => setSessionSetupOpen(false)}
           t={t}
@@ -2314,6 +2351,7 @@ function SessionSetupModal({
   profiles,
   connected,
   onStart,
+  onListDirectories,
   onClose,
   t,
 }: {
@@ -2322,12 +2360,14 @@ function SessionSetupModal({
   profiles: AgentModelPreset[];
   connected: boolean;
   onStart: (draft: SessionDraft) => void;
+  onListDirectories: (path?: string) => Promise<WorkspaceDirectoryListing>;
   onClose: () => void;
   t: Translate;
 }) {
   const [draft, setDraft] = useState<SessionDraft>(initialDraft);
   const [pickingWorkspace, setPickingWorkspace] = useState(false);
   const [workspacePickerStatus, setWorkspacePickerStatus] = useState("");
+  const [directoryListing, setDirectoryListing] = useState<WorkspaceDirectoryListing>();
   const currentAgentIds = new Set(currentRoom.participants.filter((participant) => participant.kind === "agent").map((participant) => participant.id));
   const participantOptions = [
     ...currentRoom.participants.filter((participant) => participant.kind === "agent").map((participant) => ({
@@ -2428,15 +2468,16 @@ function SessionSetupModal({
                   title={t("Choose folder")}
                   aria-label={t("Choose folder")}
                   onClick={async () => {
-                    if (!isTauriRuntime()) {
-                      setWorkspacePickerStatus(t("Folder picker is available in the desktop app. You can still enter an absolute path here."));
-                      return;
-                    }
                     setPickingWorkspace(true);
                     setWorkspacePickerStatus("");
                     try {
-                      const path = await pickWorkspaceDirectory(draft.workspacePath || currentRoom.workspacePath || "");
-                      if (path) setDraft((current) => ({ ...current, workspacePath: path }));
+                      if (isTauriRuntime()) {
+                        const path = await pickWorkspaceDirectory(draft.workspacePath || currentRoom.workspacePath || "");
+                        if (path) setDraft((current) => ({ ...current, workspacePath: path }));
+                      } else {
+                        const listing = await onListDirectories(draft.workspacePath || currentRoom.workspacePath || undefined);
+                        setDirectoryListing(listing);
+                      }
                     } catch (err) {
                       setWorkspacePickerStatus(err instanceof Error ? err.message : String(err));
                     } finally {
@@ -2449,6 +2490,39 @@ function SessionSetupModal({
               </div>
               {workspacePickerStatus ? <small className="field-note">{workspacePickerStatus}</small> : null}
             </label>
+            {directoryListing ? (
+              <div className="directory-browser" aria-label={t("Browse folders on the daemon machine")}>
+                <div className="directory-browser-head">
+                  <code title={directoryListing.path}>{directoryListing.path}</code>
+                  <button
+                    type="button"
+                    className="secondary-action"
+                    onClick={() => {
+                      setDraft((current) => ({ ...current, workspacePath: directoryListing.path }));
+                      setDirectoryListing(undefined);
+                    }}
+                  >
+                    <Check size={14} />
+                    <span>{t("Select this folder")}</span>
+                  </button>
+                </div>
+                <div className="directory-list">
+                  {directoryListing.parent ? (
+                    <button type="button" onClick={async () => setDirectoryListing(await onListDirectories(directoryListing.parent))}>
+                      <Undo2 size={15} />
+                      <span>{t("Parent folder")}</span>
+                    </button>
+                  ) : null}
+                  {directoryListing.directories.map((directory) => (
+                    <button type="button" key={directory.path} onClick={async () => setDirectoryListing(await onListDirectories(directory.path))}>
+                      <FolderOpen size={15} />
+                      <span>{directory.name}</span>
+                    </button>
+                  ))}
+                  {!directoryListing.parent && !directoryListing.directories.length ? <span className="field-note">{t("No subfolders")}</span> : null}
+                </div>
+              </div>
+            ) : null}
           </section>
 
           <section className="session-setup-section">
