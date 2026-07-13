@@ -172,6 +172,12 @@ class InterruptibleSpeaker extends StubSpeaker {
   }
 }
 
+class FailingSpeaker extends StubSpeaker {
+  async *speak(): AsyncGenerator<AgentDelta> {
+    yield { type: "error", message: "CLI exited with code 7", category: "cli_exit", detail: "bad flags" };
+  }
+}
+
 class FakeWorkspace implements WorkspaceManager {
   acquired: string[] = [];
   released: string[] = [];
@@ -200,6 +206,58 @@ class FakeWorkspace implements WorkspaceManager {
 }
 
 describe("SessionManager", () => {
+  it("queues prompts submitted during a turn and runs them in FIFO order", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const events: RoomEvent[] = [];
+    log.on((event) => events.push(event));
+    const session = new SessionManager({
+      sessionId: "room",
+      title: "Prompt queue",
+      log,
+      agents: [new StubSpeaker("agent", { confidence: 1, delayMs: 80 })],
+      settlingWindowMs: 10,
+      turnTimeoutMs: 1_000,
+    });
+
+    session.start();
+    try {
+      void session.submitUserPrompt("first");
+      await waitFor(() => events.some((event) => event.type === "turn_started"));
+      await session.submitUserPrompt("second");
+      await session.submitUserPrompt("third");
+      await waitFor(() => events.filter((event) => event.type === "turn_completed").length === 3, 2_000);
+
+      const humanPrompts = events
+        .filter((event) => event.type === "message" && event.author.kind === "human")
+        .map((event) => (event.body as any).text);
+      expect(humanPrompts).toEqual(["first", "second", "third"]);
+      expect(events.filter((event) => event.type === "phase_changed" && (event.body as any).to === "collecting_bids")).toHaveLength(3);
+    } finally {
+      await session.stop();
+    }
+  });
+
+  it("records structured adapter failures as failed turns", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const session = new SessionManager({
+      sessionId: "room",
+      title: "Failure",
+      log,
+      agents: [new FailingSpeaker("agent")],
+      settlingWindowMs: 10,
+      turnTimeoutMs: 1_000,
+    });
+    session.start();
+    try {
+      await session.submitUserPrompt("fail");
+      await waitFor(() => log.replay(0).some((event) => event.type === "turn_failed"));
+      const failed = log.replay(0).find((event) => event.type === "turn_failed");
+      expect((failed?.body as any).failure).toMatchObject({ category: "cli_exit", message: "CLI exited with code 7" });
+      expect(log.replay(0).some((event) => event.type === "turn_completed")).toBe(false);
+    } finally {
+      await session.stop();
+    }
+  });
   it("queues bids during speaking and selects the next speaker only after turn completion", async () => {
     const log = new EventLog("room", new InMemoryStore());
     const events: RoomEvent[] = [];

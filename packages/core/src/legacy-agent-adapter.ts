@@ -86,6 +86,14 @@ export class LegacyAgentAdapter implements ISpeakerAgent {
       } else if (event.type === "tool_result") {
         const body = event.body as any;
         yield { type: "tool_result", callId: body.callId, ok: !!body.ok, stdout: body.stdout, exitCode: body.exitCode };
+      } else if (event.type === "system" && (event.body as any)?.level === "error") {
+        const body = event.body as any;
+        yield {
+          type: "error",
+          message: typeof body.text === "string" ? body.text : "agent turn failed",
+          category: typeof body.category === "string" ? body.category : "adapter_error",
+          detail: typeof body.detail === "string" ? body.detail : undefined,
+        };
       }
     }
     yield { type: "done" };

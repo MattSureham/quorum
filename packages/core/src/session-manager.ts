@@ -58,6 +58,13 @@ export interface SessionSnapshot {
   lastTurnId?: string;
 }
 
+interface PendingPrompt {
+  text: string;
+  addressedTo: string[];
+  attachments: ImageAttachment[];
+  eventSeq: number;
+}
+
 const systemAuthor = { kind: "system" as const, id: "session", display: "SessionManager" };
 const CONTEXT_EVENT_TYPES = new Set<RoomEvent["type"]>([
   "message",
@@ -92,6 +99,7 @@ export class SessionManager {
   private active?: { turnId: string; speakerId: string; generation: number; ac: AbortController };
   private lastTurnId?: string;
   private lastPrompt = "";
+  private pendingPrompts: PendingPrompt[] = [];
   private roundRobinQueue: string[] = [];
   private running = false;
   private humanHoldsWriteFloor = false;
@@ -141,33 +149,47 @@ export class SessionManager {
   }
 
   async submitUserPrompt(text: string, addressedTo: string[] = [], attachments: ImageAttachment[] = []): Promise<void> {
-    await this.mailbox.enqueue("submitUserPrompt", async () => {
+    const shouldActivate = await this.mailbox.enqueue("submitUserPrompt", async () => {
       if (!this.running) this.running = true;
       this.releaseWriteFloor("human resumed the room");
-      this.lastPrompt = text;
-      this.epoch++;
-      await this.append("message", { text, ...(attachments.length ? { attachments } : {}) }, "participant", {
+      const event = await this.append("message", { text, ...(attachments.length ? { attachments } : {}) }, "participant", {
         author: { kind: "human", id: "human", display: "Human" },
         addressedTo,
       });
-
-      if (this.isRoundRobin()) {
-        this.roundRobinQueue = this.orderedAgentIds();
-        if (!this.active && this.phase !== "speaking" && this.phase !== "speaker_granted") {
-          await this.grantNextRoundRobinSpeaker();
-        }
-        return;
+      const prompt = { text, addressedTo, attachments, eventSeq: event.seq };
+      if (this.active || this.phase === "speaking" || this.phase === "speaker_granted" || this.phase === "settling") {
+        this.pendingPrompts.push(prompt);
+        await this.append("system", {
+          level: "info",
+          text: `prompt queued behind active turn: #${event.seq}`,
+          promptSeq: event.seq,
+          queueDepth: this.pendingPrompts.length,
+        }, "debug");
+        return false;
       }
-
-      if (this.phase === "speaking" || this.phase === "speaker_granted") {
-        return;
-      }
-
-      await this.transition("collecting_bids", { epoch: this.epoch });
+      await this.activatePrompt(prompt);
+      return !this.isRoundRobin();
     });
+    if (shouldActivate) await this.collectAndMaybeArbitrate(text);
+  }
 
-    if (this.isRoundRobin()) return;
-    await this.collectAndMaybeArbitrate(text);
+  private async activatePrompt(prompt: PendingPrompt): Promise<void> {
+    this.lastPrompt = prompt.text;
+    this.epoch++;
+    this.pendingBids.clear();
+    if (this.isRoundRobin()) {
+      this.roundRobinQueue = this.orderedAgentIds();
+      await this.grantNextRoundRobinSpeaker();
+      return;
+    }
+    await this.transition("collecting_bids", { epoch: this.epoch, promptSeq: prompt.eventSeq });
+  }
+
+  private async activateNextQueuedPrompt(): Promise<void> {
+    const next = this.pendingPrompts.shift();
+    if (!next) return;
+    await this.activatePrompt(next);
+    if (!this.isRoundRobin()) void this.collectAndMaybeArbitrate(next.text);
   }
 
   async submitBid(bid: Bid): Promise<void> {
@@ -377,6 +399,7 @@ export class SessionManager {
     let lease: WriteLease | undefined;
     let toolCalls = 0;
     let outputs = 0;
+    let failure: { message: string; category?: string; detail?: string } | undefined;
 
     await this.mailbox.enqueue("turnStarted", async () => {
       await this.transition("speaking", { turnId, speakerId: agent.id, generation });
@@ -407,6 +430,11 @@ export class SessionManager {
           break;
         }
         if (delta.type === "done") break;
+        if (delta.type === "error") {
+          failure = delta;
+          outcome = "failed";
+          break;
+        }
         await this.mailbox.enqueue("turnDelta", async () => {
           if (!this.active || this.active.turnId !== turnId || this.active.generation !== generation) return;
           if (delta.type === "tool_call") toolCalls++;
@@ -414,8 +442,12 @@ export class SessionManager {
           offset = await this.persistDelta(agent, turnId, generation, offset, delta);
         });
       }
-    } catch {
+    } catch (err) {
       outcome = ac.signal.aborted ? "cancelled" : "failed";
+      if (!ac.signal.aborted) failure = {
+        message: err instanceof Error ? err.message : String(err),
+        category: "adapter_exception",
+      };
     } finally {
       clearTimeout(timeout);
       if (ac.signal.aborted && outcome === "done") outcome = "cancelled";
@@ -425,7 +457,13 @@ export class SessionManager {
         this.active = undefined;
         this.recentSpeakerCounts.set(agent.id, (this.recentSpeakerCounts.get(agent.id) ?? 0) + 1);
         const eventType = outcome === "done" ? "turn_completed" : outcome === "cancelled" ? "turn_cancelled" : "turn_failed";
-        const completed = await this.append(eventType, { turnId, speakerId: agent.id, generation, offset });
+        const completed = await this.append(eventType, {
+          turnId,
+          speakerId: agent.id,
+          generation,
+          offset,
+          ...(failure ? { failure } : {}),
+        });
         await this.append("turn_trace", {
           turnId,
           speakerId: agent.id,
@@ -437,6 +475,7 @@ export class SessionManager {
           toolCalls,
           outputs,
           offset,
+          ...(failure ? { failure } : {}),
         }, "debug", {
           author: { kind: "system", id: "trace", display: "Trace" },
           turnId,
@@ -453,7 +492,8 @@ export class SessionManager {
         await this.append("floor_release", { turnId, reason: outcome === "done" ? "done" : outcome });
         await this.maybeAutoCompactWorkingMemory();
         await this.transition("settling", { turnId, settlingWindowMs: this.opts.settlingWindowMs ?? 400 });
-        void this.settleAndArbitrate();
+        if (this.pendingPrompts.length) void this.activateNextQueuedPrompt();
+        else void this.settleAndArbitrate();
       });
       lease?.release();
     }

@@ -215,6 +215,7 @@ export type AgentDelta =
   | { type: "thinking"; text: string }
   | { type: "tool_call"; tool: string; args: unknown; callId?: string }
   | { type: "tool_result"; callId: string; ok: boolean; stdout?: string; exitCode?: number }
+  | { type: "error"; message: string; category?: string; detail?: string }
   | { type: "done" };
 
 export interface AgentHealth {

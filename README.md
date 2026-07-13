@@ -160,6 +160,11 @@ outcome; the UI falls back to deriving the same view from older event logs when
 trace events are absent. Backend token counts, native session ids, and detailed
 failure categories are still future work.
 
+Prompts received while an agent is speaking are persisted immediately and then
+processed through a FIFO queue, with a fresh epoch and bid collection after the
+active turn. Adapter failures use structured `turn_failed`/`turn_trace` payloads
+instead of appearing as successful turns with no visible reply.
+
 Session setup exposes a first-pass permission policy: read-only, workspace-write,
 approval-required, or full-auto. The selected policy is written into participant
 adapter config; Codex sandbox and Claude Code permission mode are mapped from it.
