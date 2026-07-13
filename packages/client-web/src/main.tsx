@@ -1620,7 +1620,7 @@ function App() {
 
   function addCustomProfile() {
     const id = profileDraft.id.trim().toLowerCase();
-    if (!id || agentProfiles.some((profile) => profile.id === id)) return;
+    if (!id || agentProfiles.some((profile) => profile.id === id) || customProfiles.some((profile) => profile.id === id)) return;
     const nextProfile: AgentModelPreset = {
       id,
       display: profileDraft.display.trim() || id,
@@ -2177,11 +2177,11 @@ function capabilityBadgesForPreset(preset: AgentModelPreset, configured: boolean
   return [preset.adapter];
 }
 
-function modelsUsingProvider(providerId: string, t: Translate, profiles = agentModelPresets): string {
+function modelsUsingProvider(providerId: string, t: Translate): string {
   if (!providerId) return t("Custom API provider credential");
-  const models = profiles
-    .filter((preset) => preset.providerId === providerId)
-    .map((preset) => preset.display);
+  const models = providerModelCatalog
+    .filter((entry) => entry.providerId === providerId)
+    .map((entry) => entry.label);
   return models.length ? `${t("Used by")} ${models.join(", ")}` : t("Credential source for API-model agents");
 }
 
