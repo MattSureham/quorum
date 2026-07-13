@@ -389,8 +389,8 @@ interface AgentProfileDraft {
 const credentialPresets: CredentialDraft[] = [
   { draftId: "preset-openai", providerId: "openai", envVar: "OPENAI_API_KEY", apiKey: "", baseUrl: "https://api.openai.com/v1", model: "gpt-5.5", locked: true },
   { draftId: "preset-deepseek", providerId: "deepseek", envVar: "DEEPSEEK_API_KEY", apiKey: "", baseUrl: "https://api.deepseek.com", model: "deepseek-v4-pro", locked: true },
-  { draftId: "preset-zhipu", providerId: "zhipu", envVar: "ZHIPU_API_KEY", apiKey: "", baseUrl: "https://open.bigmodel.cn/api/paas/v4", model: "glm-5.1", locked: true },
-  { draftId: "preset-minimax", providerId: "minimax", envVar: "MINIMAX_API_KEY", apiKey: "", baseUrl: "https://api.minimax.io/v1", model: "MiniMax-M2.7", locked: true },
+  { draftId: "preset-zhipu", providerId: "zhipu", envVar: "ZHIPU_API_KEY", apiKey: "", baseUrl: "https://open.bigmodel.cn/api/paas/v4", model: "glm-5.2", locked: true },
+  { draftId: "preset-minimax", providerId: "minimax", envVar: "MINIMAX_API_KEY", apiKey: "", baseUrl: "https://api.minimax.io/v1", model: "MiniMax-M3", locked: true },
   { draftId: "preset-anthropic", providerId: "anthropic", envVar: "ANTHROPIC_API_KEY", apiKey: "", baseUrl: "https://api.anthropic.com/v1", model: "claude-fable-5", locked: true },
 ];
 
@@ -430,12 +430,14 @@ const providerModelCatalog: Array<{
   { providerId: "openai", model: "gpt-5.4-mini", label: "GPT-5.4 mini", role: "efficient general model", vision: true },
   { providerId: "deepseek", model: "deepseek-v4-pro", label: "DeepSeek V4 Pro", role: "flagship reasoning model", flagship: true },
   { providerId: "deepseek", model: "deepseek-v4-flash", label: "DeepSeek V4 Flash", role: "fast reasoning model" },
-  { providerId: "zhipu", model: "glm-5.1", label: "GLM-5.1", role: "flagship agentic model", flagship: true },
+  { providerId: "zhipu", model: "glm-5.2", label: "GLM-5.2", role: "flagship agentic model", flagship: true },
+  { providerId: "zhipu", model: "glm-5.1", label: "GLM-5.1", role: "previous flagship agentic model" },
   { providerId: "zhipu", model: "glm-5.1-highspeed", label: "GLM-5.1 HighSpeed", role: "fast flagship model" },
   { providerId: "zhipu", model: "glm-5", label: "GLM-5", role: "agentic foundation model" },
   { providerId: "zhipu", model: "glm-4.7", label: "GLM-4.7", role: "general reasoning model" },
   { providerId: "zhipu", model: "glm-5v-turbo", label: "GLM-5V Turbo", role: "vision coding model", vision: true },
-  { providerId: "minimax", model: "MiniMax-M2.7", label: "MiniMax M2.7", role: "flagship agentic model", flagship: true },
+  { providerId: "minimax", model: "MiniMax-M3", label: "MiniMax M3", role: "flagship agentic model", flagship: true },
+  { providerId: "minimax", model: "MiniMax-M2.7", label: "MiniMax M2.7", role: "previous flagship agentic model" },
   { providerId: "minimax", model: "MiniMax-M2.7-highspeed", label: "MiniMax M2.7 HighSpeed", role: "high-speed flagship model" },
   { providerId: "minimax", model: "MiniMax-M2.5", label: "MiniMax M2.5", role: "coding and tool model" },
   { providerId: "anthropic", model: "claude-fable-5", label: "Claude Fable 5", role: "most capable long-running agent model", flagship: true, vision: true },

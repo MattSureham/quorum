@@ -339,7 +339,7 @@ After a provider API key is configured, Session setup exposes that provider's
 language-model catalog as individual participants. The built-in catalog includes
 an explicitly labelled flagship plus practical faster/cheaper models for
 OpenAI, DeepSeek, Zhipu, MiniMax, and Anthropic. DeepSeek uses V4 Pro/Flash,
-Zhipu includes GLM-5.1 and GLM-5V, MiniMax includes M2.7/HighSpeed, and Anthropic
+Zhipu includes GLM-5.2/5.1 and GLM-5V, MiniMax includes M3 and M2.7/HighSpeed, and Anthropic
 API profiles use the native Messages protocol rather than the OpenAI-compatible
 adapter path. Local Codex and Claude Code agents continue to use their own CLI
 model defaults and authentication. Custom profiles remain available for model

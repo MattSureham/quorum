@@ -324,6 +324,10 @@ The following is the implementation trail from this session. It is written for t
     - Work: configured provider credentials now unlock multiple exact model ids as independent participants, with a flagship marker. The 2026-07 catalog includes DeepSeek V4 Pro/Flash, Zhipu GLM-5.1/5/4.7/5V, MiniMax M2.7/M2.5, current OpenAI defaults, and current Anthropic Claude models. Anthropic profiles use the native Messages API including base64 vision input; local CLI agents retain their own default model configuration.
     - Verification: `pnpm typecheck`, all 84 tests, the API-model adapter tests, and the Web production build pass. Automated browser screenshot inspection was unavailable in this session.
 
+73. this change `fix: update Zhipu and MiniMax flagships`
+    - Files: provider model catalog/default credentials, `README.md`, `HANDOFF.md`.
+    - Work: updates the flagship selections to exact API ids `glm-5.2` and `MiniMax-M3`, while retaining GLM-5.1 and MiniMax M2.7 as previous-generation choices.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:
