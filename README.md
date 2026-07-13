@@ -125,7 +125,7 @@ with current, completed, and remaining speakers.
 
 Agent health checks can be triggered from the **Agents & Models** panel and run
 automatically when a session snapshot loads. The first pass checks local CLI
-availability for Codex/Claude Code, API key env availability for direct API
+availability and required non-interactive flags for Codex/Claude Code, API key env availability for direct API
 models, and placeholder/unknown adapter states. Full native-login verification
 still happens on the first real CLI turn because those tools own their local
 auth/session state.

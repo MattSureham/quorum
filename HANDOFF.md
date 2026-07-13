@@ -307,6 +307,10 @@ The following is the implementation trail from this session. It is written for t
     - Work: made built-in profile labels disclose their actual provider model ids, made persisted room lifecycle authoritative over legacy localStorage state, and removed stale placeholder/test-count documentation.
     - Verification: `pnpm typecheck`, all 82 tests, and the Web production build pass.
 
+69. this change `fix: verify cli adapter compatibility`
+    - Files: `packages/daemon/src/shared-session-host.ts`, `README.md`, `HANDOFF.md`.
+    - Work: health checks now inspect Codex and Claude Code help output for the non-interactive flags Quorum requires, without sending a model request. Native login remains verified by the first real turn.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:
@@ -350,7 +354,7 @@ What is already implemented:
 - The Web UI surfaces compact agent/model capability badges so users can distinguish local CLI agents, API-model agents, file-editing agents, command/tool-capable agents, vision-capable agents, placeholder entries, key-required entries, and unknown health states. These are currently declared/preset capabilities, not a full runtime health probe.
 - The run-status banner now explains the execution stage instead of only showing coarse phase labels. It can surface queueing, scheduler wait, agent contact, thinking/output, running tools, waiting approval, failure, and completed-without-visible-reply states.
 - Shared-session diagnostics now explain mode semantics and show round-robin order/current/completed/remaining speakers.
-- Agent health checks are available through WebSocket `check_agents` and the Web UI. Current checks cover CLI binary availability, API key env availability, placeholders, echo readiness, and unknown adapters.
+- Agent health checks are available through WebSocket `check_agents` and the Web UI. Current checks cover CLI binary and required-flag compatibility, API key env availability, placeholders, echo readiness, and unknown adapters.
 - The Web UI session sidebar supports persisted Archive/Unarchive, JSON Export, and confirmed hard Delete. A legacy localStorage archive set is used only for old rooms that do not yet have a persisted lifecycle field.
 - Shared-session diagnostics include a Continuity card for native resume fallback warnings and latest memory-summary seq ranges.
 - Agents & Models now presents agent profiles with role/provider/model/capability summaries. Provider credentials remain separate hidden credential sources for API-model profiles.

@@ -73,6 +73,19 @@ async function commandExists(bin: string): Promise<boolean> {
   }
 }
 
+async function commandSupports(bin: string, args: string[], required: string[]): Promise<{ ok: boolean; detail?: string }> {
+  try {
+    const { stdout, stderr } = await exec(bin, args, { timeout: 2_500 });
+    const help = `${stdout}\n${stderr}`;
+    const missing = required.filter((flag) => !help.includes(flag));
+    return missing.length
+      ? { ok: false, detail: `${bin} is installed but lacks required flags: ${missing.join(", ")}` }
+      : { ok: true };
+  } catch (err) {
+    return { ok: false, detail: `${bin} compatibility check failed: ${err instanceof Error ? err.message : String(err)}` };
+  }
+}
+
 async function checkParticipantHealth(participant: ParticipantDescriptor): Promise<AgentHealth> {
   const adapter = participant.adapter ?? "";
   const cfg = participant.adapterConfig ?? {};
@@ -81,16 +94,20 @@ async function checkParticipantHealth(participant: ParticipantDescriptor): Promi
   if (adapter === "codex") {
     const bin = typeof cfg.bin === "string" ? cfg.bin : "codex";
     const ok = await commandExists(bin);
-    return ok
-      ? { ok: true, status: "idle", detail: `${bin} CLI found` }
-      : { ok: false, status: "offline", detail: `${bin} CLI not found on PATH` };
+    if (!ok) return { ok: false, status: "offline", detail: `${bin} CLI not found on PATH` };
+    const compatibility = await commandSupports(bin, ["exec", "--help"], ["--json", "--sandbox", "--cd"]);
+    return compatibility.ok
+      ? { ok: true, status: "idle", detail: `${bin} CLI found and non-interactive flags are compatible` }
+      : { ok: false, status: "offline", detail: compatibility.detail };
   }
   if (adapter === "claude-code") {
     const bin = typeof cfg.bin === "string" ? cfg.bin : "claude";
     const ok = await commandExists(bin);
-    return ok
-      ? { ok: true, status: "idle", detail: `${bin} CLI found; local login is verified on first turn` }
-      : { ok: false, status: "offline", detail: `${bin} CLI not found on PATH` };
+    if (!ok) return { ok: false, status: "offline", detail: `${bin} CLI not found on PATH` };
+    const compatibility = await commandSupports(bin, ["--help"], ["--output-format", "--permission-mode"]);
+    return compatibility.ok
+      ? { ok: true, status: "idle", detail: `${bin} CLI flags are compatible; local login is verified on first turn` }
+      : { ok: false, status: "offline", detail: compatibility.detail };
   }
   if (adapter === "api-model") {
     const apiKeyEnv = typeof cfg.apiKeyEnv === "string" ? cfg.apiKeyEnv : "OPENAI_API_KEY";
