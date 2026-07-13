@@ -28,6 +28,7 @@ export interface ProjectedSessionState {
   pendingBids: Bid[];
   selected?: { agentId?: string; score?: number; kind?: string };
   lastTurnId?: string;
+  lastSpeakerId?: string;
 }
 
 function asObject(value: unknown): Record<string, unknown> {
@@ -49,6 +50,7 @@ export function projectSessionState(events: Iterable<RoomEvent>): ProjectedSessi
   let activeTurn: ProjectedSessionState["activeTurn"];
   let selected: ProjectedSessionState["selected"];
   let lastTurnId: string | undefined;
+  let lastSpeakerId: string | undefined;
 
   for (const event of events) {
     const body = asObject(event.body);
@@ -82,8 +84,9 @@ export function projectSessionState(events: Iterable<RoomEvent>): ProjectedSessi
       const turnId = asString(body.turnId);
       if (turnId && activeTurn?.turnId === turnId) activeTurn = undefined;
       lastTurnId = turnId ?? lastTurnId;
+      lastSpeakerId = asString(body.speakerId) ?? lastSpeakerId;
     }
   }
 
-  return { phase, epoch, activeTurn, pendingBids: [...pending.values()], selected, lastTurnId };
+  return { phase, epoch, activeTurn, pendingBids: [...pending.values()], selected, lastTurnId, lastSpeakerId };
 }

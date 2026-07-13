@@ -7,6 +7,7 @@ export interface ArbitrationContext {
   lastSpeakerId?: string;
   recentSpeakerCounts?: Map<string, number>;
   waitingRounds?: Map<string, number>;
+  noConsecutive?: boolean;
 }
 
 export interface ScoredBid {
@@ -41,8 +42,11 @@ export class Arbiter {
 
   decide(ctx: ArbitrationContext): ArbitrationDecision {
     const participantIds = new Set(ctx.participants.map((p) => p.id));
+    const eligibleBids = ctx.bids.filter((bid) => participantIds.has(bid.agentId));
+    const hasAlternativeSpeaker = eligibleBids.some((bid) => bid.agentId !== ctx.lastSpeakerId);
     const candidates = ctx.bids
-      .filter((bid) => participantIds.has(bid.agentId))
+      .filter((bid) => participantIds.has(bid.agentId)
+        && !(ctx.noConsecutive && hasAlternativeSpeaker && bid.agentId === ctx.lastSpeakerId))
       .map((bid) => this.scoreBid(bid, ctx))
       .sort((a, b) => {
         if (b.score !== a.score) return b.score - a.score;

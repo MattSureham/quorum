@@ -97,6 +97,17 @@ class ContextCaptureSpeaker extends StubSpeaker {
   }
 }
 
+class PromptCaptureSpeaker extends StubSpeaker {
+  prompts: string[] = [];
+
+  async *speak(turn: TurnContext, _runtime: AgentRuntime, signal: AbortSignal): AsyncGenerator<AgentDelta> {
+    this.prompts.push(turn.prompt);
+    if (signal.aborted) return;
+    yield { type: "text", text: `${this.id}-${this.prompts.length}` };
+    yield { type: "done" };
+  }
+}
+
 class ToolSpeaker implements ISpeakerAgent {
   readonly descriptor: ParticipantDescriptor = { id: "tool-agent", kind: "agent", display: "tool-agent", adapter: "stub", status: "idle" };
   readonly id = "tool-agent";
@@ -338,6 +349,83 @@ describe("SessionManager", () => {
         "round-robin",
         "round-robin",
       ]);
+    } finally {
+      await session.stop();
+    }
+  });
+
+  it("limits addressed prompts to the selected agents", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const events: RoomEvent[] = [];
+    log.on((event) => events.push(event));
+    const session = new SessionManager({
+      sessionId: "room",
+      title: "Directed",
+      log,
+      agents: [new StubSpeaker("alpha", { confidence: 1 }), new StubSpeaker("bravo", { confidence: 0.5 })],
+      maxTurnsPerTopic: 2,
+      noConsecutive: false,
+      settlingWindowMs: 10,
+    });
+    session.start();
+    try {
+      await session.submitUserPrompt("alpha only", ["alpha"]);
+      await waitFor(() => session.snapshot().phase === "idle" && events.some((event) => event.type === "turn_completed"), 1_500);
+      const speakers = events.filter((event) => event.type === "turn_started").map((event) => (event.body as any).speakerId);
+      expect(speakers.length).toBeGreaterThan(0);
+      expect(new Set(speakers)).toEqual(new Set(["alpha"]));
+    } finally {
+      await session.stop();
+    }
+  });
+
+  it("records raise-hand bids as floor requests and waits for the active speaker", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const events: RoomEvent[] = [];
+    log.on((event) => events.push(event));
+    const session = new SessionManager({
+      sessionId: "room",
+      title: "Raise hand",
+      log,
+      agents: [new StubSpeaker("alpha", { confidence: 1 }), new StubSpeaker("bravo", { confidence: 0.5 })],
+      schedulerMode: "raise-hand",
+      maxTurnsPerTopic: 2,
+      noConsecutive: true,
+      settlingWindowMs: 10,
+    });
+    session.start();
+    try {
+      await session.submitUserPrompt("discuss");
+      await waitFor(() => events.filter((event) => event.type === "turn_completed").length === 2, 1_500);
+      const requests = events.filter((event) => event.type === "floor_request");
+      expect(requests.map((event) => event.author.id).sort()).toEqual(["alpha", "bravo"]);
+      const firstCompleted = events.find((event) => event.type === "turn_completed");
+      const secondStarted = events.filter((event) => event.type === "turn_started")[1];
+      expect(firstCompleted?.seq).toBeLessThan(secondStarted?.seq ?? 0);
+    } finally {
+      await session.stop();
+    }
+  });
+
+  it("reserves the final topic turn for a forced wrap-up", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const alpha = new PromptCaptureSpeaker("alpha", { confidence: 1 });
+    const bravo = new PromptCaptureSpeaker("bravo", { confidence: 0.5 });
+    const session = new SessionManager({
+      sessionId: "room",
+      title: "Wrap up",
+      log,
+      agents: [alpha, bravo],
+      maxTurnsPerTopic: 3,
+      noConsecutive: true,
+      settlingWindowMs: 10,
+    });
+    session.start();
+    try {
+      await session.submitUserPrompt("decide");
+      await waitFor(() => session.snapshot().phase === "idle" && log.replay(0).filter((event) => event.type === "turn_completed").length === 3, 1_500);
+      expect([...alpha.prompts, ...bravo.prompts].some((prompt) => prompt.includes("[QUORUM WRAP UP]"))).toBe(true);
+      expect((log.replay(0).filter((event) => event.type === "phase_changed").at(-1)?.body as any).reason).toBe("topic wrapped up");
     } finally {
       await session.stop();
     }

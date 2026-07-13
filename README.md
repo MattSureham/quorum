@@ -170,6 +170,13 @@ The Codex CLI adapter accepts both current `item.type` JSONL events and older
 argument failures, and successful runs with no assistant message are surfaced
 as failed turns; native resume fallback is attempted at most once.
 
+Shared-session modes are enforced by the scheduler. Addressed prompts only ask
+the selected agents to bid; `noConsecutive` uses the actual last speaker id;
+Raise hand records each structured bid as a floor request and never preempts the
+active speaker. Open discussion recollects follow-up bids within
+`maxTurnsPerTopic`, reserving the final turn for a forced concrete wrap-up.
+The final round-robin speaker receives the same wrap-up requirement.
+
 Session setup exposes a first-pass permission policy: read-only, workspace-write,
 approval-required, or full-auto. The selected policy is written into participant
 adapter config; Codex sandbox and Claude Code permission mode are mapped from it.

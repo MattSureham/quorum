@@ -47,7 +47,9 @@ export interface SessionManagerOptions {
     minSeqGap?: number;
     keepRecentEvents?: number;
   };
-  schedulerMode?: "bid" | "round-robin";
+  schedulerMode?: "bid" | "raise-hand" | "round-robin";
+  maxTurnsPerTopic?: number;
+  noConsecutive?: boolean;
 }
 
 export interface SessionSnapshot {
@@ -98,7 +100,11 @@ export class SessionManager {
   private epoch = 0;
   private active?: { turnId: string; speakerId: string; generation: number; ac: AbortController };
   private lastTurnId?: string;
+  private lastSpeakerId?: string;
   private lastPrompt = "";
+  private currentAddressedTo: string[] = [];
+  private turnsThisTopic = 0;
+  private wrapUpActive = false;
   private pendingPrompts: PendingPrompt[] = [];
   private roundRobinQueue: string[] = [];
   private running = false;
@@ -114,6 +120,7 @@ export class SessionManager {
       const projected = projectSessionState(opts.log.replay(0));
       this.epoch = projected.epoch;
       this.lastTurnId = projected.lastTurnId;
+      this.lastSpeakerId = projected.lastSpeakerId;
     }
   }
 
@@ -175,6 +182,9 @@ export class SessionManager {
 
   private async activatePrompt(prompt: PendingPrompt): Promise<void> {
     this.lastPrompt = prompt.text;
+    this.currentAddressedTo = prompt.addressedTo;
+    this.turnsThisTopic = 0;
+    this.wrapUpActive = false;
     this.epoch++;
     this.pendingBids.clear();
     if (this.isRoundRobin()) {
@@ -318,8 +328,11 @@ export class SessionManager {
       lastTurnId: this.lastTurnId,
     };
 
+    const eligible = this.currentAddressedTo.length
+      ? [...this.byId.values()].filter((agent) => this.currentAddressedTo.includes(agent.id))
+      : [...this.byId.values()];
     const bids = await Promise.all(
-      [...this.byId.values()].map((agent) =>
+      eligible.map((agent) =>
         agent.bid(ctx).then((bid) => bid).catch(() => undefined),
       ),
     );
@@ -328,6 +341,13 @@ export class SessionManager {
       for (const bid of bids) {
         if (!bid || bid.epoch !== this.epoch) continue;
         this.pendingBids.set(bid.bidId, bid);
+        if (this.isRaiseHand()) {
+          await this.append("floor_request", {
+            reason: bid.rationale ?? `${bid.kind} bid`,
+            intent: bid.kind === "rebuttal" ? "rebut" : "reply",
+            bidId: bid.bidId,
+          }, "participant", { author: { kind: "agent", id: bid.agentId, display: bid.agentId } });
+        }
         await this.append("bid_submitted", { bid }, "debug", {
           author: { kind: "agent", id: bid.agentId, display: bid.agentId },
         });
@@ -347,9 +367,10 @@ export class SessionManager {
     const decision = this.arbiter.decide({
       participants: this.participants(),
       bids: [...this.pendingBids.values()],
-      lastSpeakerId: this.lastTurnId,
       recentSpeakerCounts: this.recentSpeakerCounts,
       waitingRounds: this.waitingRounds,
+      lastSpeakerId: this.lastSpeakerId,
+      noConsecutive: this.opts.noConsecutive,
     });
     await this.append("speaker_selected", {
       policyVersion: decision.policyVersion,
@@ -454,6 +475,8 @@ export class SessionManager {
       await this.mailbox.enqueue("finishTurn", async () => {
         if (!this.active || this.active.turnId !== turnId || this.active.generation !== generation) return;
         this.lastTurnId = turnId;
+        this.lastSpeakerId = agent.id;
+        this.turnsThisTopic++;
         this.active = undefined;
         this.recentSpeakerCounts.set(agent.id, (this.recentSpeakerCounts.get(agent.id) ?? 0) + 1);
         const eventType = outcome === "done" ? "turn_completed" : outcome === "cancelled" ? "turn_cancelled" : "turn_failed";
@@ -502,8 +525,8 @@ export class SessionManager {
   private async settleAndArbitrate(): Promise<void> {
     await delay(this.opts.settlingWindowMs ?? 400);
     if (!this.running) return;
-    await this.mailbox.enqueue("settleAndArbitrate", async () => {
-      if (this.phase !== "settling") return;
+    const action = await this.mailbox.enqueue("settleAndArbitrate", async (): Promise<"collect" | "none"> => {
+      if (this.phase !== "settling") return "none";
       for (const bid of this.pendingBids.values()) {
         await this.append("bid_settled", { bidId: bid.bidId, action: "confirmed" }, "debug", {
           author: { kind: "agent", id: bid.agentId, display: bid.agentId },
@@ -511,14 +534,40 @@ export class SessionManager {
       }
       if (this.isRoundRobin()) {
         await this.grantNextRoundRobinSpeaker();
-        return;
+        return "none";
+      }
+      const maxTurns = Math.max(1, this.opts.maxTurnsPerTopic ?? 6);
+      if (this.wrapUpActive) {
+        this.pendingBids.clear();
+        await this.transition("idle", { reason: "topic wrapped up", turns: this.turnsThisTopic });
+        return "none";
+      }
+      if (this.turnsThisTopic >= maxTurns - 1) {
+        this.wrapUpActive = true;
+        this.lastPrompt = `${this.lastPrompt}\n\n[QUORUM WRAP UP] This is the final turn for this topic. State the concrete final answer or plan now. Preserve unresolved disagreements explicitly and leave unfinished work for Continue Session.`;
+        if (this.pendingBids.size) {
+          await this.arbitrateIfPossible();
+          return "none";
+        }
+        await this.transition("collecting_bids", { epoch: this.epoch, wrapUp: true });
+        return "collect";
+      }
+      if (this.pendingBids.size === 0) {
+        await this.transition("collecting_bids", { epoch: this.epoch, followUp: true });
+        return "collect";
       }
       await this.arbitrateIfPossible();
-    }).catch(() => undefined);
+      return "none";
+    }).catch(() => "none" as const);
+    if (action === "collect") await this.collectAndMaybeArbitrate(this.lastPrompt);
   }
 
   private isRoundRobin(): boolean {
     return this.opts.schedulerMode === "round-robin";
+  }
+
+  private isRaiseHand(): boolean {
+    return this.opts.schedulerMode === "raise-hand";
   }
 
   private orderedAgentIds(): string[] {
@@ -539,6 +588,9 @@ export class SessionManager {
       return;
     }
     const bid = this.roundRobinBid(agent);
+    if (this.roundRobinQueue.length === 0) {
+      this.lastPrompt = `${this.lastPrompt}\n\n[QUORUM WRAP UP] You are the final scheduled speaker. Give your concrete conclusion and explicitly record any unresolved disagreement for Continue Session.`;
+    }
     if (this.phase === "idle") await this.transition("collecting_bids", { epoch: this.epoch, scheduler: "round-robin" });
     await this.transition("arbitrating", { epoch: this.epoch, scheduler: "round-robin" });
     await this.append("speaker_selected", {
