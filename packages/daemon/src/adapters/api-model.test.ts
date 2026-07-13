@@ -52,7 +52,7 @@ describe("ApiModelAdapter attachments", () => {
   it("uses the native Anthropic messages protocol for Anthropic profiles", async () => {
     process.env.TEST_API_KEY = "test";
     let requestedUrl = "";
-    let requestHeaders: HeadersInit | undefined;
+    let requestHeaders: any;
     let requestBody: any;
     globalThis.fetch = vi.fn(async (url, init) => {
       requestedUrl = String(url);
