@@ -286,6 +286,27 @@ The following is the implementation trail from this session. It is written for t
     - Work: tightened permission-policy mapping for native CLI agents. Until Codex/Claude Code native tool calls are fully bridged through Quorum approval, `approval-required` maps Codex to `read-only` sandbox and Claude Code to default permissions rather than workspace-write/accept-edits. `full-auto` remains the explicit least-restrictive choice.
     - Verification: run `pnpm typecheck`, `pnpm test`, and `pnpm --filter @quorum/client-web build` after this change.
 
+64. commit `b9d8fed` `fix: queue prompts during active turns`
+    - Files: protocol agent deltas, legacy adapter bridge, `SessionManager` and tests, README/HANDOFF.
+    - Work: added persisted FIFO prompt queueing and structured adapter failure propagation into `turn_failed`/`turn_trace`.
+
+65. commit `ce25a04` `fix: surface codex cli failures`
+    - Files: Codex adapter and adapter tests, README/HANDOFF.
+    - Work: updated Codex JSONL parsing for current event shapes and made spawn, stderr, exit, auth, empty-output, and one-shot resume fallback observable.
+
+66. commit `417476d` `feat: enforce shared session modes`
+    - Files: protocol room scheduler, arbiter/session state and tests, shared host, README/HANDOFF.
+    - Work: enforced addressed targets, no-consecutive speaking, raise-hand floor requests, bounded open follow-ups, strict round-robin, and mandatory final wrap-up.
+
+67. commit `b7ea29e` `feat: restore shared memory and bound attachments`
+    - Files: core event/memory/projection paths, SQLite, API model and gateway, protocol validation and tests, README/HANDOFF.
+    - Work: restored compaction/shared memory across restart, persisted shared memory with versions, removed image data URLs from text context, limited attachment payloads, and sent vision models only current-epoch images.
+
+68. this change `fix: align profiles lifecycle and docs`
+    - Files: `packages/client-web/src/main.tsx`, `README.md`, `HANDOFF.md`.
+    - Work: made built-in profile labels disclose their actual provider model ids, made persisted room lifecycle authoritative over legacy localStorage state, and removed stale placeholder/test-count documentation.
+    - Verification: `pnpm typecheck`, all 82 tests, and the Web production build pass.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:
@@ -330,10 +351,10 @@ What is already implemented:
 - The run-status banner now explains the execution stage instead of only showing coarse phase labels. It can surface queueing, scheduler wait, agent contact, thinking/output, running tools, waiting approval, failure, and completed-without-visible-reply states.
 - Shared-session diagnostics now explain mode semantics and show round-robin order/current/completed/remaining speakers.
 - Agent health checks are available through WebSocket `check_agents` and the Web UI. Current checks cover CLI binary availability, API key env availability, placeholders, echo readiness, and unknown adapters.
-- The Web UI session sidebar supports local Archive/Unarchive, JSON Export, and confirmed hard Delete. Archive is local UI state only; it does not remove SQLite data.
+- The Web UI session sidebar supports persisted Archive/Unarchive, JSON Export, and confirmed hard Delete. A legacy localStorage archive set is used only for old rooms that do not yet have a persisted lifecycle field.
 - Shared-session diagnostics include a Continuity card for native resume fallback warnings and latest memory-summary seq ranges.
 - Agents & Models now presents agent profiles with role/provider/model/capability summaries. Provider credentials remain separate hidden credential sources for API-model profiles.
-- Session rows show a first-pass lifecycle label (`active`, `completed`, `archived`) and exports include that lifecycle. The label is derived in the Web UI and is not yet a persisted lifecycle field.
+- Session rows and exports show the persisted lifecycle (`active`, `completed`, or `archived`) when present; UI derivation is only a compatibility fallback for old room records.
 - Diagnostics include a derived Turn Trace panel that groups recent turns by `turnId` and shows speaker, duration, tool count, output count, and outcome.
 - Session setup exposes a permission-policy selector and writes the selected policy into new participants' adapter config.
 - Chat image attachments now show per-session visibility: vision-capable agents versus metadata-only agents.
@@ -406,7 +427,7 @@ pnpm dev      # ONE command: daemon (ws://127.0.0.1:8787) + web client (http://1
 ```
 Then open **http://127.0.0.1:5173** in a browser (NOT 8787 — that's the WebSocket port; hitting it with a browser shows "Upgrade Required", which is normal).
 
-Other scripts: `pnpm demo` (dependency-free 2-agent echo demo), `pnpm test` (vitest, 30 tests), `pnpm typecheck` (tsc -b), `pnpm smoke` (M0 EventLog check).
+Other scripts: `pnpm demo` (dependency-free 2-agent echo demo), `pnpm test` (vitest), `pnpm typecheck` (tsc -b), `pnpm smoke` (M0 EventLog check).
 
 **Gotcha:** only one process can hold port 8787. If a standalone daemon is already running you'll get `EADDRINUSE` — stop it first (`lsof -nP -i :8787` to find it).
 
@@ -435,12 +456,12 @@ SPEC.md       full design (Chinese): data model, Conductor state machine, adapte
 
 ## Where to change common things
 - **Agent/model config**: the Web UI right sidebar should be agent/model oriented. Users select or configure participants such as `codex`, `claude-code`, OpenClaw-style adapters, or direct API model agents such as DeepSeek/GLM/MiniMax. `claude-code` is the local Claude Code agent and should be displayed as `Claude Code`, not generic `Claude`; Anthropic API models should use explicit model names and the `api-model` adapter. Provider credentials are only hidden credential sources for API-model agents; do not put API key inputs directly in the persistent sidebar. The credential modal has built-in presets for OpenAI, DeepSeek, Zhipu, MiniMax, and Anthropic, and must support custom providers beyond presets. Credentials are persisted locally in SQLite and applied to daemon `process.env`; the browser only receives masked previews.
-- **Session creation**: the Web UI Session setup modal calls `create_session`; the shared-session host keeps an in-memory multi-session registry and the gateway routes snapshots/events by room id. The modal can set a per-session `workspacePath`; CLI agents run from that path and sandboxed tool execution is scoped there. Dynamically-created sessions persist room metadata and can be continued after daemon restart. `Round robin` persists `schedulerMode: "round-robin"` and uses the strict ordered scheduler in `SessionManager`; Open discussion and Raise hand continue to use the shared bid kernel.
+- **Session creation**: the Web UI Session setup modal calls `create_session`; the shared-session host keeps an in-memory multi-session registry and the gateway routes snapshots/events by room id. The modal can set a per-session `workspacePath`; CLI agents run from that path and sandboxed tool execution is scoped there. Dynamically-created sessions persist room metadata and can be continued after daemon restart. Round robin uses strict participant order, Raise hand persists explicit floor requests before arbitration, and Open discussion recollects follow-up bids within the room turn budget.
 - **Session setup form state**: keep editable form state local to `SessionSetupModal`. Do not pass React event objects into function-style state updaters; copy `input.currentTarget.value` first, then update state with the plain value. Otherwise React can null `currentTarget` before the updater runs and the modal can crash while typing.
 - **Run visibility**: message sends should never appear silent. `packages/client-web/src/main.tsx` derives `RunStatus` from local submit time and room events; keep this banner updated when adding new phases or schedulers.
 - **Chat vs log**: the central Chat transcript should remain message-only. Keep non-message room/session events in diagnostics, recent activity, tool activity, memory, replay, or checkpoint panels; do not reintroduce raw event rows into the primary chat stream.
 - **Web UI language**: `packages/client-web/src/main.tsx` has a lightweight local `zhText` dictionary and `t()` helper. The language switcher lives in the left Connection panel and persists `quorum.client.language` in `localStorage`. When adding user-visible Web UI text, route it through `t()` or add a dictionary entry.
-- **Image chat**: `MessageBody.attachments` supports image data URLs. The Web UI handles upload/preview/display, `post_message` transports attachments, and `api-model` turns convert images to OpenAI-compatible `image_url` content. CLI agents currently see image metadata/data URLs in text projection; add a file bridge before claiming full local CLI vision support.
+- **Image chat**: `MessageBody.attachments` supports image data URLs. The Web UI handles upload/preview/display, `post_message` transports attachments, and `api-model` turns convert only current-epoch images to OpenAI-compatible `image_url` content. CLI agents see attachment metadata, not data URLs; add a safe file bridge before claiming local CLI vision support.
 - **API-model failures**: `packages/daemon/src/adapters/api-model.ts` must never silently complete on missing keys, HTTP errors, or empty model responses. It should emit a visible message so the run-status banner and transcript explain what happened.
 - **The room (agents, policy, workspace)**: the initial room is still defined in `quorum.config.json` at the repo root (or `QUORUM_CONFIG=<path>`). `packages/cli/src/index.ts` loads it via `loadConfig()` and falls back to built-in defaults if the file is missing. New Web UI sessions may override `workspacePath` per session.
 - **Add an agent**: currently still add a `ParticipantDescriptor` to `participants[]` with an `adapter` + `adapterConfig`. `claude-code` runs the local `claude -p --verbose --output-format stream-json` CLI subprocess by default and should reuse Claude Code local auth; it strips `ANTHROPIC_API_KEY` unless `adapterConfig.inheritApiKeyEnv` is explicitly true. Set `adapterConfig.transport: "sdk"` only for the optional Agent SDK path. `codex` needs the `codex` CLI on PATH; `api-model` is any OpenAI-compatible endpoint; `echo` is the built-in fake.
@@ -456,13 +477,13 @@ SPEC.md       full design (Chinese): data model, Conductor state machine, adapte
 - **M6** remote (relay/E2E/pairing QR, more providers) — **not started**.
 
 ## Suggested next steps
-1. Audit/finish M5 web-client features (diff view, approve-tool + rollback UI, reconnect).
-2. Start M6 (remote transport + pairing).
-3. Refresh `README.md` — its "Status" section is stale (still calls the web client a placeholder and references a `pnpm --filter @quorum/cli start` script that doesn't exist; start the daemon with `npx tsx packages/cli/src/index.ts`).
+1. Add a safe local-file bridge for CLI agents that have native vision support.
+2. Persist custom agent profiles server-side instead of browser-only localStorage.
+3. Validate the unsigned NSIS artifact on a real Windows x64 machine, then add signing/updater work.
 
 ## Conventions / gotchas
 - `@quorum/core` stays **dependency-free**; anything needing network/env/SDKs lives in `@quorum/daemon`.
-- Verify before claiming: `pnpm typecheck` is clean and `pnpm test` is 30/30 green at `384c311`.
+- Verify before claiming with `pnpm typecheck`, `pnpm test`, the Web build, and the relevant sidecar/desktop smoke commands. The 2026-07-13 reliability pass reached 82 passing tests before the final profile/lifecycle cleanup.
 - Debug artifacts (root `*.png`, `.playwright-mcp/`) are gitignored — keep them out of commits.
 - **Git worktrees:** `main` is checked out at `/Users/matthew/Projects/quorum`; a second worktree (`test-framework-debug`) also exists. A branch can only be checked out in one worktree at a time, so don't try to `git checkout main` in the second one.
 

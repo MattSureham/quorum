@@ -281,13 +281,13 @@ wiring, and broader platform lifecycle hardening.
 
 ## Status
 
-Scaffold + runnable core (M0 done, M1/M2 core logic in place):
+Runnable shared-session application with persisted sessions, Web UI, and desktop packaging:
 
 - `@quorum/protocol` — event/room types + zod wire schema
 - `@quorum/core` — EventLog, Conductor, the three floor policies, projection — **dependency-free, tested**
 - `@quorum/daemon` — adapters (echo + real Claude Code / Codex / API), git workspace, SQLite store, WS gateway
 - `@quorum/cli` — minimal daemon launcher
-- `@quorum/client-web` — placeholder (M5)
+- `@quorum/client-web` — React session/chat/configuration and diagnostics client
 
 ## Run it
 
@@ -328,6 +328,10 @@ their own local auth/session. The key modal is hidden during normal chat/session
 work. Credentials are stored locally in the Quorum SQLite database, applied to
 the daemon process immediately, and only returned to the browser as masked
 previews.
+
+Built-in API profiles show the exact model id sent to the provider. Role labels
+such as analysis or fast do not claim a different underlying model; create a
+custom profile when a provider exposes a newer model id.
 
 The agent roster still comes from the room config for now: `quorum.config.json`
 or `QUORUM_CONFIG=<path>`. Each agent is a `ParticipantDescriptor` with an
@@ -428,7 +432,7 @@ packages/
   core/       room engine: event-log, conductor, policies, projection
   daemon/     adapters, git workspace, sqlite store, ws gateway, wiring
   cli/        daemon launcher
-  client-web/ React client (M5 placeholder)
+  client-web/ React session/chat and diagnostics client
 scripts/      demo.ts (end-to-end) · smoke.ts (M0)
 SPEC.md       full design + handoff spec
 ```

@@ -406,10 +406,10 @@ const agentModelPresets: AgentModelPreset[] = [
   { id: "codex", display: "Codex", adapter: "codex", detail: "CLI agent; uses the local Codex session/auth", credential: "Codex CLI", role: "local builder" },
   { id: "claude-code", display: "Claude Code", adapter: "claude-code", detail: "CLI/SDK agent; uses Claude Code auth", credential: "Claude Code auth", role: "local reviewer" },
   { id: "openclaw", display: "OpenClaw", adapter: "openclaw", detail: "Agent adapter placeholder; not installed in this build", credential: "Agent-specific auth", role: "placeholder agent" },
-  { id: "deepseek-v4-pro", display: "DeepSeek V4 Pro", adapter: "api-model", detail: "Direct API model agent", credential: "DeepSeek API key", providerId: "deepseek", model: "deepseek-chat", role: "analysis model" },
-  { id: "deepseek-v4-flash", display: "DeepSeek V4 Flash", adapter: "api-model", detail: "Direct API model agent", credential: "DeepSeek API key", providerId: "deepseek", model: "deepseek-chat", role: "fast model" },
-  { id: "glm-5.2", display: "GLM 5.2", adapter: "api-model", detail: "Direct API model agent", credential: "Zhipu API key", providerId: "zhipu", model: "glm-4.6", role: "analysis model" },
-  { id: "minimax-m3", display: "MiniMax M3", adapter: "api-model", detail: "Direct API model agent", credential: "MiniMax API key", providerId: "minimax", model: "MiniMax-M3", role: "vision reader", vision: true },
+  { id: "deepseek-v4-pro", display: "DeepSeek (deepseek-chat) · analysis", adapter: "api-model", detail: "Direct API model agent", credential: "DeepSeek API key", providerId: "deepseek", model: "deepseek-chat", role: "analysis model" },
+  { id: "deepseek-v4-flash", display: "DeepSeek (deepseek-chat) · fast role", adapter: "api-model", detail: "Direct API model agent", credential: "DeepSeek API key", providerId: "deepseek", model: "deepseek-chat", role: "fast model" },
+  { id: "glm-5.2", display: "Zhipu (glm-4.6)", adapter: "api-model", detail: "Direct API model agent", credential: "Zhipu API key", providerId: "zhipu", model: "glm-4.6", role: "analysis model" },
+  { id: "minimax-m3", display: "MiniMax (MiniMax-M3)", adapter: "api-model", detail: "Direct API model agent", credential: "MiniMax API key", providerId: "minimax", model: "MiniMax-M3", role: "vision reader", vision: true },
 ];
 
 const defaultSettings: ClientSettings = {
@@ -803,6 +803,10 @@ function sessionLifecycle(room: Room, currentRoom: Room, events: RoomEvent[], ar
   return t("active");
 }
 
+function isRoomArchived(room: Room, legacyArchivedIds: Set<string>): boolean {
+  return room.lifecycle !== undefined ? room.lifecycle === "archived" : legacyArchivedIds.has(room.id);
+}
+
 function projectSharedSession(events: RoomEvent[]): SharedSessionProjection {
   const pending = new Map<string, Bid>();
   let phase = "legacy";
@@ -1076,7 +1080,7 @@ function App() {
     .filter((item) =>
       !deletingSessionIds.has(item.id) &&
       !deletedSessionIds.has(item.id) &&
-      (showArchived || (item.lifecycle !== "archived" && !archivedSessionIds.has(item.id)))
+      (showArchived || !isRoomArchived(item, archivedSessionIds))
     );
   const isPreview = status !== "connected";
   const displayEvents = isPreview ? previewEvents : events;
@@ -1292,6 +1296,17 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!sessionsLoaded) return;
+    setArchivedSessionIds((current) => {
+      const persistedIds = new Set(rooms.filter((item) => item.lifecycle !== undefined).map((item) => item.id));
+      const next = new Set([...current].filter((id) => !persistedIds.has(id)));
+      if (next.size === current.size && [...next].every((id) => current.has(id))) return current;
+      saveArchivedSessionIds(next);
+      return next;
+    });
+  }, [rooms, sessionsLoaded]);
+
   function applyConnection() {
     setSettings(draftSettings);
     attemptRef.current = 0;
@@ -1319,7 +1334,7 @@ function App() {
   }
 
   function toggleArchiveSession(room: Room) {
-    const nextLifecycle = room.lifecycle === "archived" || archivedSessionIds.has(room.id) ? "active" : "archived";
+    const nextLifecycle = isRoomArchived(room, archivedSessionIds) ? "active" : "archived";
     if (send({ t: "update_session_lifecycle", sessionId: room.id, lifecycle: nextLifecycle })) {
       setArchivedSessionIds((current) => {
         const next = new Set(current);
@@ -1340,7 +1355,7 @@ function App() {
   }
 
   function exportSession(room: Room) {
-    const archived = room.lifecycle === "archived" || archivedSessionIds.has(room.id);
+    const archived = isRoomArchived(room, archivedSessionIds);
     const payload = {
       exportedAt: new Date().toISOString(),
       lifecycle: sessionLifecycle(room, displayRoom, displayEvents, archived, (text) => text),
@@ -1601,7 +1616,7 @@ function App() {
             </button>
           </div>
           {visibleRooms.map((item) => (
-            <div key={item.id} className={item.id === displayRoom.id ? "room-list-row active" : item.lifecycle === "archived" || archivedSessionIds.has(item.id) ? "room-list-row archived" : "room-list-row"}>
+            <div key={item.id} className={item.id === displayRoom.id ? "room-list-row active" : isRoomArchived(item, archivedSessionIds) ? "room-list-row archived" : "room-list-row"}>
             <button
               key={item.id}
               className={item.id === displayRoom.id ? "room-list-item active" : "room-list-item"}
@@ -1611,7 +1626,7 @@ function App() {
             >
               <span>{item.title}</span>
               <strong>{item.id}</strong>
-              <em>{sessionLifecycle(item, displayRoom, displayEvents, item.lifecycle === "archived" || archivedSessionIds.has(item.id), t)}</em>
+              <em>{sessionLifecycle(item, displayRoom, displayEvents, isRoomArchived(item, archivedSessionIds), t)}</em>
             </button>
             <button
               className="icon-action room-export-action"
@@ -1625,8 +1640,8 @@ function App() {
             <button
               className="icon-action room-archive-action"
               type="button"
-              title={item.lifecycle === "archived" || archivedSessionIds.has(item.id) ? t("Unarchive session") : t("Archive session")}
-              aria-label={`${item.lifecycle === "archived" || archivedSessionIds.has(item.id) ? t("Unarchive session") : t("Archive session")} ${item.title}`}
+              title={isRoomArchived(item, archivedSessionIds) ? t("Unarchive session") : t("Archive session")}
+              aria-label={`${isRoomArchived(item, archivedSessionIds) ? t("Unarchive session") : t("Archive session")} ${item.title}`}
               onClick={() => toggleArchiveSession(item)}
             >
               <Archive size={15} />
