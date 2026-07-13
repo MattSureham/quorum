@@ -386,11 +386,11 @@ interface AgentProfileDraft {
 }
 
 const credentialPresets: CredentialDraft[] = [
-  { draftId: "preset-openai", providerId: "openai", envVar: "OPENAI_API_KEY", apiKey: "", baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini", locked: true },
-  { draftId: "preset-deepseek", providerId: "deepseek", envVar: "DEEPSEEK_API_KEY", apiKey: "", baseUrl: "https://api.deepseek.com/v1", model: "deepseek-chat", locked: true },
-  { draftId: "preset-zhipu", providerId: "zhipu", envVar: "ZHIPU_API_KEY", apiKey: "", baseUrl: "https://open.bigmodel.cn/api/paas/v4", model: "glm-4.6", locked: true },
-  { draftId: "preset-minimax", providerId: "minimax", envVar: "MINIMAX_API_KEY", apiKey: "", baseUrl: "https://api.minimax.io/v1", model: "MiniMax-M3", locked: true },
-  { draftId: "preset-anthropic", providerId: "anthropic", envVar: "ANTHROPIC_API_KEY", apiKey: "", baseUrl: "", model: "claude-sonnet-4-20250514", locked: true },
+  { draftId: "preset-openai", providerId: "openai", envVar: "OPENAI_API_KEY", apiKey: "", baseUrl: "https://api.openai.com/v1", model: "gpt-5.5", locked: true },
+  { draftId: "preset-deepseek", providerId: "deepseek", envVar: "DEEPSEEK_API_KEY", apiKey: "", baseUrl: "https://api.deepseek.com", model: "deepseek-v4-pro", locked: true },
+  { draftId: "preset-zhipu", providerId: "zhipu", envVar: "ZHIPU_API_KEY", apiKey: "", baseUrl: "https://open.bigmodel.cn/api/paas/v4", model: "glm-5.1", locked: true },
+  { draftId: "preset-minimax", providerId: "minimax", envVar: "MINIMAX_API_KEY", apiKey: "", baseUrl: "https://api.minimax.io/v1", model: "MiniMax-M2.7", locked: true },
+  { draftId: "preset-anthropic", providerId: "anthropic", envVar: "ANTHROPIC_API_KEY", apiKey: "", baseUrl: "https://api.anthropic.com/v1", model: "claude-fable-5", locked: true },
 ];
 
 interface AgentModelPreset {
@@ -403,6 +403,7 @@ interface AgentModelPreset {
   model?: string;
   role: string;
   vision?: boolean;
+  flagship?: boolean;
   custom?: boolean;
 }
 
@@ -410,10 +411,33 @@ const agentModelPresets: AgentModelPreset[] = [
   { id: "codex", display: "Codex", adapter: "codex", detail: "CLI agent; uses the local Codex session/auth", credential: "Codex CLI", role: "local builder" },
   { id: "claude-code", display: "Claude Code", adapter: "claude-code", detail: "CLI/SDK agent; uses Claude Code auth", credential: "Claude Code auth", role: "local reviewer" },
   { id: "openclaw", display: "OpenClaw", adapter: "openclaw", detail: "Agent adapter placeholder; not installed in this build", credential: "Agent-specific auth", role: "placeholder agent" },
-  { id: "deepseek-v4-pro", display: "DeepSeek (deepseek-chat) · analysis", adapter: "api-model", detail: "Direct API model agent", credential: "DeepSeek API key", providerId: "deepseek", model: "deepseek-chat", role: "analysis model" },
-  { id: "deepseek-v4-flash", display: "DeepSeek (deepseek-chat) · fast role", adapter: "api-model", detail: "Direct API model agent", credential: "DeepSeek API key", providerId: "deepseek", model: "deepseek-chat", role: "fast model" },
-  { id: "glm-5.2", display: "Zhipu (glm-4.6)", adapter: "api-model", detail: "Direct API model agent", credential: "Zhipu API key", providerId: "zhipu", model: "glm-4.6", role: "analysis model" },
-  { id: "minimax-m3", display: "MiniMax (MiniMax-M3)", adapter: "api-model", detail: "Direct API model agent", credential: "MiniMax API key", providerId: "minimax", model: "MiniMax-M3", role: "vision reader", vision: true },
+];
+
+const providerModelCatalog: Array<{
+  providerId: string;
+  model: string;
+  label: string;
+  role: string;
+  flagship?: boolean;
+  vision?: boolean;
+}> = [
+  { providerId: "openai", model: "gpt-5.5-pro", label: "GPT-5.5 Pro", role: "maximum-quality reasoning model", flagship: true, vision: true },
+  { providerId: "openai", model: "gpt-5.5", label: "GPT-5.5", role: "general reasoning model", vision: true },
+  { providerId: "openai", model: "gpt-5.4-mini", label: "GPT-5.4 mini", role: "efficient general model", vision: true },
+  { providerId: "deepseek", model: "deepseek-v4-pro", label: "DeepSeek V4 Pro", role: "flagship reasoning model", flagship: true },
+  { providerId: "deepseek", model: "deepseek-v4-flash", label: "DeepSeek V4 Flash", role: "fast reasoning model" },
+  { providerId: "zhipu", model: "glm-5.1", label: "GLM-5.1", role: "flagship agentic model", flagship: true },
+  { providerId: "zhipu", model: "glm-5.1-highspeed", label: "GLM-5.1 HighSpeed", role: "fast flagship model" },
+  { providerId: "zhipu", model: "glm-5", label: "GLM-5", role: "agentic foundation model" },
+  { providerId: "zhipu", model: "glm-4.7", label: "GLM-4.7", role: "general reasoning model" },
+  { providerId: "zhipu", model: "glm-5v-turbo", label: "GLM-5V Turbo", role: "vision coding model", vision: true },
+  { providerId: "minimax", model: "MiniMax-M2.7", label: "MiniMax M2.7", role: "flagship agentic model", flagship: true },
+  { providerId: "minimax", model: "MiniMax-M2.7-highspeed", label: "MiniMax M2.7 HighSpeed", role: "high-speed flagship model" },
+  { providerId: "minimax", model: "MiniMax-M2.5", label: "MiniMax M2.5", role: "coding and tool model" },
+  { providerId: "anthropic", model: "claude-fable-5", label: "Claude Fable 5", role: "most capable long-running agent model", flagship: true, vision: true },
+  { providerId: "anthropic", model: "claude-opus-4-8", label: "Claude Opus 4.8", role: "complex agentic coding model", vision: true },
+  { providerId: "anthropic", model: "claude-sonnet-5", label: "Claude Sonnet 5", role: "balanced frontier model", vision: true },
+  { providerId: "anthropic", model: "claude-haiku-4-5", label: "Claude Haiku 4.5", role: "fast efficient model", vision: true },
 ];
 
 const defaultSettings: ClientSettings = {
