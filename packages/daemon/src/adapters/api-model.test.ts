@@ -48,4 +48,43 @@ describe("ApiModelAdapter attachments", () => {
     expect(content).toEqual(expect.arrayContaining([expect.objectContaining({ image_url: { url: "data:image/png;base64,TkVX" } })]));
     expect(JSON.stringify(content)).not.toContain("T0xE");
   });
+
+  it("uses the native Anthropic messages protocol for Anthropic profiles", async () => {
+    process.env.TEST_API_KEY = "test";
+    let requestedUrl = "";
+    let requestHeaders: HeadersInit | undefined;
+    let requestBody: any;
+    globalThis.fetch = vi.fn(async (url, init) => {
+      requestedUrl = String(url);
+      requestHeaders = init?.headers;
+      requestBody = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ content: [{ type: "text", text: "anthropic ok" }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+    const self: ParticipantDescriptor = { id: "claude-api", kind: "agent", display: "Claude API", adapter: "api-model", status: "idle" };
+    const adapter = new ApiModelAdapter(self, {
+      apiKeyEnv: "TEST_API_KEY",
+      baseUrl: "https://api.anthropic.com/v1",
+      model: "claude-fable-5",
+      apiStyle: "anthropic",
+    });
+    const events = [];
+    for await (const event of adapter.takeTurn({
+      turnId: "turn",
+      roomTitle: "room",
+      self,
+      participants: [self],
+      protocol: "system",
+      projection: [],
+      attachments: [{ id: "img", name: "img.png", mimeType: "image/png", dataUrl: "data:image/png;base64,QUJD" }],
+      signal: new AbortController().signal,
+    })) events.push(event);
+
+    expect(requestedUrl).toBe("https://api.anthropic.com/v1/messages");
+    expect(requestHeaders).toMatchObject({ "x-api-key": "test", "anthropic-version": "2023-06-01" });
+    expect(requestBody.messages[0].content).toEqual(expect.arrayContaining([expect.objectContaining({ type: "image" })]));
+    expect(events.some((event) => (event.body as any).text === "anthropic ok")).toBe(true);
+  });
 });

@@ -6,6 +6,7 @@ export interface ApiModelOptions {
   model?: string;
   baseUrl?: string;     // OpenAI-compatible /chat/completions endpoint base
   apiKeyEnv?: string;   // env var holding the key
+  apiStyle?: "openai" | "anthropic";
 }
 
 /** A no-file-edit "speaker / second opinion / moderator" backed by a chat API. */
@@ -35,16 +36,26 @@ export class ApiModelAdapter extends BaseAgentAdapter {
         yield this.msg(`Cannot call ${this.descriptor.display}: missing API key env var ${apiKeyEnv}. Configure it in API keys, then start or retry the session.`);
         return;
       }
-      const res = await fetch(`${base}/chat/completions`, {
+      const apiStyle = this.opts.apiStyle ?? "openai";
+      const res = await fetch(apiStyle === "anthropic" ? `${base}/messages` : `${base}/chat/completions`, {
         method: "POST",
-        headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: "system", content: input.protocol },
-            { role: "user", content: userContentFor(input, this.prompt(input)) },
-          ],
-        }),
+        headers: apiStyle === "anthropic"
+          ? { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" }
+          : { "content-type": "application/json", authorization: `Bearer ${key}` },
+        body: JSON.stringify(apiStyle === "anthropic"
+          ? {
+              model,
+              max_tokens: 8_192,
+              system: input.protocol,
+              messages: [{ role: "user", content: anthropicContentFor(input, this.prompt(input)) }],
+            }
+          : {
+              model,
+              messages: [
+                { role: "system", content: input.protocol },
+                { role: "user", content: userContentFor(input, this.prompt(input)) },
+              ],
+            }),
         signal: ac.signal,
       });
       const data = (await res.json()) as any;
@@ -53,7 +64,9 @@ export class ApiModelAdapter extends BaseAgentAdapter {
         yield this.msg(`Cannot call ${this.descriptor.display}: ${detail}`);
         return;
       }
-      const text: string = data?.choices?.[0]?.message?.content ?? "";
+      const text: string = apiStyle === "anthropic"
+        ? (data?.content ?? []).filter((block: any) => block?.type === "text").map((block: any) => block.text).join("\n")
+        : data?.choices?.[0]?.message?.content ?? "";
       yield this.msg(text || `${this.descriptor.display} returned no text. Check the configured model/base URL for ${apiKeyEnv}.`);
     } finally {
       input.signal.removeEventListener("abort", onAbort);
@@ -63,6 +76,22 @@ export class ApiModelAdapter extends BaseAgentAdapter {
   async interrupt(): Promise<void> {
     this.ac?.abort();
   }
+}
+
+function anthropicContentFor(input: TurnInput, text: string): Array<Record<string, unknown>> {
+  return [
+    { type: "text", text },
+    ...(input.attachments ?? [])
+      .filter((attachment) => attachment.mimeType.startsWith("image/"))
+      .map((image) => ({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: image.mimeType,
+          data: image.dataUrl.slice(image.dataUrl.indexOf(",") + 1),
+        },
+      })),
+  ];
 }
 
 function userContentFor(input: TurnInput, text: string): string | Array<Record<string, unknown>> {
