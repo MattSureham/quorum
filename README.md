@@ -335,6 +335,16 @@ Built-in API profiles show the exact model id sent to the provider. Role labels
 such as analysis or fast do not claim a different underlying model; create a
 custom profile when a provider exposes a newer model id.
 
+After a provider API key is configured, Session setup exposes that provider's
+language-model catalog as individual participants. The built-in catalog includes
+an explicitly labelled flagship plus practical faster/cheaper models for
+OpenAI, DeepSeek, Zhipu, MiniMax, and Anthropic. DeepSeek uses V4 Pro/Flash,
+Zhipu includes GLM-5.1 and GLM-5V, MiniMax includes M2.7/HighSpeed, and Anthropic
+API profiles use the native Messages protocol rather than the OpenAI-compatible
+adapter path. Local Codex and Claude Code agents continue to use their own CLI
+model defaults and authentication. Custom profiles remain available for model
+ids not yet present in the built-in catalog.
+
 In the desktop app, Session setup includes a native folder picker beside the
 workspace path field. The chosen absolute path is written into the session
 draft; manual entry remains available, including in browser-only development.

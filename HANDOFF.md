@@ -319,6 +319,10 @@ The following is the implementation trail from this session. It is written for t
     - Files: Tauri Rust command/dependency, Web Session setup and styles, `README.md`, `HANDOFF.md`.
     - Work: adds a system-native directory chooser in the desktop app, seeded from the current workspace path. Session setup keeps manual absolute-path entry and explains that browser-only mode cannot expose a local absolute directory path.
 
+72. this change `feat: add provider model catalogs`
+    - Files: Web credential/profile/session selection, API-model adapter/tests, `README.md`, `HANDOFF.md`.
+    - Work: configured provider credentials now unlock multiple exact model ids as independent participants, with a flagship marker. The 2026-07 catalog includes DeepSeek V4 Pro/Flash, Zhipu GLM-5.1/5/4.7/5V, MiniMax M2.7/M2.5, current OpenAI defaults, and current Anthropic Claude models. Anthropic profiles use the native Messages API including base64 vision input; local CLI agents retain their own default model configuration.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:
