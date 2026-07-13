@@ -165,6 +165,11 @@ processed through a FIFO queue, with a fresh epoch and bid collection after the
 active turn. Adapter failures use structured `turn_failed`/`turn_trace` payloads
 instead of appearing as successful turns with no visible reply.
 
+The Codex CLI adapter accepts both current `item.type` JSONL events and older
+`item.item_type` events. Spawn errors, stderr/non-zero exits, authentication or
+argument failures, and successful runs with no assistant message are surfaced
+as failed turns; native resume fallback is attempted at most once.
+
 Session setup exposes a first-pass permission policy: read-only, workspace-write,
 approval-required, or full-auto. The selected policy is written into participant
 adapter config; Codex sandbox and Claude Code permission mode are mapped from it.

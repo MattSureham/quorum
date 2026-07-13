@@ -48,6 +48,10 @@ export class CodexAdapter extends BaseAgentAdapter {
     const queue: PartialRoomEvent[] = [];
     let wake: (() => void) | null = null;
     let resumeFailed = false;
+    let stderr = "";
+    let exitCode: number | null = null;
+    let spawnError: Error | undefined;
+    let emittedMessage = false;
     const push = (e: PartialRoomEvent) => { queue.push(e); wake?.(); wake = null; };
 
     const rl = createInterface({ input: child.stdout! });
@@ -63,11 +67,12 @@ export class CodexAdapter extends BaseAgentAdapter {
           break;
         case "item.completed": {
           const it = ev.item ?? {};
-          if (it.item_type === "reasoning" && it.text) push({ type: "thinking", body: { text: it.text } });
-          else if (it.item_type === "command_execution") {
+          const itemType = it.type ?? it.item_type;
+          if (itemType === "reasoning" && it.text) push({ type: "thinking", body: { text: it.text } });
+          else if (itemType === "command_execution") {
             push({ type: "tool_call", body: { tool: "bash", args: { command: it.command }, callId: String(it.id ?? "") } });
             push({ type: "tool_result", body: { callId: String(it.id ?? ""), ok: (it.exit_code ?? 0) === 0, stdout: it.aggregated_output, exitCode: it.exit_code } });
-          } else if (it.item_type === "mcp_tool_call") {
+          } else if (itemType === "mcp_tool_call") {
             const rawName = String(it.name ?? it.tool ?? "tool");
             push({ type: "tool_call", body: { tool: `mcp:${rawName}`, args: it.arguments ?? {}, callId: String(it.id ?? "") } });
             // Room tools (§9): a `raise_hand` / `hand_off` call from Codex becomes
@@ -76,7 +81,8 @@ export class CodexAdapter extends BaseAgentAdapter {
               const out = runRoomTool(normalizeToolName(rawName), (it.arguments as Record<string, unknown>) ?? {}, { readRoom: input.readRoom });
               for (const ev of out.events) push(ev);
             }
-          } else if (it.item_type === "assistant_message" && it.text) {
+          } else if ((itemType === "assistant_message" || itemType === "agent_message") && it.text) {
+            emittedMessage = true;
             push({ type: "message", body: { text: it.text } });
           }
           break;
@@ -98,9 +104,26 @@ export class CodexAdapter extends BaseAgentAdapter {
           break; // turn.started / turn.completed / item.started: ignore
       }
     });
+    child.stderr?.on("data", (chunk) => { stderr += chunk.toString(); });
 
     let closed = false;
-    const done = new Promise<void>((res) => child.on("close", () => { closed = true; res(); wake?.(); }));
+    const done = new Promise<void>((resolve) => {
+      child.on("close", (code) => {
+        exitCode = code;
+        closed = true;
+        resolve();
+        wake?.();
+        wake = null;
+      });
+      child.on("error", (error) => {
+        spawnError = error;
+        exitCode = 1;
+        closed = true;
+        resolve();
+        wake?.();
+        wake = null;
+      });
+    });
 
     try {
       while (true) {
@@ -110,6 +133,29 @@ export class CodexAdapter extends BaseAgentAdapter {
       }
       if (resumeFailed) {
         yield* this.takeTurn({ ...input, nativeSessionId: undefined });
+      } else if (spawnError) {
+        yield {
+          type: "system",
+          body: { level: "error", text: `Codex CLI failed to start: ${spawnError.message}`, category: "cli_not_found", detail: spawnError.message },
+        };
+      } else if (exitCode !== 0) {
+        const detail = stderr.trim() || `exit code ${exitCode}`;
+        if (usedResume) {
+          input.onNativeSessionResumeFailed?.(`Codex resume failed: ${detail}`);
+          this.threadId = undefined;
+          yield { type: "thinking", body: { text: `Native Codex thread resume failed; retrying with Quorum context bundle. ${detail}` } };
+          yield* this.takeTurn({ ...input, nativeSessionId: undefined });
+        } else {
+          yield {
+            type: "system",
+            body: { level: "error", text: `Codex CLI failed: ${detail}`, category: classifyCliFailure(detail), detail },
+          };
+        }
+      } else if (!emittedMessage) {
+        yield {
+          type: "system",
+          body: { level: "error", text: "Codex CLI completed without an assistant response", category: "empty_output", detail: stderr.trim() || undefined },
+        };
       }
     } finally {
       input.signal.removeEventListener("abort", onAbort);
@@ -120,4 +166,12 @@ export class CodexAdapter extends BaseAgentAdapter {
   async interrupt(): Promise<void> {
     this.child?.kill("SIGINT");
   }
+}
+
+function classifyCliFailure(detail: string): string {
+  const normalized = detail.toLowerCase();
+  if (normalized.includes("login") || normalized.includes("authentication") || normalized.includes("unauthorized")) return "auth";
+  if (normalized.includes("unexpected argument") || normalized.includes("unknown option") || normalized.includes("usage:")) return "cli_arguments";
+  if (normalized.includes("timed out") || normalized.includes("timeout")) return "timeout";
+  return "cli_exit";
 }
