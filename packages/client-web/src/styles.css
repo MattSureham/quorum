@@ -366,6 +366,70 @@ textarea:focus {
   line-height: 1.35;
 }
 
+.directory-browser {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #d7dfdc;
+}
+
+.directory-browser-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.directory-browser-head code {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: #43534e;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.directory-browser-head .secondary-action {
+  flex: 0 0 auto;
+  padding: 0 10px;
+}
+
+.directory-list {
+  display: grid;
+  max-height: 210px;
+  overflow-y: auto;
+  border: 1px solid #d7dfdc;
+  border-radius: 7px;
+  background: #fbfcfc;
+}
+
+.directory-list button {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 6px 10px;
+  color: #263832;
+  text-align: left;
+  border-bottom: 1px solid #e6ece9;
+  cursor: pointer;
+}
+
+.directory-list button:hover {
+  background: #eaf3ef;
+}
+
+.directory-list button:last-child {
+  border-bottom: 0;
+}
+
+.directory-list span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .primary-action,
 .secondary-action,
 .danger-action,

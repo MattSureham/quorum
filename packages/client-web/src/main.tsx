@@ -2368,6 +2368,17 @@ function SessionSetupModal({
   const [pickingWorkspace, setPickingWorkspace] = useState(false);
   const [workspacePickerStatus, setWorkspacePickerStatus] = useState("");
   const [directoryListing, setDirectoryListing] = useState<WorkspaceDirectoryListing>();
+  async function loadDirectory(path?: string) {
+    setPickingWorkspace(true);
+    setWorkspacePickerStatus("");
+    try {
+      setDirectoryListing(await onListDirectories(path));
+    } catch (err) {
+      setWorkspacePickerStatus(err instanceof Error ? err.message : String(err));
+    } finally {
+      setPickingWorkspace(false);
+    }
+  }
   const currentAgentIds = new Set(currentRoom.participants.filter((participant) => participant.kind === "agent").map((participant) => participant.id));
   const participantOptions = [
     ...currentRoom.participants.filter((participant) => participant.kind === "agent").map((participant) => ({
@@ -2475,8 +2486,7 @@ function SessionSetupModal({
                         const path = await pickWorkspaceDirectory(draft.workspacePath || currentRoom.workspacePath || "");
                         if (path) setDraft((current) => ({ ...current, workspacePath: path }));
                       } else {
-                        const listing = await onListDirectories(draft.workspacePath || currentRoom.workspacePath || undefined);
-                        setDirectoryListing(listing);
+                        await loadDirectory(draft.workspacePath || currentRoom.workspacePath || undefined);
                       }
                     } catch (err) {
                       setWorkspacePickerStatus(err instanceof Error ? err.message : String(err));
@@ -2508,13 +2518,13 @@ function SessionSetupModal({
                 </div>
                 <div className="directory-list">
                   {directoryListing.parent ? (
-                    <button type="button" onClick={async () => setDirectoryListing(await onListDirectories(directoryListing.parent))}>
+                    <button type="button" onClick={() => void loadDirectory(directoryListing.parent)}>
                       <Undo2 size={15} />
                       <span>{t("Parent folder")}</span>
                     </button>
                   ) : null}
                   {directoryListing.directories.map((directory) => (
-                    <button type="button" key={directory.path} onClick={async () => setDirectoryListing(await onListDirectories(directory.path))}>
+                    <button type="button" key={directory.path} onClick={() => void loadDirectory(directory.path)}>
                       <FolderOpen size={15} />
                       <span>{directory.name}</span>
                     </button>
