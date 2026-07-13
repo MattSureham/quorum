@@ -404,6 +404,9 @@ interface AgentModelPreset {
   role: string;
   vision?: boolean;
   flagship?: boolean;
+  apiKeyEnv?: string;
+  baseUrl?: string;
+  apiStyle?: "openai" | "anthropic";
   custom?: boolean;
 }
 
@@ -439,6 +442,29 @@ const providerModelCatalog: Array<{
   { providerId: "anthropic", model: "claude-sonnet-5", label: "Claude Sonnet 5", role: "balanced frontier model", vision: true },
   { providerId: "anthropic", model: "claude-haiku-4-5", label: "Claude Haiku 4.5", role: "fast efficient model", vision: true },
 ];
+
+function providerCatalogProfiles(views: ProviderConfigView[]): AgentModelPreset[] {
+  const configured = new Map(views.filter((view) => view.configured).map((view) => [view.providerId, view]));
+  return providerModelCatalog.flatMap((entry) => {
+    const view = configured.get(entry.providerId);
+    if (!view) return [];
+    return [{
+      id: `${entry.providerId}-${entry.model.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`,
+      display: entry.label,
+      adapter: "api-model",
+      detail: "Direct API model agent",
+      credential: `${entry.providerId} API key`,
+      providerId: entry.providerId,
+      model: entry.model,
+      role: entry.role,
+      vision: entry.vision,
+      flagship: entry.flagship,
+      apiKeyEnv: view.envVar,
+      baseUrl: view.baseUrl,
+      apiStyle: entry.providerId === "anthropic" ? "anthropic" as const : "openai" as const,
+    }];
+  });
+}
 
 const defaultSettings: ClientSettings = {
   url: "ws://127.0.0.1:8787",
@@ -601,8 +627,10 @@ function participantFromPreset(id: string, profiles: AgentModelPreset[]): Partic
     adapterConfig.providerId = preset.providerId;
     adapterConfig.role = preset.role;
     if (preset.model || credential?.model) adapterConfig.model = preset.model ?? credential?.model;
-    if (credential?.envVar) adapterConfig.apiKeyEnv = credential.envVar;
-    if (credential?.baseUrl) adapterConfig.baseUrl = credential.baseUrl;
+    if (preset.apiKeyEnv || credential?.envVar) adapterConfig.apiKeyEnv = preset.apiKeyEnv ?? credential?.envVar;
+    if (preset.baseUrl || credential?.baseUrl) adapterConfig.baseUrl = preset.baseUrl ?? credential?.baseUrl;
+    adapterConfig.apiStyle = preset.apiStyle ?? (preset.providerId === "anthropic" ? "anthropic" : "openai");
+    adapterConfig.vision = !!preset.vision;
   }
   return {
     id,
@@ -1118,7 +1146,21 @@ function App() {
     );
   const isPreview = status !== "connected";
   const displayEvents = isPreview ? previewEvents : events;
-  const agentProfiles = useMemo(() => [...agentModelPresets, ...customProfiles], [customProfiles]);
+  const agentProfiles = useMemo(() => {
+    const viewsByProvider = new Map(credentialViews.map((view) => [view.providerId, view]));
+    const availableCustom = customProfiles
+      .filter((profile) => !profile.providerId || viewsByProvider.get(profile.providerId)?.configured)
+      .map((profile) => {
+        const view = profile.providerId ? viewsByProvider.get(profile.providerId) : undefined;
+        return {
+          ...profile,
+          apiKeyEnv: view?.envVar,
+          baseUrl: view?.baseUrl,
+          apiStyle: profile.providerId === "anthropic" ? "anthropic" as const : "openai" as const,
+        };
+      });
+    return [...agentModelPresets, ...providerCatalogProfiles(credentialViews), ...availableCustom];
+  }, [credentialViews, customProfiles]);
   const chatEvents = displayEvents.filter((item) => item.type === "message");
   const activityEvents = displayEvents.filter((item) => item.type !== "message");
   const participants = displayRoom.participants;
@@ -2101,6 +2143,7 @@ function formatAgentDetail(agent: ParticipantDescriptor): string {
 
 function profileSummary(preset: AgentModelPreset, t: Translate): string {
   const parts = [`${t("Role")}: ${t(preset.role)}`];
+  if (preset.flagship) parts.unshift(t("Flagship"));
   if (preset.providerId) parts.push(`${t("Provider")}: ${preset.providerId}`);
   if (preset.model) parts.push(`${t("Model")}: ${preset.model}`);
   if (!preset.providerId) parts.push(t(preset.detail));
@@ -2112,7 +2155,7 @@ function capabilityBadgesForAgent(agent: ParticipantDescriptor): string[] {
   if (adapter === "codex" || adapter === "claude-code") return ["local CLI", "files", "commands"];
   if (adapter === "api-model") {
     const model = typeof agent.adapterConfig?.model === "string" ? agent.adapterConfig.model.toLowerCase() : "";
-    return ["API model", model.includes("minimax") ? "vision" : "no files"];
+    return ["API model", agent.adapterConfig?.vision || model.includes("minimax") ? "vision" : "no files"];
   }
   if (adapter === "echo") return ["local CLI", "no files"];
   if (adapter === "openclaw") return ["placeholder"];
@@ -2121,6 +2164,7 @@ function capabilityBadgesForAgent(agent: ParticipantDescriptor): string[] {
 
 function agentSupportsVision(agent: ParticipantDescriptor): boolean {
   if (agent.adapter !== "api-model") return false;
+  if (agent.adapterConfig?.vision === true) return true;
   const model = String(agent.adapterConfig?.model ?? agent.id).toLowerCase();
   return model.includes("minimax") || agent.id.toLowerCase().includes("minimax");
 }
