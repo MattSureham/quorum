@@ -331,6 +331,7 @@ The following is the implementation trail from this session. It is written for t
 74. this change `feat: browse daemon workspaces from web`
     - Files: protocol command, WebSocket gateway/test, shared host directory service, Web Session setup/styles, `README.md`, `HANDOFF.md`.
     - Work: adds read-only `list_workspace_directories` request/response handling and an inline Web folder navigator with parent/subfolder navigation and an explicit “Select this folder” action. Desktop continues to use the native OS picker; browser mode selects absolute paths on the connected daemon machine.
+    - Verification: `pnpm typecheck`, all 85 tests, Web production build, and shared-session smoke pass.
 
 What is already implemented:
 
@@ -508,7 +509,7 @@ SPEC.md       full design (Chinese): data model, Conductor state machine, adapte
 
 ## Conventions / gotchas
 - `@quorum/core` stays **dependency-free**; anything needing network/env/SDKs lives in `@quorum/daemon`.
-- Verify before claiming with `pnpm typecheck`, `pnpm test`, the Web build, and the relevant sidecar/desktop smoke commands. The 2026-07-13 provider-catalog pass ends with 84 passing tests; shared-session and source-sidecar smoke coverage passed immediately before it.
+- Verify before claiming with `pnpm typecheck`, `pnpm test`, the Web build, and the relevant sidecar/desktop smoke commands. The 2026-07-13 Web workspace-browser pass ends with 85 passing tests and shared-session smoke coverage.
 - Debug artifacts (root `*.png`, `.playwright-mcp/`) are gitignored — keep them out of commits.
 - **Git worktrees:** `main` is checked out at `/Users/matthew/Projects/quorum`; a second worktree (`test-framework-debug`) also exists. A branch can only be checked out in one worktree at a time, so don't try to `git checkout main` in the second one.
 
