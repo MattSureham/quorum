@@ -349,6 +349,12 @@ In the desktop app, Session setup includes a native folder picker beside the
 workspace path field. The chosen absolute path is written into the session
 draft; manual entry remains available, including in browser-only development.
 
+The browser Web UI can also select a workspace without typing its path. Its
+folder button opens a read-only directory browser backed by the connected local
+daemon; only directory names and absolute paths are returned, never file
+contents. On a remote connection this intentionally browses the daemon host,
+because that is where CLI agents and workspace tools execute.
+
 The agent roster still comes from the room config for now: `quorum.config.json`
 or `QUORUM_CONFIG=<path>`. Each agent is a `ParticipantDescriptor` with an
 `adapter`:

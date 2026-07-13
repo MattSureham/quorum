@@ -328,6 +328,10 @@ The following is the implementation trail from this session. It is written for t
     - Files: provider model catalog/default credentials, `README.md`, `HANDOFF.md`.
     - Work: updates the flagship selections to exact API ids `glm-5.2` and `MiniMax-M3`, while retaining GLM-5.1 and MiniMax M2.7 as previous-generation choices.
 
+74. this change `feat: browse daemon workspaces from web`
+    - Files: protocol command, WebSocket gateway/test, shared host directory service, Web Session setup/styles, `README.md`, `HANDOFF.md`.
+    - Work: adds read-only `list_workspace_directories` request/response handling and an inline Web folder navigator with parent/subfolder navigation and an explicit “Select this folder” action. Desktop continues to use the native OS picker; browser mode selects absolute paths on the connected daemon machine.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:

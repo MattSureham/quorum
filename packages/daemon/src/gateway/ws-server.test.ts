@@ -40,6 +40,33 @@ function nextMessage(ws: WebSocket): Promise<any> {
 }
 
 describe("Gateway", () => {
+  it("returns daemon-side workspace directory listings", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const gateway = new Gateway({
+      log,
+      room,
+      setPolicy: () => undefined,
+      listWorkspaceDirectories: async (path) => ({
+        path: path ?? "/home/test",
+        parent: "/home",
+        directories: [{ name: "project", path: "/home/test/project" }],
+      }),
+    }, 0);
+    await gateway.ready;
+    const ws = await connect(gateway.url());
+    try {
+      ws.send(JSON.stringify({ t: "list_workspace_directories", roomId: "room", requestId: "dirs-1", path: "/home/test" }));
+      expect(await nextMessage(ws)).toMatchObject({
+        t: "workspace_directories",
+        requestId: "dirs-1",
+        path: "/home/test",
+        directories: [{ name: "project", path: "/home/test/project" }],
+      });
+    } finally {
+      await gateway.close();
+    }
+  });
+
   it("serves snapshots, broadcasts posted messages, and applies policy updates", async () => {
     const log = new EventLog("room", new InMemoryStore());
     await log.append({
