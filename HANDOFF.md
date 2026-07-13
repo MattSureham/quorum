@@ -322,6 +322,7 @@ The following is the implementation trail from this session. It is written for t
 72. this change `feat: add provider model catalogs`
     - Files: Web credential/profile/session selection, API-model adapter/tests, `README.md`, `HANDOFF.md`.
     - Work: configured provider credentials now unlock multiple exact model ids as independent participants, with a flagship marker. The 2026-07 catalog includes DeepSeek V4 Pro/Flash, Zhipu GLM-5.1/5/4.7/5V, MiniMax M2.7/M2.5, current OpenAI defaults, and current Anthropic Claude models. Anthropic profiles use the native Messages API including base64 vision input; local CLI agents retain their own default model configuration.
+    - Verification: `pnpm typecheck`, all 84 tests, the API-model adapter tests, and the Web production build pass. Automated browser screenshot inspection was unavailable in this session.
 
 What is already implemented:
 
@@ -499,7 +500,7 @@ SPEC.md       full design (Chinese): data model, Conductor state machine, adapte
 
 ## Conventions / gotchas
 - `@quorum/core` stays **dependency-free**; anything needing network/env/SDKs lives in `@quorum/daemon`.
-- Verify before claiming with `pnpm typecheck`, `pnpm test`, the Web build, and the relevant sidecar/desktop smoke commands. The 2026-07-13 reliability pass ends with 83 passing tests plus shared-session and source-sidecar smoke coverage.
+- Verify before claiming with `pnpm typecheck`, `pnpm test`, the Web build, and the relevant sidecar/desktop smoke commands. The 2026-07-13 provider-catalog pass ends with 84 passing tests; shared-session and source-sidecar smoke coverage passed immediately before it.
 - Debug artifacts (root `*.png`, `.playwright-mcp/`) are gitignored — keep them out of commits.
 - **Git worktrees:** `main` is checked out at `/Users/matthew/Projects/quorum`; a second worktree (`test-framework-debug`) also exists. A branch can only be checked out in one worktree at a time, so don't try to `git checkout main` in the second one.
 
