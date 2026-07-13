@@ -164,6 +164,8 @@ Prompts received while an agent is speaking are persisted immediately and then
 processed through a FIFO queue, with a fresh epoch and bid collection after the
 active turn. Adapter failures use structured `turn_failed`/`turn_trace` payloads
 instead of appearing as successful turns with no visible reply.
+Queued prompt markers are replayed after daemon restart, so an accepted but not
+yet activated prompt is not stranded when the process exits mid-turn.
 
 The Codex CLI adapter accepts both current `item.type` JSONL events and older
 `item.item_type` events. Spawn errors, stderr/non-zero exits, authentication or

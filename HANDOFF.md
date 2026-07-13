@@ -305,11 +305,15 @@ The following is the implementation trail from this session. It is written for t
 68. this change `fix: align profiles lifecycle and docs`
     - Files: `packages/client-web/src/main.tsx`, `README.md`, `HANDOFF.md`.
     - Work: made built-in profile labels disclose their actual provider model ids, made persisted room lifecycle authoritative over legacy localStorage state, and removed stale placeholder/test-count documentation.
-    - Verification: `pnpm typecheck`, all 82 tests, and the Web production build pass.
+    - Verification: `pnpm typecheck`, the full test suite, and the Web production build pass.
 
 69. this change `fix: verify cli adapter compatibility`
     - Files: `packages/daemon/src/shared-session-host.ts`, `README.md`, `HANDOFF.md`.
     - Work: health checks now inspect Codex and Claude Code help output for the non-interactive flags Quorum requires, without sending a model request. Native login remains verified by the first real turn.
+
+70. this change `fix: restore queued prompts after restart`
+    - Files: `packages/core/src/session-manager.ts`, its tests, `README.md`, `HANDOFF.md`.
+    - Work: reconstructs queued-but-not-activated human prompts from event-log queued markers and resumes the FIFO automatically when a shared session manager starts. Also fixes a graceful-stop race where an aborted turn attempted to enqueue `finishTurn` after the command mailbox had stopped.
 
 What is already implemented:
 
@@ -487,7 +491,7 @@ SPEC.md       full design (Chinese): data model, Conductor state machine, adapte
 
 ## Conventions / gotchas
 - `@quorum/core` stays **dependency-free**; anything needing network/env/SDKs lives in `@quorum/daemon`.
-- Verify before claiming with `pnpm typecheck`, `pnpm test`, the Web build, and the relevant sidecar/desktop smoke commands. The 2026-07-13 reliability pass reached 82 passing tests before the final profile/lifecycle cleanup.
+- Verify before claiming with `pnpm typecheck`, `pnpm test`, the Web build, and the relevant sidecar/desktop smoke commands. The 2026-07-13 reliability pass ends with 83 passing tests plus shared-session and source-sidecar smoke coverage.
 - Debug artifacts (root `*.png`, `.playwright-mcp/`) are gitignored — keep them out of commits.
 - **Git worktrees:** `main` is checked out at `/Users/matthew/Projects/quorum`; a second worktree (`test-framework-debug`) also exists. A branch can only be checked out in one worktree at a time, so don't try to `git checkout main` in the second one.
 

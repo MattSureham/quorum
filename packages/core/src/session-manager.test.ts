@@ -248,6 +248,43 @@ describe("SessionManager", () => {
     }
   });
 
+  it("restores an unprocessed queued prompt after restart", async () => {
+    const store = new InMemoryStore();
+    const firstLog = new EventLog("room", store);
+    const first = new SessionManager({
+      sessionId: "room",
+      title: "Before restart",
+      log: firstLog,
+      agents: [new InterruptibleSpeaker("agent", { confidence: 1 })],
+      settlingWindowMs: 10,
+      turnTimeoutMs: 1_000,
+    });
+    first.start();
+    void first.submitUserPrompt("active");
+    await waitFor(() => firstLog.replay(0).some((event) => event.type === "turn_started"));
+    await first.submitUserPrompt("survive restart");
+    await waitFor(() => firstLog.replay(0).some((event) => event.type === "system" && (event.body as any).promptSeq));
+    await first.stop();
+
+    const secondLog = new EventLog("room", store);
+    const second = new SessionManager({
+      sessionId: "room",
+      title: "After restart",
+      log: secondLog,
+      agents: [new StubSpeaker("agent", { confidence: 1, text: "restored" })],
+      maxTurnsPerTopic: 1,
+      settlingWindowMs: 10,
+    });
+    second.start();
+    try {
+      await waitFor(() => secondLog.replay(0).some((event) => event.type === "message" && event.author.id === "agent" && (event.body as any).text.startsWith("restored")), 1_500);
+      const latestHuman = secondLog.replay(0).filter((event) => event.type === "message" && event.author.kind === "human").at(-1);
+      expect((latestHuman?.body as any).text).toBe("survive restart");
+    } finally {
+      await second.stop();
+    }
+  });
+
   it("records structured adapter failures as failed turns", async () => {
     const log = new EventLog("room", new InMemoryStore());
     const session = new SessionManager({

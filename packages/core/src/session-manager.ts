@@ -118,10 +118,29 @@ export class SessionManager {
     for (const agent of opts.agents) this.byId.set(agent.id, agent);
     this.arbiter = opts.arbiter ?? new Arbiter();
     if (opts.log.headSeq > 0) {
-      const projected = projectSessionState(opts.log.replay(0));
+      const replay = opts.log.replay(0);
+      const projected = projectSessionState(replay);
       this.epoch = projected.epoch;
       this.lastTurnId = projected.lastTurnId;
       this.lastSpeakerId = projected.lastSpeakerId;
+      const activatedPromptSeqs = new Set(replay
+        .filter((event) => event.type === "phase_changed" && typeof (event.body as any)?.promptSeq === "number")
+        .map((event) => (event.body as any).promptSeq as number));
+      const queuedPromptSeqs = replay
+        .filter((event) => event.type === "system" && typeof (event.body as any)?.promptSeq === "number")
+        .map((event) => (event.body as any).promptSeq as number)
+        .filter((seq) => !activatedPromptSeqs.has(seq));
+      for (const seq of queuedPromptSeqs) {
+        const event = replay.find((item) => item.seq === seq && item.type === "message" && item.author.kind === "human");
+        if (!event) continue;
+        const body = event.body as { text?: string; attachments?: ImageAttachment[] };
+        this.pendingPrompts.push({
+          text: body.text ?? "",
+          addressedTo: event.addressedTo ?? [],
+          attachments: body.attachments ?? [],
+          eventSeq: event.seq,
+        });
+      }
     }
     const summaries = opts.log.readWorkingMemorySummaries();
     this.lastCompactedSeq = summaries.reduce((max, summary) => Math.max(max, summary.sourceToSeq), 0);
@@ -132,6 +151,9 @@ export class SessionManager {
 
   start(): void {
     this.running = true;
+    if (this.pendingPrompts.length) {
+      void this.mailbox.enqueue("restoreQueuedPrompt", () => this.activateNextQueuedPrompt()).catch(() => undefined);
+    }
   }
 
   async stop(): Promise<void> {
@@ -143,8 +165,10 @@ export class SessionManager {
     this.humanWriteLease = undefined;
     this.humanHoldsWriteFloor = false;
     if (this.active) {
-      this.active.ac.abort();
-      await this.append("turn_cancelled", { turnId: this.active.turnId, reason: "session stopped" }, "system");
+      const active = this.active;
+      this.active = undefined;
+      active.ac.abort();
+      await this.append("turn_cancelled", { turnId: active.turnId, speakerId: active.speakerId, reason: "session stopped" }, "system");
     }
     await Promise.all([...this.byId.values()].map((agent) => agent.shutdown().catch(() => undefined)));
   }
@@ -484,7 +508,7 @@ export class SessionManager {
     } finally {
       clearTimeout(timeout);
       if (ac.signal.aborted && outcome === "done") outcome = "cancelled";
-      await this.mailbox.enqueue("finishTurn", async () => {
+      if (this.running) await this.mailbox.enqueue("finishTurn", async () => {
         if (!this.active || this.active.turnId !== turnId || this.active.generation !== generation) return;
         this.lastTurnId = turnId;
         this.lastSpeakerId = agent.id;
@@ -529,6 +553,12 @@ export class SessionManager {
         await this.transition("settling", { turnId, settlingWindowMs: this.opts.settlingWindowMs ?? 400 });
         if (this.pendingPrompts.length) void this.activateNextQueuedPrompt();
         else void this.settleAndArbitrate();
+      }).catch(async (err) => {
+        if (!this.running) return;
+        await this.append("system", {
+          level: "error",
+          text: `failed to finalize turn ${turnId}: ${err instanceof Error ? err.message : String(err)}`,
+        }, "system", { turnId });
       });
       lease?.release();
     }
