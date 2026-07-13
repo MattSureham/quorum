@@ -2,6 +2,9 @@ import { EventLog, LegacyAgentAdapter, SessionManager, type WorkspaceManager } f
 import type { AgentHealth, CreateSessionInput, ParticipantDescriptor, Room, SessionMode } from "@quorum/protocol";
 import { execFile } from "node:child_process";
 import { mkdirSync } from "node:fs";
+import { readdir, realpath, stat } from "node:fs/promises";
+import { homedir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { createParticipant } from "./adapters/registry.js";
 import { Gateway, type GatewaySessionDeps } from "./gateway/ws-server.js";
@@ -126,6 +129,26 @@ async function checkRoomAgents(room: Room): Promise<Record<string, AgentHealth>>
   return Object.fromEntries(entries);
 }
 
+async function listWorkspaceDirectories(inputPath?: string): Promise<{
+  path: string;
+  parent?: string;
+  directories: Array<{ name: string; path: string }>;
+}> {
+  const requested = resolve(inputPath?.trim() || homedir());
+  const canonical = await realpath(requested).catch(() => {
+    throw new Error(`folder does not exist: ${requested}`);
+  });
+  const metadata = await stat(canonical);
+  if (!metadata.isDirectory()) throw new Error(`not a folder: ${canonical}`);
+  const entries = await readdir(canonical, { withFileTypes: true });
+  const directories = entries
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+    .map((entry) => ({ name: entry.name, path: join(canonical, entry.name) }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const parent = dirname(canonical);
+  return { path: canonical, ...(parent !== canonical ? { parent } : {}), directories };
+}
+
 /**
  * New architecture entrypoint: existing adapters are wrapped into ISpeakerAgent
  * and human prompts are routed through SessionManager instead of Conductor.
@@ -223,6 +246,7 @@ export async function startSharedSessionRoom(
       listCredentials: () => store.readProviderConfigViews(),
       setCredential: (input) => store.upsertProviderConfig(input),
       checkAgents: () => checkRoomAgents(nextRoom),
+      listWorkspaceDirectories,
       takeWriteFloor: () => session.takeWriteFloor(),
       releaseWriteFloor: () => session.releaseWriteFloor(),
       setPolicy: () => {

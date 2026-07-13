@@ -20,6 +20,7 @@ export interface GatewayDeps {
   listCredentials?: () => ProviderConfigView[];
   setCredential?: (input: { providerId: string; envVar?: string; apiKey?: string; baseUrl?: string; model?: string }) => ProviderConfigView;
   checkAgents?: () => Promise<Record<string, AgentHealth>> | Record<string, AgentHealth>;
+  listWorkspaceDirectories?: (path?: string) => Promise<{ path: string; parent?: string; directories: Array<{ name: string; path: string }> }>;
   interrupt?: (hard: boolean) => Promise<void> | void;
   /** Let the human take the write floor to edit files directly (take_write_floor). */
   takeWriteFloor?: () => Promise<void> | void;
@@ -276,6 +277,21 @@ export class Gateway {
         }).catch((err) =>
           ws.send(JSON.stringify({ t: "error", text: `check_agents failed: ${err instanceof Error ? err.message : String(err)}` })),
         );
+        break;
+      case "list_workspace_directories":
+        if (!session.listWorkspaceDirectories) {
+          ws.send(JSON.stringify({ t: "workspace_directories_error", requestId: m.requestId, text: "workspace browsing is not available" }));
+          break;
+        }
+        void Promise.resolve(session.listWorkspaceDirectories(m.path)).then((listing) => {
+          ws.send(JSON.stringify({ t: "workspace_directories", requestId: m.requestId, ...listing }));
+        }).catch((err) => {
+          ws.send(JSON.stringify({
+            t: "workspace_directories_error",
+            requestId: m.requestId,
+            text: err instanceof Error ? err.message : String(err),
+          }));
+        });
         break;
       case "set_credential":
         if (!this.deps.setCredential) {
