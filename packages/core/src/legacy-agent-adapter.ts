@@ -65,6 +65,7 @@ export class LegacyAgentAdapter implements ISpeakerAgent {
       projection: turn.transcript,
       protocol: "",
       contextBundle: turn.contextBundle,
+      attachments: turn.attachments,
       workspacePath: this.opts.workspacePath,
       nativeSessionId: this.opts.nativeSessionStore?.read(turn.sessionId, this.id),
       onNativeSessionId: (sessionId) => this.opts.nativeSessionStore?.write(turn.sessionId, this.id, sessionId),

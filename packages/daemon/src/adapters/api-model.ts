@@ -1,6 +1,6 @@
 import { BaseAgentAdapter } from "./base.js";
 import type { TurnInput, PartialRoomEvent } from "@quorum/core";
-import type { MessageBody, ParticipantDescriptor, Capabilities } from "@quorum/protocol";
+import type { ParticipantDescriptor, Capabilities } from "@quorum/protocol";
 
 export interface ApiModelOptions {
   model?: string;
@@ -66,9 +66,7 @@ export class ApiModelAdapter extends BaseAgentAdapter {
 }
 
 function userContentFor(input: TurnInput, text: string): string | Array<Record<string, unknown>> {
-  const images = input.projection
-    .filter((event) => event.type === "message")
-    .flatMap((event) => (event.body as MessageBody).attachments ?? [])
+  const images = (input.attachments ?? [])
     .filter((attachment) => attachment.mimeType.startsWith("image/"));
   if (!images.length) return text;
   return [

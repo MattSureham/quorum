@@ -81,6 +81,21 @@ describe("Gateway", () => {
       expect(event.event.body.attachments).toHaveLength(1);
       expect(event.event.body.attachments[0].name).toBe("chart.png");
 
+      const oversizedPromise = nextMessage(ws);
+      ws.send(JSON.stringify({
+        t: "post_message",
+        roomId: "room",
+        text: "too large",
+        attachments: ["a", "b", "c"].map((id) => ({
+          id,
+          name: `${id}.png`,
+          mimeType: "image/png",
+          dataUrl: "data:image/png;base64,AAAA",
+          sizeBytes: 5_000_000,
+        })),
+      }));
+      expect(await oversizedPromise).toMatchObject({ t: "error", text: expect.stringContaining("12 MB") });
+
       ws.send(JSON.stringify({
         t: "set_policy",
         roomId: "room",

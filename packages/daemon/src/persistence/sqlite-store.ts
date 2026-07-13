@@ -1,7 +1,7 @@
 import { createRequire } from "node:module";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { Room, RoomEvent } from "@quorum/protocol";
+import type { Room, RoomEvent, SharedMemoryCommand, WriteResult } from "@quorum/protocol";
 import type { MemorySummary } from "@quorum/protocol";
 import type { EventStore } from "@quorum/core";
 
@@ -363,6 +363,36 @@ export class SqliteStore implements EventStore {
         VALUES (?, ?, ?, ?, ?, ?, ?)
       `)
       .run(sessionId, agentId, namespace, key, version, JSON.stringify(value), Date.now());
+  }
+
+  readSharedMemory(sessionId: string): Array<{ namespace: string; key: string; version: number; value: unknown }> {
+    return this.db
+      .prepare("SELECT namespace, key, version, value FROM shared_memory WHERE session_id=? ORDER BY namespace, key")
+      .all(sessionId)
+      .map((row: any) => ({ namespace: row.namespace, key: row.key, version: row.version, value: JSON.parse(row.value) }));
+  }
+
+  writeSharedMemory(sessionId: string, command: SharedMemoryCommand): WriteResult {
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const current = this.db
+        .prepare("SELECT version FROM shared_memory WHERE session_id=? AND namespace=? AND key=?")
+        .get(sessionId, command.namespace, command.key) as any;
+      if (command.expectedVersion !== undefined && current?.version !== command.expectedVersion) {
+        this.db.exec("ROLLBACK");
+        return { ok: false, error: "version mismatch" };
+      }
+      const version = (current?.version ?? 0) + 1;
+      this.db.prepare(`
+        INSERT OR REPLACE INTO shared_memory (session_id, namespace, key, version, value, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(sessionId, command.namespace, command.key, version, JSON.stringify(command.value), Date.now());
+      this.db.exec("COMMIT");
+      return { ok: true, version };
+    } catch (err) {
+      this.db.exec("ROLLBACK");
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
   }
 
   upsertProviderConfig(input: Omit<ProviderConfig, "updatedAt">): ProviderConfigView {

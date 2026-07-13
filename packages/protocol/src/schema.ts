@@ -16,11 +16,11 @@ const ParticipantDescriptorSchema = z.object({
 const SessionLifecycleSchema = z.enum(["draft", "active", "paused", "completed", "archived", "deleted"]);
 
 const ImageAttachmentSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  mimeType: z.string(),
-  dataUrl: z.string(),
-  sizeBytes: z.number().int().optional(),
+  id: z.string().min(1).max(128),
+  name: z.string().min(1).max(255),
+  mimeType: z.string().regex(/^image\/[a-zA-Z0-9.+-]+$/),
+  dataUrl: z.string().max(7_000_000).regex(/^data:image\/[a-zA-Z0-9.+-]+;base64,/),
+  sizeBytes: z.number().int().min(0).max(5_000_000).optional(),
 });
 
 export const SessionPhaseSchema = z.enum([
@@ -93,7 +93,7 @@ export const ClientMessageSchema = z.discriminatedUnion("t", [
     t: z.literal("post_message"),
     roomId: z.string(),
     text: z.string(),
-    attachments: z.array(ImageAttachmentSchema).optional(),
+    attachments: z.array(ImageAttachmentSchema).max(6).optional(),
     addressedTo: z.array(z.string()).optional(),
   }),
   z.object({ t: z.literal("interrupt"), roomId: z.string(), hard: z.boolean().optional() }),

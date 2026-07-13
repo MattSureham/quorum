@@ -431,6 +431,70 @@ describe("SessionManager", () => {
     }
   });
 
+  it("restores shared memory into the context bundle", async () => {
+    const store = new InMemoryStore();
+    store.writeSharedMemory("room", { namespace: "decision", key: "runtime", value: "bun" });
+    const log = new EventLog("room", store);
+    const speaker = new ContextCaptureSpeaker("agent", { confidence: 1 });
+    const session = new SessionManager({
+      sessionId: "room",
+      title: "Memory restore",
+      log,
+      agents: [speaker],
+      maxTurnsPerTopic: 1,
+      settlingWindowMs: 10,
+    });
+    session.start();
+    try {
+      await session.submitUserPrompt("continue");
+      await waitFor(() => speaker.capturedContextBundle.length > 0);
+      expect(speaker.capturedContextBundle).toContain("decision:runtime v1: \"bun\"");
+    } finally {
+      await session.stop();
+    }
+  });
+
+  it("continues automatic compaction after the last persisted summary", async () => {
+    const store = new InMemoryStore();
+    const log = new EventLog("room", store);
+    for (let index = 0; index < 60; index++) {
+      await log.append({
+        author: { kind: "human", id: "human", display: "Human" },
+        type: "message",
+        body: { text: `historical-${index}` },
+      });
+    }
+    store.persistWorkingMemorySummary({
+      summaryId: "existing",
+      sessionId: "room",
+      sourceFromSeq: 1,
+      sourceToSeq: 50,
+      sourceHash: "existing-hash",
+      model: "extractive-v1",
+      promptVersion: "working-memory-v1",
+      createdAt: new Date().toISOString(),
+      content: "existing summary",
+    });
+    const session = new SessionManager({
+      sessionId: "room",
+      title: "Compaction restore",
+      log,
+      agents: [new StubSpeaker("agent", { confidence: 1 })],
+      maxTurnsPerTopic: 1,
+      settlingWindowMs: 10,
+      memory: { minSeqGap: 1, minEvents: 1, keepRecentEvents: 0 },
+    });
+    session.start();
+    try {
+      await session.submitUserPrompt("continue");
+      await waitFor(() => log.readWorkingMemorySummaries().length > 1);
+      const nextSummary = log.readWorkingMemorySummaries().at(-1)!;
+      expect(nextSummary.sourceFromSeq).toBeGreaterThan(50);
+    } finally {
+      await session.stop();
+    }
+  });
+
   it("serializes editable shared-session turns through the workspace and checkpoints them", async () => {
     const log = new EventLog("room", new InMemoryStore());
     const events: RoomEvent[] = [];

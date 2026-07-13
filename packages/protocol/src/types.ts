@@ -208,6 +208,7 @@ export interface TurnContext {
   participants: ParticipantDescriptor[];
   transcript: RoomEvent[];
   contextBundle?: string;
+  attachments?: ImageAttachment[];
 }
 
 export type AgentDelta =

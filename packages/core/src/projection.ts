@@ -28,7 +28,7 @@ export function renderProjection(input: TurnInput): string {
           {
             const body = e.body as MessageBody;
             const attachments = body.attachments?.length
-              ? `\n${body.attachments.map((item, index) => `  [image ${index + 1}: ${item.name} ${item.mimeType} ${item.dataUrl}]`).join("\n")}`
+              ? `\n${body.attachments.map((item, index) => `  [image ${index + 1}: ${item.name} ${item.mimeType} id=${item.id} size=${item.sizeBytes ?? "unknown"}]`).join("\n")}`
               : "";
             return `[t${e.seq} ${e.author.id}${to}] ${body.text}${attachments}`;
           }

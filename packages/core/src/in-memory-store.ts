@@ -1,10 +1,11 @@
-import type { MemorySummary, RoomEvent } from "@quorum/protocol";
+import type { MemorySummary, RoomEvent, SharedMemoryCommand, WriteResult } from "@quorum/protocol";
 import { type EventStore } from "./types.js";
 
 /** Dependency-free EventStore for tests and the local demo. */
 export class InMemoryStore implements EventStore {
   private readonly events = new Map<string, RoomEvent[]>();
   private readonly summaries = new Map<string, MemorySummary[]>();
+  private readonly sharedMemory = new Map<string, Map<string, { namespace: string; key: string; version: number; value: unknown }>>();
 
   persist(e: RoomEvent): void {
     const arr = this.events.get(e.roomId) ?? [];
@@ -29,5 +30,22 @@ export class InMemoryStore implements EventStore {
 
   readWorkingMemorySummaries(sessionId: string): MemorySummary[] {
     return [...(this.summaries.get(sessionId) ?? [])];
+  }
+
+  readSharedMemory(sessionId: string) {
+    return [...(this.sharedMemory.get(sessionId)?.values() ?? [])];
+  }
+
+  writeSharedMemory(sessionId: string, command: SharedMemoryCommand): WriteResult {
+    const room = this.sharedMemory.get(sessionId) ?? new Map();
+    const id = `${command.namespace}:${command.key}`;
+    const current = room.get(id);
+    if (command.expectedVersion !== undefined && current?.version !== command.expectedVersion) {
+      return { ok: false, error: "version mismatch" };
+    }
+    const version = (current?.version ?? 0) + 1;
+    room.set(id, { namespace: command.namespace, key: command.key, version, value: command.value });
+    this.sharedMemory.set(sessionId, room);
+    return { ok: true, version };
   }
 }

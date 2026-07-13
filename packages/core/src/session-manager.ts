@@ -103,6 +103,7 @@ export class SessionManager {
   private lastSpeakerId?: string;
   private lastPrompt = "";
   private currentAddressedTo: string[] = [];
+  private currentAttachments: ImageAttachment[] = [];
   private turnsThisTopic = 0;
   private wrapUpActive = false;
   private pendingPrompts: PendingPrompt[] = [];
@@ -121,6 +122,11 @@ export class SessionManager {
       this.epoch = projected.epoch;
       this.lastTurnId = projected.lastTurnId;
       this.lastSpeakerId = projected.lastSpeakerId;
+    }
+    const summaries = opts.log.readWorkingMemorySummaries();
+    this.lastCompactedSeq = summaries.reduce((max, summary) => Math.max(max, summary.sourceToSeq), 0);
+    for (const item of opts.log.readSharedMemory()) {
+      this.sharedMemory.set(`${item.namespace}:${item.key}`, { version: item.version, value: item.value });
     }
   }
 
@@ -183,8 +189,13 @@ export class SessionManager {
   private async activatePrompt(prompt: PendingPrompt): Promise<void> {
     this.lastPrompt = prompt.text;
     this.currentAddressedTo = prompt.addressedTo;
+    this.currentAttachments = prompt.attachments;
     this.turnsThisTopic = 0;
     this.wrapUpActive = false;
+    if (!this.isRoundRobin() && Math.max(1, this.opts.maxTurnsPerTopic ?? 6) === 1) {
+      this.wrapUpActive = true;
+      this.lastPrompt = this.wrapUpPrompt(this.lastPrompt);
+    }
     this.epoch++;
     this.pendingBids.clear();
     if (this.isRoundRobin()) {
@@ -443,6 +454,7 @@ export class SessionManager {
         participants: this.participants(),
         transcript: this.opts.log.replay(0),
         contextBundle: this.contextBundle(),
+        attachments: this.currentAttachments,
       };
 
       for await (const delta of agent.speak(ctx, this.runtime(), ac.signal)) {
@@ -544,7 +556,7 @@ export class SessionManager {
       }
       if (this.turnsThisTopic >= maxTurns - 1) {
         this.wrapUpActive = true;
-        this.lastPrompt = `${this.lastPrompt}\n\n[QUORUM WRAP UP] This is the final turn for this topic. State the concrete final answer or plan now. Preserve unresolved disagreements explicitly and leave unfinished work for Continue Session.`;
+        this.lastPrompt = this.wrapUpPrompt(this.lastPrompt);
         if (this.pendingBids.size) {
           await this.arbitrateIfPossible();
           return "none";
@@ -568,6 +580,10 @@ export class SessionManager {
 
   private isRaiseHand(): boolean {
     return this.opts.schedulerMode === "raise-hand";
+  }
+
+  private wrapUpPrompt(prompt: string): string {
+    return `${prompt}\n\n[QUORUM WRAP UP] This is the final turn for this topic. State the concrete final answer or plan now. Preserve unresolved disagreements explicitly and leave unfinished work for Continue Session.`;
   }
 
   private orderedAgentIds(): string[] {
@@ -690,7 +706,9 @@ export class SessionManager {
         if (cmd.expectedVersion !== undefined && current?.version !== cmd.expectedVersion) {
           return { ok: false, error: "version mismatch" };
         }
-        const version = (current?.version ?? 0) + 1;
+        const persisted = this.opts.log.writeSharedMemory(cmd);
+        if (!persisted.ok) return persisted;
+        const version = persisted.version ?? (current?.version ?? 0) + 1;
         this.sharedMemory.set(key, { version, value: cmd.value });
         await this.mailbox.enqueue("sharedMemoryWrite", () =>
           this.append("system", {
@@ -717,6 +735,9 @@ export class SessionManager {
     const pendingApprovals = [...this.pendingToolApprovals.entries()]
       .map(([callId, pending]) => `${pending.tool} [${callId}]`)
       .join(", ") || "none";
+    const sharedMemoryLines = this.sharedMemory.size
+      ? [...this.sharedMemory.entries()].map(([key, item]) => `- ${key} v${item.version}: ${JSON.stringify(item.value).slice(0, 500)}`).join("\n")
+      : "- none";
     const summaryLines = summaries.length
       ? summaries.slice(-5).map((summary) =>
         `- #${summary.sourceFromSeq}-#${summary.sourceToSeq} ${summary.summaryId} hash=${summary.sourceHash.slice(0, 12)}: ${summary.content}`,
@@ -725,7 +746,10 @@ export class SessionManager {
     const eventLines = recent.length
       ? recent.map((event) => {
         const body = event.body as Record<string, unknown>;
-        const text = typeof body.text === "string" ? body.text : JSON.stringify(body);
+        const safeBody = Array.isArray(body.attachments)
+          ? { ...body, attachments: body.attachments.map((item: any) => ({ id: item.id, name: item.name, mimeType: item.mimeType, sizeBytes: item.sizeBytes })) }
+          : body;
+        const text = typeof body.text === "string" ? body.text : JSON.stringify(safeBody);
         return `- #${event.seq} ${event.type} ${event.author.id}: ${text.slice(0, 500)}`;
       }).join("\n")
       : "- none";
@@ -751,6 +775,9 @@ export class SessionManager {
       "",
       "Working memory summaries:",
       summaryLines,
+      "",
+      "Shared memory:",
+      sharedMemoryLines,
       "",
       "Recent authoritative events:",
       eventLines,

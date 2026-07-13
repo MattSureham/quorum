@@ -238,6 +238,22 @@ describe("SqliteStore", () => {
     store.close();
   });
 
+  it("persists versioned shared memory across reopen", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "quorum-sqlite-shared-memory-"));
+    const dbPath = join(dir, "shared.sqlite");
+    const store = new SqliteStore(dbPath);
+    expect(store.writeSharedMemory("room", { namespace: "decisions", key: "stack", value: { runtime: "node" } })).toEqual({ ok: true, version: 1 });
+    expect(store.writeSharedMemory("room", { namespace: "decisions", key: "stack", value: "stale", expectedVersion: 0 })).toEqual({ ok: false, error: "version mismatch" });
+    store.close();
+
+    const reopened = new SqliteStore(dbPath);
+    try {
+      expect(reopened.readSharedMemory("room")).toEqual([{ namespace: "decisions", key: "stack", version: 1, value: { runtime: "node" } }]);
+    } finally {
+      reopened.close();
+    }
+  });
+
   it("persists provider credentials as masked views and applies env vars", async () => {
     const dir = await mkdtemp(join(tmpdir(), "quorum-sqlite-credentials-"));
     const dbPath = join(dir, "credentials.sqlite");

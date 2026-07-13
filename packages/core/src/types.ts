@@ -1,6 +1,7 @@
 import type {
   RoomEvent, EventType, EventAuthor, ParticipantDescriptor, MemorySummary,
-  Capabilities, ConductorPolicyConfig, DiffStat,
+  Capabilities, ConductorPolicyConfig, DiffStat, SharedMemoryCommand, WriteResult,
+  ImageAttachment,
 } from "@quorum/protocol";
 
 // Persistence seam. The engine assigns seq itself (single-writer); the store
@@ -11,6 +12,8 @@ export interface EventStore {
   maxSeq(roomId: string): number;
   persistWorkingMemorySummary?(summary: MemorySummary): void;
   readWorkingMemorySummaries?(sessionId: string): MemorySummary[];
+  readSharedMemory?(sessionId: string): Array<{ namespace: string; key: string; version: number; value: unknown }>;
+  writeSharedMemory?(sessionId: string, command: SharedMemoryCommand): WriteResult;
 }
 
 // What callers hand to EventLog.append (seq/id/ts filled in by the log).
@@ -44,6 +47,7 @@ export interface TurnInput {
   projection: RoomEvent[];   // events since this participant last spoke
   protocol: string;          // room speaking-protocol text
   contextBundle?: string;    // deterministic Quorum context used after restore/continue
+  attachments?: ImageAttachment[]; // images attached to the prompt that triggered this epoch
   workspacePath?: string;
   nativeSessionId?: string;
   onNativeSessionId?: (sessionId: string) => void;

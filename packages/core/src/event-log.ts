@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import type { MemorySummary, RoomEvent } from "@quorum/protocol";
+import type { MemorySummary, RoomEvent, SharedMemoryCommand, WriteResult } from "@quorum/protocol";
 import { type EventStore, type AppendInput } from "./types.js";
 import { ulid } from "./ids.js";
 
@@ -67,5 +67,13 @@ export class EventLog {
 
   readWorkingMemorySummaries(): MemorySummary[] {
     return this.store.readWorkingMemorySummaries?.(this.roomId) ?? [];
+  }
+
+  readSharedMemory(): Array<{ namespace: string; key: string; version: number; value: unknown }> {
+    return this.store.readSharedMemory?.(this.roomId) ?? [];
+  }
+
+  writeSharedMemory(command: SharedMemoryCommand): WriteResult {
+    return this.store.writeSharedMemory?.(this.roomId, command) ?? { ok: false, error: "shared memory persistence is unavailable" };
   }
 }

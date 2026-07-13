@@ -93,8 +93,16 @@ export class Gateway {
       let msg: any;
       try {
         msg = ClientMessageSchema.parse(JSON.parse(String(raw)));
-      } catch {
-        ws.send(JSON.stringify({ t: "error", text: "bad message" }));
+      } catch (err) {
+        const attachmentError = err && typeof err === "object" && "issues" in err
+          && Array.isArray((err as any).issues)
+          && (err as any).issues.some((issue: any) => issue.path?.includes("attachments"));
+        ws.send(JSON.stringify({
+          t: "error",
+          text: attachmentError
+            ? "invalid image attachments: use at most 6 images, 5 MB each and 12 MB total"
+            : "bad message",
+        }));
         return;
       }
       this.route(ws, msg);
@@ -198,6 +206,14 @@ export class Gateway {
         }));
         break;
       case "post_message":
+        if (m.attachments?.length) {
+          const declaredBytes = m.attachments.reduce((sum: number, item: ImageAttachment) => sum + (item.sizeBytes ?? 0), 0);
+          const encodedBytes = m.attachments.reduce((sum: number, item: ImageAttachment) => sum + item.dataUrl.length, 0);
+          if (declaredBytes > 12_000_000 || encodedBytes > 16_000_000) {
+            ws.send(JSON.stringify({ t: "error", text: "image attachments exceed the 12 MB total limit" }));
+            break;
+          }
+        }
         if (session.postMessage) void Promise.resolve(session.postMessage(m.text, m.addressedTo, m.attachments)).catch((err) =>
           ws.send(JSON.stringify({ t: "error", text: `post_message failed: ${err instanceof Error ? err.message : String(err)}` })),
         );

@@ -177,6 +177,13 @@ active speaker. Open discussion recollects follow-up bids within
 `maxTurnsPerTopic`, reserving the final turn for a forced concrete wrap-up.
 The final round-robin speaker receives the same wrap-up requirement.
 
+Continue Session now restores the last compaction boundary and versioned shared
+memory from the event store; shared memory is included in the deterministic
+Context Bundle. Image data URLs are excluded from text projections and context
+summaries. Vision API requests receive only the images attached to the prompt
+that opened the current epoch, with six-image, 5 MB per-image, and 12 MB total
+gateway limits.
+
 Session setup exposes a first-pass permission policy: read-only, workspace-write,
 approval-required, or full-auto. The selected policy is written into participant
 adapter config; Codex sandbox and Claude Code permission mode are mapped from it.
