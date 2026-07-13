@@ -11,6 +11,7 @@ import {
   CircleAlert,
   CircleDot,
   Download,
+  FolderOpen,
   GitCommitHorizontal,
   Hand,
   KeyRound,
@@ -177,6 +178,9 @@ const zhText: Record<string, string> = {
   "Session id": "会话 id",
   "Title": "标题",
   "Workspace path": "工作路径",
+  "Choose folder": "选择文件夹",
+  "Choosing folder": "正在选择文件夹",
+  "Folder picker is available in the desktop app. You can still enter an absolute path here.": "文件夹选择器仅在桌面应用中可用，你仍可在此输入绝对路径。",
   "Optional absolute path for this session": "当前会话可选的绝对路径",
   "Mode": "模式",
   "Permission policy": "权限策略",
@@ -1030,6 +1034,12 @@ async function resolveDesktopSettings(settings: ClientSettings): Promise<ClientS
   const { invoke } = await import("@tauri-apps/api/core");
   const connection = await invoke<DesktopSidecarConnection>("get_sidecar_connection");
   return { ...settings, url: connection.url };
+}
+
+async function pickWorkspaceDirectory(initialPath: string): Promise<string | null> {
+  if (!isTauriRuntime()) return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<string | null>("pick_workspace_directory", { initialPath: initialPath.trim() || null });
 }
 
 function App() {
@@ -2245,6 +2255,8 @@ function SessionSetupModal({
   t: Translate;
 }) {
   const [draft, setDraft] = useState<SessionDraft>(initialDraft);
+  const [pickingWorkspace, setPickingWorkspace] = useState(false);
+  const [workspacePickerStatus, setWorkspacePickerStatus] = useState("");
   const currentAgentIds = new Set(currentRoom.participants.filter((participant) => participant.kind === "agent").map((participant) => participant.id));
   const participantOptions = [
     ...currentRoom.participants.filter((participant) => participant.kind === "agent").map((participant) => ({
@@ -2328,14 +2340,43 @@ function SessionSetupModal({
             </label>
             <label>
               <span>{t("Workspace path")}</span>
-              <input
-                value={draft.workspacePath}
-                placeholder={currentRoom.workspacePath ?? t("Optional absolute path for this session")}
-                onChange={(input) => {
-                  const value = input.currentTarget.value;
-                  setDraft((current) => ({ ...current, workspacePath: value }));
-                }}
-              />
+              <div className="path-picker-field">
+                <input
+                  value={draft.workspacePath}
+                  placeholder={currentRoom.workspacePath ?? t("Optional absolute path for this session")}
+                  onChange={(input) => {
+                    const value = input.currentTarget.value;
+                    setWorkspacePickerStatus("");
+                    setDraft((current) => ({ ...current, workspacePath: value }));
+                  }}
+                />
+                <button
+                  type="button"
+                  className="icon-action path-picker-action"
+                  disabled={pickingWorkspace}
+                  title={t("Choose folder")}
+                  aria-label={t("Choose folder")}
+                  onClick={async () => {
+                    if (!isTauriRuntime()) {
+                      setWorkspacePickerStatus(t("Folder picker is available in the desktop app. You can still enter an absolute path here."));
+                      return;
+                    }
+                    setPickingWorkspace(true);
+                    setWorkspacePickerStatus("");
+                    try {
+                      const path = await pickWorkspaceDirectory(draft.workspacePath || currentRoom.workspacePath || "");
+                      if (path) setDraft((current) => ({ ...current, workspacePath: path }));
+                    } catch (err) {
+                      setWorkspacePickerStatus(err instanceof Error ? err.message : String(err));
+                    } finally {
+                      setPickingWorkspace(false);
+                    }
+                  }}
+                >
+                  {pickingWorkspace ? <RefreshCcw size={16} className="spin" /> : <FolderOpen size={16} />}
+                </button>
+              </div>
+              {workspacePickerStatus ? <small className="field-note">{workspacePickerStatus}</small> : null}
             </label>
           </section>
 

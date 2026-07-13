@@ -315,6 +315,10 @@ The following is the implementation trail from this session. It is written for t
     - Files: `packages/core/src/session-manager.ts`, its tests, `README.md`, `HANDOFF.md`.
     - Work: reconstructs queued-but-not-activated human prompts from event-log queued markers and resumes the FIFO automatically when a shared session manager starts. Also fixes a graceful-stop race where an aborted turn attempted to enqueue `finishTurn` after the command mailbox had stopped.
 
+71. this change `feat: add native workspace folder picker`
+    - Files: Tauri Rust command/dependency, Web Session setup and styles, `README.md`, `HANDOFF.md`.
+    - Work: adds a system-native directory chooser in the desktop app, seeded from the current workspace path. Session setup keeps manual absolute-path entry and explains that browser-only mode cannot expose a local absolute directory path.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:

@@ -134,10 +134,29 @@ fn get_sidecar_connection(
     Ok(connection)
 }
 
+#[tauri::command]
+async fn pick_workspace_directory(initial_path: Option<String>) -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut dialog = rfd::FileDialog::new().set_title("Choose Quorum workspace");
+        if let Some(path) = initial_path.filter(|path| !path.trim().is_empty()) {
+            let initial = PathBuf::from(path);
+            let directory = if initial.is_dir() {
+                initial
+            } else {
+                initial.parent().map(Path::to_path_buf).unwrap_or(initial)
+            };
+            dialog = dialog.set_directory(directory);
+        }
+        dialog.pick_folder().map(|path| path.to_string_lossy().into_owned())
+    })
+    .await
+    .map_err(|err| format!("folder picker failed: {err}"))
+}
+
 pub fn run() {
     tauri::Builder::default()
         .manage(Mutex::new(SidecarState::default()))
-        .invoke_handler(tauri::generate_handler![get_sidecar_connection])
+        .invoke_handler(tauri::generate_handler![get_sidecar_connection, pick_workspace_directory])
         .build(tauri::generate_context!())
         .expect("failed to build tauri app")
         .run(|_app, _event| {});

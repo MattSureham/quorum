@@ -346,6 +346,26 @@ textarea:focus {
   box-shadow: 0 0 0 3px #d9ece5;
 }
 
+.path-picker-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 36px;
+  gap: 8px;
+  align-items: center;
+}
+
+.path-picker-action {
+  border: 1px solid #c8d3d0;
+  background: #f7faf9;
+}
+
+.field-note {
+  display: block;
+  margin-top: 6px;
+  color: #66736f;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .primary-action,
 .secondary-action,
 .danger-action,

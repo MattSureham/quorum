@@ -335,6 +335,10 @@ Built-in API profiles show the exact model id sent to the provider. Role labels
 such as analysis or fast do not claim a different underlying model; create a
 custom profile when a provider exposes a newer model id.
 
+In the desktop app, Session setup includes a native folder picker beside the
+workspace path field. The chosen absolute path is written into the session
+draft; manual entry remains available, including in browser-only development.
+
 The agent roster still comes from the room config for now: `quorum.config.json`
 or `QUORUM_CONFIG=<path>`. Each agent is a `ParticipantDescriptor` with an
 `adapter`:
