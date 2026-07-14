@@ -64,7 +64,7 @@ export interface InterruptBody { by: string; hard: boolean; note?: string }
 export interface DiffStat { files: number; insertions: number; deletions: number }
 export interface CheckpointBody { preHead: string; postHead: string; stat: DiffStat; summary?: string }
 export type ApprovalState = "requested" | "granted" | "denied";
-export interface ApprovalSignal { callId: string; tool: string; state: ApprovalState }
+export interface ApprovalSignal { callId: string; tool: string; args?: unknown; state: ApprovalState }
 export interface SystemBody { level: "info" | "warn" | "error"; text: string; approval?: ApprovalSignal }
 
 // ---- participants / rooms ----

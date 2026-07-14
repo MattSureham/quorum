@@ -1892,6 +1892,7 @@ function App() {
                   <strong>{signal.tool}</strong>
                   <span>{signal.callId}</span>
                 </div>
+                <pre className="approval-args">{JSON.stringify(signal.args ?? {}, null, 2)}</pre>
                 <div className="approval-actions">
                   <button type="button" className="approve" disabled={!connected} onClick={() => approveTool(signal.callId, true)}>
                     <Check size={14} /> {t("Approve")}
