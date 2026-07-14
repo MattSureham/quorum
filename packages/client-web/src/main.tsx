@@ -1369,6 +1369,7 @@ function App() {
           setDeletedSessionIds(new Set());
           setDeletingSessionIds(new Set());
           setError(message.text);
+          if (message.text.startsWith("set_credential failed:")) setCredentialStatus(message.text);
         }
       });
       socket.addEventListener("close", () => {

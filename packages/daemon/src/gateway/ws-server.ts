@@ -295,7 +295,7 @@ export class Gateway {
         break;
       case "set_credential":
         if (!this.deps.setCredential) {
-          ws.send(JSON.stringify({ t: "error", text: "credential storage is not available" }));
+          ws.send(JSON.stringify({ t: "error", text: "set_credential failed: credential storage is not available" }));
           break;
         }
         try {

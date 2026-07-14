@@ -3,7 +3,7 @@ import type { Participant, ConductorPolicy } from "@quorum/core";
 import type { Room, ConductorPolicyConfig } from "@quorum/protocol";
 import { SqliteStore } from "./persistence/sqlite-store.js";
 import { GitWorkspace } from "./workspace/git-workspace.js";
-import { Gateway } from "./gateway/ws-server.js";
+import { Gateway, type GatewayDeps } from "./gateway/ws-server.js";
 import { createParticipant } from "./adapters/registry.js";
 import { makeModelModerator } from "./moderator.js";
 
@@ -26,6 +26,7 @@ export interface RoomHost {
 /** Wire store -> log -> conductor -> participants -> workspace -> gateway for one room. */
 export async function startRoom(room: Room, opts: { dbPath?: string; port?: number } = {}): Promise<RoomHost> {
   const store = new SqliteStore(opts.dbPath);
+  store.applyProviderConfigsToEnv();
   const log = new EventLog(room.id, store);
 
   const participants: Participant[] = room.participants
@@ -71,6 +72,8 @@ export async function startRoom(room: Room, opts: { dbPath?: string; port?: numb
       approveTool: (callId, allow) => conductor.resolveToolApproval(callId, allow),
       takeWriteFloor: () => conductor.takeWriteFloor(),
       releaseWriteFloor: () => conductor.releaseWriteFloor(),
+      listCredentials: () => store.readProviderConfigViews(),
+      setCredential: (input: Parameters<NonNullable<GatewayDeps["setCredential"]>>[0]) => store.upsertProviderConfig(input),
       rollback: ws
         ? async (toHead) => {
             // Serialize behind any active edit, then reset, then announce (SPEC §7.4).

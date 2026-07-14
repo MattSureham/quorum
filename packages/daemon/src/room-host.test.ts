@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { describe, it, expect } from "vitest";
+import WebSocket from "ws";
 import type { Room, RoomEvent } from "@quorum/protocol";
 import { createParticipant } from "./adapters/registry.js";
 import { startRoom } from "./room-host.js";
@@ -51,6 +52,42 @@ async function makeRepo(): Promise<string> {
 }
 
 describe("RoomHost", () => {
+  it("stores provider credentials through the legacy room gateway", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "quorum-room-credentials-"));
+    const host = await startRoom(testRoom(dir), { dbPath: join(dir, "room.sqlite"), port: 0 });
+    const ws = new WebSocket(host.gateway.url());
+    const messages: any[] = [];
+    ws.on("message", (data) => messages.push(JSON.parse(data.toString())));
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        ws.once("open", resolve);
+        ws.once("error", reject);
+      });
+      ws.send(JSON.stringify({
+        t: "set_credential",
+        providerId: "deepseek",
+        envVar: "DEEPSEEK_API_KEY",
+        apiKey: "temporary-test-key-1234",
+        baseUrl: "https://api.deepseek.com",
+        model: "deepseek-v4-pro",
+      }));
+      await waitFor(() => messages.some((message) => message.t === "credential_saved"));
+
+      const saved = messages.find((message) => message.t === "credential_saved");
+      expect(saved.provider).toMatchObject({
+        providerId: "deepseek",
+        configured: true,
+        apiKeyPreview: "...1234",
+      });
+      expect(JSON.stringify(saved)).not.toContain("temporary-test-key-1234");
+    } finally {
+      ws.close();
+      await host.stop();
+      delete process.env.DEEPSEEK_API_KEY;
+    }
+  });
+
   it("creates the built-in echo adapter through the registry", async () => {
     const participant = createParticipant({
       id: "echo",
