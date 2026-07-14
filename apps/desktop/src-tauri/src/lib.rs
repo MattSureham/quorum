@@ -5,7 +5,9 @@ use std::{
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
-    sync::Mutex,
+    sync::{mpsc, Mutex},
+    thread,
+    time::Duration,
 };
 use tauri::{Manager, State};
 
@@ -142,19 +144,48 @@ fn start_sidecar(app: &tauri::AppHandle, binary: &Path) -> Result<(Child, Sideca
         .spawn()
         .map_err(|err| DesktopError::Start(err.to_string()))?;
 
-    let stdout = child.stdout.take().ok_or_else(|| DesktopError::Handshake("stdout unavailable".into()))?;
-    let mut reader = BufReader::new(stdout);
-    let mut line = String::new();
-    let bytes = reader
-        .read_line(&mut line)
-        .map_err(|err| DesktopError::Handshake(err.to_string()))?;
-
+    let stdout = match child.stdout.take() {
+        Some(stdout) => stdout,
+        None => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(DesktopError::Handshake("stdout unavailable".into()));
+        }
+    };
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        let mut reader = BufReader::new(stdout);
+        let mut line = String::new();
+        let result = reader.read_line(&mut line).map(|bytes| (bytes, line));
+        let _ = tx.send(result);
+    });
+    let handshake = rx.recv_timeout(Duration::from_secs(10));
+    let (bytes, line) = match handshake {
+        Ok(Ok(value)) => value,
+        Ok(Err(err)) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(DesktopError::Handshake(err.to_string()));
+        }
+        Err(err) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(DesktopError::Handshake(format!("timed out waiting for sidecar handshake: {err}")));
+        }
+    };
     if bytes == 0 {
+        let _ = child.wait();
         return Err(DesktopError::EarlyExit);
     }
 
-    let mut connection: SidecarConnection =
-        serde_json::from_str(line.trim()).map_err(|err| DesktopError::Handshake(err.to_string()))?;
+    let mut connection: SidecarConnection = match serde_json::from_str(line.trim()) {
+        Ok(connection) => connection,
+        Err(err) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(DesktopError::Handshake(err.to_string()));
+        }
+    };
     connection.url = format!("ws://127.0.0.1:{}?token={}", connection.port, connection.token);
 
     Ok((child, connection))
