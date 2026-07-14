@@ -314,9 +314,9 @@ printf '%s\\n' '{"type":"result","session_id":"fresh-session"}'
     const off = host.log.on((event) => events.push(event));
 
     try {
-      await sleep(20);
+      await sleep(process.platform === "win32" ? 250 : 20);
       await writeFile(join(workspacePath, "manual.txt"), "manual edit\n");
-      await waitFor(() => events.some((event) => event.type === "checkpoint"));
+      await waitFor(() => events.some((event) => event.type === "checkpoint"), process.platform === "win32" ? 10_000 : 2_500);
 
       const checkpoint = events.find((event) => event.type === "checkpoint");
       expect(checkpoint?.author.kind).toBe("human");

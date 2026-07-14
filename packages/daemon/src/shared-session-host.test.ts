@@ -1,4 +1,4 @@
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -6,6 +6,7 @@ import WebSocket from "ws";
 import type { Room, RoomEvent } from "@quorum/protocol";
 import { startSharedSessionRoom } from "./shared-session-host.js";
 import { registerAdapter } from "./adapters/registry.js";
+import { GitWorkspace } from "./workspace/git-workspace.js";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -246,6 +247,8 @@ describe("SharedSessionHost", () => {
   it("serializes editable turns across sessions sharing one canonical workspace", async () => {
     const dir = await mkdtemp(join(tmpdir(), "quorum-shared-workspace-lock-"));
     const workspacePath = join(dir, "workspace");
+    await mkdir(workspacePath, { recursive: true });
+    await new GitWorkspace(workspacePath, "main").init();
     let activeEditors = 0;
     let maxActiveEditors = 0;
     let completedEditors = 0;
