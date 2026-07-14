@@ -350,9 +350,29 @@ describe("Gateway", () => {
 
       await expect(deleted1).resolves.toMatchObject({ t: "session_deleted", sessionId: "room", rooms: [] });
       await expect(deleted2).resolves.toMatchObject({ t: "session_deleted", sessionId: "room", rooms: [] });
+
+      ws1.send(JSON.stringify({ t: "subscribe", roomId: "room", sinceSeq: 0 }));
+      await expect(nextMessage(ws1)).resolves.toMatchObject({ t: "error", text: "unknown session: room" });
     } finally {
       ws1.close();
       ws2.close();
+      await gateway.close();
+    }
+  });
+
+  it("reports rollback as unavailable instead of silently succeeding", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const gateway = new Gateway({ log, room, humanId: "human", setPolicy: () => {} }, 0);
+    await gateway.ready;
+    const ws = await connect(gateway.url());
+    try {
+      ws.send(JSON.stringify({ t: "rollback", roomId: "room", toHead: "abc123" }));
+      await expect(nextMessage(ws)).resolves.toMatchObject({
+        t: "error",
+        text: "rollback is not available for this session",
+      });
+    } finally {
+      ws.close();
       await gateway.close();
     }
   });

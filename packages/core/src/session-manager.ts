@@ -476,7 +476,7 @@ export class SessionManager {
         prompt: this.lastPrompt,
         contextSeq: this.opts.log.headSeq,
         participants: this.participants(),
-        transcript: this.opts.log.replay(0),
+        transcript: this.boundedTranscript(),
         contextBundle: this.contextBundle(),
         attachments: this.currentAttachments,
       };
@@ -818,6 +818,14 @@ export class SessionManager {
       "- Do not silently fill gaps from memory. If a required fact is absent or ambiguous, say what is uncertain.",
       "- If the user asks to continue prior work, continue from the latest head seq and avoid re-deciding settled points unless new evidence appears.",
     ].join("\n");
+  }
+
+  private boundedTranscript(): RoomEvent[] {
+    const headSeq = this.opts.log.headSeq;
+    const afterSeq = this.lastCompactedSeq > 0
+      ? this.lastCompactedSeq
+      : Math.max(0, headSeq - 60);
+    return this.opts.log.replay(afterSeq);
   }
 
   private async requestToolApproval(req: ToolCallRequest): Promise<ToolCallResult> {
