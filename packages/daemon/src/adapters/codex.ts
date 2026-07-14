@@ -35,12 +35,12 @@ export class CodexAdapter extends BaseAgentAdapter {
     const bin = safeWindowsBinary(this.opts.bin ?? "codex");
     const sandbox = safeCliValue(this.opts.sandbox ?? "workspace-write", "Codex sandbox");
     const cwd = input.workspacePath ?? process.cwd();
-    const flags = ["--json", "--sandbox", sandbox];
+    const flags = ["--sandbox", sandbox];
     if (this.opts.model) flags.push("-m", safeCliValue(this.opts.model, "model"));
     const threadId = this.threadId ? safeCliValue(this.threadId, "thread id") : undefined;
     const args = this.threadId
       ? ["exec", ...flags, "resume", threadId!, "--json", "-"]
-      : ["exec", ...flags, "--skip-git-repo-check", "-"];
+      : ["exec", "--json", ...flags, "--skip-git-repo-check", "-"];
 
     const child = spawn(bin, args, {
       cwd,

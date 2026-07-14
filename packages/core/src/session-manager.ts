@@ -462,7 +462,7 @@ export class SessionManager {
   }
 
   private async runTurn(agent: ISpeakerAgent, turnId: string, generation: number, ac: AbortController): Promise<void> {
-    const timeout = setTimeout(() => ac.abort(), this.opts.turnTimeoutMs ?? 120_000);
+    let timeout: ReturnType<typeof setTimeout> | undefined;
     const startedAt = Date.now();
     let offset = 0;
     let outcome: "done" | "cancelled" | "failed" = "done";
@@ -482,6 +482,9 @@ export class SessionManager {
         lease = await this.opts.workspace.acquireWriteFloor(turnId, agent.id);
         await this.opts.workspace.snapshotPre();
       }
+      // Workspace contention is queueing time. The agent execution deadline
+      // starts only after this turn owns the shared write floor.
+      timeout = setTimeout(() => ac.abort(), this.opts.turnTimeoutMs ?? 120_000);
       const ctx: TurnContext = {
         sessionId: this.opts.sessionId,
         turnId,
@@ -521,7 +524,7 @@ export class SessionManager {
         category: "adapter_exception",
       };
     } finally {
-      clearTimeout(timeout);
+      if (timeout) clearTimeout(timeout);
       if (ac.signal.aborted && outcome === "done") outcome = "cancelled";
       if (this.running) await this.mailbox.enqueue("finishTurn", async () => {
         if (!this.active || this.active.turnId !== turnId || this.active.generation !== generation) return;
@@ -851,16 +854,25 @@ export class SessionManager {
     );
     const allow = await new Promise<boolean>((resolve) => {
       let settled = false;
-      const finish = (value: boolean) => {
+      const finish = (value: boolean, terminalState?: "denied" | "expired") => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
         signal?.removeEventListener("abort", denyOnAbort);
         this.pendingToolApprovals.delete(callId);
+        if (terminalState) {
+          void this.mailbox.enqueue("finishToolApproval", () =>
+            this.append("system", {
+              level: "warn",
+              text: `tool approval ${terminalState}: ${req.tool} [${callId}]`,
+              approval: { callId, tool: req.tool, args: req.args, state: terminalState },
+            }, "system", { turnId: this.active?.turnId }),
+          ).catch(() => undefined);
+        }
         resolve(value);
       };
-      const denyOnAbort = () => finish(false);
-      const timer = setTimeout(() => finish(false), Math.min(this.opts.turnTimeoutMs ?? 120_000, 60_000));
+      const denyOnAbort = () => finish(false, "denied");
+      const timer = setTimeout(() => finish(false, "expired"), Math.min(this.opts.turnTimeoutMs ?? 120_000, 60_000));
       signal?.addEventListener("abort", denyOnAbort, { once: true });
       this.pendingToolApprovals.set(callId, { tool: req.tool, resolve: finish });
       void this.mailbox.enqueue("requestToolApproval", () =>
