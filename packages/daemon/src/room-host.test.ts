@@ -66,6 +66,7 @@ describe("RoomHost", () => {
       });
       ws.send(JSON.stringify({
         t: "set_credential",
+        roomId: "room",
         providerId: "deepseek",
         envVar: "DEEPSEEK_API_KEY",
         apiKey: "temporary-test-key-1234",
