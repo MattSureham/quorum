@@ -1,7 +1,7 @@
 import { EventLog, LegacyAgentAdapter, SessionManager, type WorkspaceManager } from "@quorum/core";
 import type { AgentHealth, CreateSessionInput, ParticipantDescriptor, Room, SessionMode } from "@quorum/protocol";
 import { execFile } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, realpathSync } from "node:fs";
 import { readdir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -26,6 +26,15 @@ interface ManagedSharedSession {
   log: EventLog;
   session: SessionManager;
   gatewayDeps: GatewaySessionDeps;
+  unwatch?: () => void;
+}
+
+interface SharedWorkspaceCoordinator {
+  path: string;
+  branch: string;
+  workspace: GitWorkspace;
+  ready: Promise<void>;
+  subscribers: Map<string, { log: EventLog; human: ParticipantDescriptor }>;
   unwatch?: () => void;
 }
 
@@ -160,6 +169,67 @@ export async function startSharedSessionRoom(
   const store = new SqliteStore(opts.dbPath);
   store.applyProviderConfigsToEnv();
   const managed = new Map<string, ManagedSharedSession>();
+  const workspaceCoordinators = new Map<string, SharedWorkspaceCoordinator>();
+
+  function attachWorkspace(nextRoom: Room, log: EventLog, humans: ParticipantDescriptor[]): {
+    workspace?: GitWorkspace;
+    ready?: Promise<void>;
+    detach?: () => void;
+  } {
+    if (!nextRoom.workspacePath) return {};
+    mkdirSync(nextRoom.workspacePath, { recursive: true });
+    const canonicalPath = realpathSync(nextRoom.workspacePath);
+    let coordinator = workspaceCoordinators.get(canonicalPath);
+    if (coordinator && coordinator.branch !== nextRoom.branch) {
+      throw new Error(`workspace ${canonicalPath} is already active on branch ${coordinator.branch}`);
+    }
+    if (!coordinator) {
+      const workspace = new GitWorkspace(canonicalPath, nextRoom.branch);
+      coordinator = {
+        path: canonicalPath,
+        branch: nextRoom.branch,
+        workspace,
+        ready: workspace.init(),
+        subscribers: new Map(),
+      };
+      workspaceCoordinators.set(canonicalPath, coordinator);
+      const shared = coordinator;
+      void shared.ready.then(() => {
+        shared.unwatch = shared.workspace.watchOutOfBand((checkpoint) => {
+          for (const subscriber of shared.subscribers.values()) {
+            void subscriber.log.append({
+              author: subscriber.human,
+              type: "checkpoint",
+              body: checkpoint,
+              visibility: "system",
+            });
+          }
+        });
+      }).catch((err) => {
+        for (const subscriber of shared.subscribers.values()) {
+          void subscriber.log.append({
+            author: { kind: "system", id: "workspace", display: "Workspace" },
+            type: "system",
+            body: { level: "warn", text: `workspace init failed: ${err instanceof Error ? err.message : String(err)}` },
+            visibility: "system",
+          });
+        }
+      });
+    }
+    const human = humans[0] ?? { id: "human", kind: "human", display: "Human", status: "idle" };
+    coordinator.subscribers.set(nextRoom.id, { log, human });
+    return {
+      workspace: coordinator.workspace,
+      ready: coordinator.ready,
+      detach: () => {
+        coordinator!.subscribers.delete(nextRoom.id);
+        if (!coordinator!.subscribers.size) {
+          coordinator!.unwatch?.();
+          workspaceCoordinators.delete(canonicalPath);
+        }
+      },
+    };
+  }
 
   function createManaged(nextRoom: Room): ManagedSharedSession {
     const existing = managed.get(nextRoom.id);
@@ -189,35 +259,9 @@ export async function startSharedSessionRoom(
       },
     }));
     const humans = nextRoom.participants.filter((participant) => participant.kind === "human");
-    const workspace = nextRoom.workspacePath ? new GitWorkspace(nextRoom.workspacePath, nextRoom.branch) : undefined;
-    let workspaceReady: Promise<void> | undefined;
-    if (workspace) {
-      mkdirSync(nextRoom.workspacePath!, { recursive: true });
-      workspaceReady = workspace.init().catch((err) => {
-        void log.append({
-          author: { kind: "system", id: "workspace", display: "Workspace" },
-          type: "system",
-          body: { level: "warn", text: `workspace init failed: ${err instanceof Error ? err.message : String(err)}` },
-          visibility: "system",
-        });
-        throw err;
-      });
-    }
-    let unwatch: (() => void) | undefined;
-    if (workspace && workspaceReady) {
-      void workspaceReady.then(() => {
-        unwatch = workspace.watchOutOfBand((checkpoint) => {
-          void log.append({
-            author: { kind: "human", id: humans[0]?.id ?? "human", display: humans[0]?.display ?? "Human" },
-            type: "checkpoint",
-            body: checkpoint,
-            visibility: "system",
-          });
-        });
-      }).catch(() => {
-        /* workspace init warning has already been recorded */
-      });
-    }
+    const workspaceAttachment = attachWorkspace(nextRoom, log, humans);
+    const workspace = workspaceAttachment.workspace;
+    const workspaceReady = workspaceAttachment.ready;
 
     const session = new SessionManager({
       sessionId: nextRoom.id,
@@ -258,7 +302,7 @@ export async function startSharedSessionRoom(
         });
       },
     };
-    const created = { room: nextRoom, log, session, gatewayDeps, unwatch: () => unwatch?.() };
+    const created = { room: nextRoom, log, session, gatewayDeps, unwatch: workspaceAttachment.detach };
     managed.set(nextRoom.id, created);
     return created;
   }
