@@ -1140,6 +1140,8 @@ function App() {
   const [sessionSetupOpen, setSessionSetupOpen] = useState(false);
   const [sessionDraftSeed, setSessionDraftSeed] = useState<SessionDraft>(defaultSessionDraft);
   const wsRef = useRef<WebSocket | null>(null);
+  const settingsRef = useRef(settings);
+  const activeRoomIdRef = useRef(settings.roomId);
   const lastSeqRef = useRef(0);
   const deletedSessionIdsRef = useRef<Set<string>>(new Set());
   const attemptRef = useRef(0);
@@ -1155,6 +1157,8 @@ function App() {
   const stickRef = useRef(true); // keep pinned to newest unless the user scrolls up
 
   const displayRoom = room ?? (sessionsLoaded ? emptyRoom : previewRoom);
+  settingsRef.current = settings;
+  activeRoomIdRef.current = displayRoom.id || settings.roomId;
   const visibleRooms = (sessionsLoaded ? rooms : rooms.length ? rooms : [displayRoom])
     .filter((item) =>
       !deletingSessionIds.has(item.id) &&
@@ -1226,14 +1230,14 @@ function App() {
     return merged;
   }
 
-  function scheduleReconnect(next: ClientSettings) {
+  function scheduleReconnect() {
     if (teardownRef.current) return;
     const attempt = attemptRef.current++;
     const delay = Math.min(15_000, 500 * 2 ** attempt);
-    reconnectTimerRef.current = setTimeout(() => connect(next, true), delay);
+    reconnectTimerRef.current = setTimeout(() => connect(settingsRef.current, true), delay);
   }
 
-  function connect(next = settings, resume = false) {
+  function connect(next = settingsRef.current, resume = false) {
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
     teardownRef.current = false;
     wsRef.current?.close();
@@ -1285,6 +1289,8 @@ function App() {
           setAgentHealth({});
           lastSeqRef.current = 0;
           const nextSettings = { ...next, roomId: message.room.id };
+          settingsRef.current = nextSettings;
+          activeRoomIdRef.current = message.room.id;
           setSettings(nextSettings);
           setDraftSettings(nextSettings);
           socket.send(JSON.stringify({ t: "subscribe", roomId: message.room.id, sinceSeq: 0 }));
@@ -1302,6 +1308,8 @@ function App() {
           setAgentHealth({});
           lastSeqRef.current = 0;
           const nextSettings = { ...next, roomId: message.room.id };
+          settingsRef.current = nextSettings;
+          activeRoomIdRef.current = message.room.id;
           setSettings(nextSettings);
           setDraftSettings(nextSettings);
           socket.send(JSON.stringify({ t: "subscribe", roomId: message.room.id, sinceSeq: 0 }));
@@ -1315,7 +1323,7 @@ function App() {
           });
           setRooms(message.rooms.filter((item) => item.id !== message.sessionId && !deletedSessionIdsRef.current.has(item.id)));
           setSessionsLoaded(true);
-          if (message.sessionId === settings.roomId || message.sessionId === displayRoom.id) {
+          if (message.sessionId === activeRoomIdRef.current) {
             const fallback = message.rooms.find((item) => item.id !== message.sessionId && !deletedSessionIdsRef.current.has(item.id));
             if (fallback) {
               switchSession(fallback.id);
@@ -1337,9 +1345,9 @@ function App() {
           setCredentialStatus(`${message.provider.providerId} saved`);
           setCredentialViews(message.providers);
           mergeCredentialViews(message.providers);
-          socket.send(JSON.stringify({ t: "check_agents", roomId: settings.roomId }));
+          socket.send(JSON.stringify({ t: "check_agents", roomId: settingsRef.current.roomId }));
         } else if (message.t === "agent_health") {
-          if (message.roomId === settings.roomId || message.roomId === displayRoom.id) setAgentHealth(message.health);
+          if (message.roomId === activeRoomIdRef.current) setAgentHealth(message.health);
         } else if (message.t === "workspace_directories" || message.t === "workspace_directories_error") {
           const pending = directoryRequestsRef.current.get(message.requestId);
           if (!pending) return;
@@ -1357,7 +1365,7 @@ function App() {
       socket.addEventListener("close", () => {
         if (wsRef.current !== socket || teardownRef.current) return; // replaced or intentional
         setStatus("offline");
-        scheduleReconnect(next);
+        scheduleReconnect();
       });
       socket.addEventListener("error", () => {
         if (wsRef.current !== socket || teardownRef.current) return; // ignore a replaced/torn-down socket
@@ -1366,7 +1374,7 @@ function App() {
     } catch (err) {
       setStatus("error");
       setError(err instanceof Error ? err.message : "Connection failed");
-      scheduleReconnect(next);
+      scheduleReconnect();
     }
   }
 
@@ -1378,6 +1386,8 @@ function App() {
         const initial = await resolveDesktopSettings(settings);
         if (cancelled) return;
         setSettings(initial);
+        settingsRef.current = initial;
+        activeRoomIdRef.current = initial.roomId;
         setDraftSettings(initial);
         connect(initial, false);
       } catch (err) {
@@ -1408,13 +1418,17 @@ function App() {
   }, [rooms, sessionsLoaded]);
 
   function applyConnection() {
+    settingsRef.current = draftSettings;
+    activeRoomIdRef.current = draftSettings.roomId;
     setSettings(draftSettings);
     attemptRef.current = 0;
     connect(draftSettings, false);
   }
 
   function switchSession(roomId: string) {
-    const next = { ...settings, roomId };
+    const next = { ...settingsRef.current, roomId };
+    settingsRef.current = next;
+    activeRoomIdRef.current = roomId;
     setSettings(next);
     setDraftSettings(next);
     setEvents([]);
