@@ -4,6 +4,7 @@
 import { z } from "zod";
 
 const PermissionPolicySchema = z.enum(["read-only", "workspace-write", "approval-required", "full-auto"]);
+const CliBinarySchema = z.string().min(1).max(1_024).refine((value) => !/[&|<>^%!\r\n"]/u.test(value), "CLI binary path contains shell metacharacters");
 const AdapterConfigs = {
   echo: z.object({
     text: z.string().max(20_000).optional(),
@@ -19,14 +20,14 @@ const AdapterConfigs = {
   codex: z.object({
     sandbox: z.enum(["read-only", "workspace-write", "danger-full-access"]).optional(),
     model: z.string().min(1).max(200).optional(),
-    bin: z.string().min(1).max(1_024).optional(),
+    bin: CliBinarySchema.optional(),
     permissionPolicy: PermissionPolicySchema.optional(),
   }).strict(),
   "claude-code": z.object({
     model: z.string().min(1).max(200).optional(),
     permissionMode: z.enum(["default", "acceptEdits", "bypassPermissions", "plan"]).optional(),
     transport: z.enum(["cli", "sdk"]).optional(),
-    bin: z.string().min(1).max(1_024).optional(),
+    bin: CliBinarySchema.optional(),
     inheritApiKeyEnv: z.boolean().optional(),
     permissionPolicy: PermissionPolicySchema.optional(),
   }).strict(),
