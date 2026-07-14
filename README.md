@@ -297,6 +297,13 @@ and local CLI agents such as Claude Code are launched through the Windows shell
 so `.cmd` shims work; Codex uses the same Windows-compatible launch path. Remaining release work is signing/notarization, updater
 wiring, and broader platform lifecycle hardening.
 
+On Windows desktop builds, Quorum stores its SQLite database, default workspace,
+and `sidecar.log` under `%LOCALAPPDATA%\\dev.quorum.desktop`. The desktop launcher
+also adds the standard native Claude Code (`%USERPROFILE%\\.local\\bin`) and npm
+CLI (`%APPDATA%\\npm`) locations to the sidecar `PATH`, so Explorer-launched
+portable builds can detect `claude.cmd`/`claude.exe` and `codex.cmd` without
+requiring Quorum to be launched from a configured terminal.
+
 ## Status
 
 Runnable shared-session application with persisted sessions, Web UI, and desktop packaging:

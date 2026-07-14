@@ -1,5 +1,7 @@
 use serde::Serialize;
 use std::{
+    env,
+    fs::{create_dir_all, OpenOptions},
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
@@ -86,11 +88,53 @@ fn resolve_sidecar_path(app: &tauri::AppHandle) -> Result<PathBuf, DesktopError>
     Err(DesktopError::SidecarMissing)
 }
 
-fn start_sidecar(binary: &Path) -> Result<(Child, SidecarConnection), DesktopError> {
-    let mut child = Command::new(binary)
+fn sidecar_path_env() -> Option<std::ffi::OsString> {
+    let mut paths: Vec<PathBuf> = env::var_os("PATH")
+        .as_deref()
+        .map(env::split_paths)
+        .into_iter()
+        .flatten()
+        .collect();
+
+    if cfg!(windows) {
+        if let Some(profile) = env::var_os("USERPROFILE") {
+            paths.push(PathBuf::from(profile).join(".local").join("bin"));
+        }
+        if let Some(app_data) = env::var_os("APPDATA") {
+            paths.push(PathBuf::from(app_data).join("npm"));
+        }
+        if let Some(local_app_data) = env::var_os("LOCALAPPDATA") {
+            paths.push(PathBuf::from(local_app_data).join("Programs").join("Claude"));
+        }
+    }
+
+    paths.sort();
+    paths.dedup();
+    env::join_paths(paths).ok()
+}
+
+fn start_sidecar(app: &tauri::AppHandle, binary: &Path) -> Result<(Child, SidecarConnection), DesktopError> {
+    let data_dir = app.path().app_local_data_dir().map_err(|err| DesktopError::Start(err.to_string()))?;
+    let workspace_dir = data_dir.join("workspace");
+    create_dir_all(&workspace_dir).map_err(|err| DesktopError::Start(format!("failed to create app data: {err}")))?;
+    let stderr_log = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(data_dir.join("sidecar.log"))
+        .map_err(|err| DesktopError::Start(format!("failed to open sidecar log: {err}")))?;
+
+    let mut command = Command::new(binary);
+    command
+        .current_dir(&data_dir)
+        .env("QUORUM_DB_PATH", data_dir.join("quorum.sqlite"))
+        .env("QUORUM_DEFAULT_WORKSPACE", &workspace_dir)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
+        .stderr(Stdio::from(stderr_log));
+    if let Some(path) = sidecar_path_env() {
+        command.env("PATH", path);
+    }
+    let mut child = command
         .spawn()
         .map_err(|err| DesktopError::Start(err.to_string()))?;
 
@@ -128,7 +172,7 @@ fn get_sidecar_connection(
     }
 
     let binary = resolve_sidecar_path(&app)?;
-    let (child, connection) = start_sidecar(&binary)?;
+    let (child, connection) = start_sidecar(&app, &binary)?;
     guard.child = Some(child);
     guard.connection = Some(connection.clone());
     Ok(connection)

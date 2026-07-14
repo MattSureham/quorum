@@ -38,7 +38,7 @@ const bootId = randomUUID();
 const room: Room = {
   id: cfg.id,
   title: cfg.title ?? "Quorum",
-  workspacePath: cfg.workspacePath ?? process.cwd(),
+  workspacePath: cfg.workspacePath ?? process.env.QUORUM_DEFAULT_WORKSPACE ?? process.cwd(),
   branch: cfg.branch ?? process.env.QUORUM_BRANCH ?? "main",
   primary: cfg.primary,
   policy: cfg.policy,

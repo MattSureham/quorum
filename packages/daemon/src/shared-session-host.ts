@@ -64,11 +64,11 @@ function readyWorkspace(workspace: GitWorkspace, ready: Promise<void>): Workspac
 
 async function commandExists(bin: string): Promise<boolean> {
   try {
-    await exec(bin, ["--version"], { timeout: 2_500 });
+    await exec(bin, ["--version"], { timeout: 2_500, shell: process.platform === "win32" });
     return true;
   } catch {
     try {
-      await exec(bin, ["--help"], { timeout: 2_500 });
+      await exec(bin, ["--help"], { timeout: 2_500, shell: process.platform === "win32" });
       return true;
     } catch {
       return false;
@@ -78,7 +78,7 @@ async function commandExists(bin: string): Promise<boolean> {
 
 async function commandSupports(bin: string, args: string[], required: string[]): Promise<{ ok: boolean; detail?: string }> {
   try {
-    const { stdout, stderr } = await exec(bin, args, { timeout: 2_500 });
+    const { stdout, stderr } = await exec(bin, args, { timeout: 2_500, shell: process.platform === "win32" });
     const help = `${stdout}\n${stderr}`;
     const missing = required.filter((flag) => !help.includes(flag));
     return missing.length

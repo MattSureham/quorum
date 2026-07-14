@@ -348,6 +348,10 @@ The following is the implementation trail from this session. It is written for t
     - Work: accepts image files from the clipboard through `Ctrl/Cmd+V`, reuses the existing attachment preview/removal/send path and six-image queue, leaves ordinary text paste untouched, and reports image read failures instead of rejecting silently.
     - Verification: `pnpm typecheck`, all 85 tests, and the Web production build pass. Browser interaction inspection was attempted against the local Vite app, but no controllable browser was available in this session.
 
+78. this change `fix: initialize Windows portable runtime environment`
+    - Files: Tauri sidecar launcher, daemon sidecar/health checks, `README.md`, `HANDOFF.md`.
+    - Work: moves desktop SQLite/default workspace/log output to the writable app-local data directory, gives the sidecar a deterministic working directory, adds common native/npm CLI install directories to its Windows `PATH`, and runs CLI health checks through the Windows command shell so `claude.cmd` and `codex.cmd` are detected. This addresses portable builds that could neither detect Claude Code nor create sessions when Explorer supplied an unsuitable working directory or stale PATH.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:
