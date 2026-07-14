@@ -313,6 +313,22 @@ message composer with `Ctrl/Cmd+V`. Pasted images use the same preview, removal,
 visibility, payload limits, and send path as uploaded files; ordinary text paste
 continues to work normally.
 
+Security/reliability hardening in the current shared-session path:
+
+- Claude Code and Codex prompts are written to subprocess stdin. User prompt and
+  dynamic room context never enter the Windows shell command line; model/native
+  session identifiers accepted as CLI arguments are restricted to safe characters.
+- Opening an existing Git workspace never uses `checkout -B`. Existing branches
+  are switched normally, missing branches are created, and a dirty tree blocks
+  branch switching instead of silently moving a branch pointer.
+- Sessions sharing one canonical workspace path share a single coordinator,
+  write-floor mutex, checkpoint queue, and out-of-band watcher.
+- Working-memory summaries bound subsequent agent transcripts to post-summary
+  events; without a summary, only the latest 60 events are passed as transcript.
+- The local command executor is a cwd/env/timeout/pattern guardrail, **not an OS
+  security sandbox**. Treat approval-required mode as human-reviewed local
+  execution until a platform sandbox/container backend is added.
+
 - `@quorum/protocol` — event/room types + zod wire schema
 - `@quorum/core` — EventLog, Conductor, the three floor policies, projection — **dependency-free, tested**
 - `@quorum/daemon` — adapters (echo + real Claude Code / Codex / API), git workspace, SQLite store, WS gateway

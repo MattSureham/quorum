@@ -362,6 +362,12 @@ The following is the implementation trail from this session. It is written for t
     - Files: Tauri sidecar launcher, daemon sidecar/health checks, `README.md`, `HANDOFF.md`.
     - Work: moves desktop SQLite/default workspace/log output to the writable app-local data directory, gives the sidecar a deterministic working directory, adds common native/npm CLI install directories to its Windows `PATH`, and runs CLI health checks through the Windows command shell so `claude.cmd` and `codex.cmd` are detected. This addresses portable builds that could neither detect Claude Code nor create sessions when Explorer supplied an unsuitable working directory or stale PATH.
 
+79. this change `fix: harden shared-session execution and workspace safety`
+    - Files: Claude/Codex adapters and tests, Git workspace/tests, shared-session host/tests, SessionManager, gateway/tests, Web connection/mode/approval UI, protocol approval type, Tauri launcher, `README.md`, `HANDOFF.md`.
+    - Work: removes user prompt/context from Windows shell argv by streaming both CLI prompts through stdin; validates remaining dynamic CLI values; turns Claude spawn/exit/empty-output failures into structured failed turns; replaces destructive `git checkout -B` with safe branch switching and dirty-tree refusal; shares one canonical workspace coordinator/lease/watcher across sessions; wires shared rollback through that lease; removes deleted-primary gateway fallback; bounds post-compaction transcript replay; makes bids time out; ties approvals to abort/timeout while showing full args; fixes stale WebSocket room/settings closures and Open discussion labeling; uses configured human ids; and adds a 10-second sidecar handshake timeout with child cleanup.
+    - Security boundary: `local-sandbox-executor.ts` remains a guarded local command runner, not a true OS sandbox. It limits cwd/env/time/output and blocks a small pattern set, but can still access user files/network through allowed commands. Do not claim stronger isolation until a platform sandbox/container backend exists.
+    - Verification: `pnpm typecheck`, all 93 tests, Web production build, shared-session smoke, compiled Bun sidecar smoke, Tauri info, and Rust `cargo check` pass on macOS arm64. New regression coverage includes prompt-via-stdin for both CLIs, structured Claude failures, branch-head preservation/dirty-tree refusal, deleted-primary behavior, explicit unavailable rollback, and cross-session workspace lease serialization.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:
@@ -435,8 +441,8 @@ What is not implemented yet:
 - **Local sidecar entry exists and Bun compile is verified.** The sidecar can be run through tsx with `pnpm smoke:sidecar`, compiled with Bun using `pnpm sidecar:bun:build`, and verified with `pnpm sidecar:bun:smoke`.
 - **Node-runtime fallback exists.** It is not a single binary, but `pnpm sidecar:node:build` creates a smoke-tested fallback artifact. Keep it as the fallback route if Bun compile regresses on another platform.
 - **Rust/Cargo exists only in the project-local toolchain.** Source `.tools/packaging-env.sh` before running direct Cargo/Tauri commands, or use `pnpm desktop:check`.
-- The Web UI now exposes the new shared-session phase and bid queue, but it is still a minimal projection. It does not yet provide full replay controls, policy tuning, rich arbitration score inspection, or memory inspection.
-- Richer memory policy tuning UI, adapter-level native tool bridging, full timeline replay UI, signed installer pipeline, updater, and full cross-platform desktop validation remain follow-up work.
+- The Web UI exposes shared-session phase/bid diagnostics, replay projection controls, working-memory summaries, continuity status, and turn traces. Rich arbitration score inspection, memory policy tuning, and a full timeline scrubber remain follow-up work.
+- A true OS-level tool sandbox, adapter-level native approval/tool bridging, signed installer pipeline, updater, and full cross-platform desktop validation remain follow-up work.
 
 Recommended next task for the new agent:
 
@@ -532,11 +538,11 @@ SPEC.md       full design (Chinese): data model, Conductor state machine, adapte
 - **M6** remote (relay/E2E/pairing QR, more providers) — **not started**.
 
 ## Suggested next steps
-1. Re-test `quorum-windows-x64-portable` from run 29299927270 on the original Windows machine: launch from Explorer, check Claude Code health, create a session with a selected workspace, send a Claude turn, restart, and Continue it.
-2. If that passes, add a Windows desktop smoke that starts `Quorum.exe` and verifies sidecar handshake/data-path behavior, rather than validating only archive layout.
-3. Add a safe local-file bridge for CLI agents that have native vision support.
-4. Persist custom agent profiles server-side instead of browser-only localStorage.
-5. Add signing/updater work after portable and NSIS manual acceptance is stable.
+1. Rebuild/re-test the next `quorum-windows-x64-portable` artifact on the original Windows machine: launch from Explorer, check Claude Code/Codex health, create two sessions against one workspace, send turns containing `&`/`|` as plain text, restart, and Continue.
+2. Add a Windows desktop smoke that starts `Quorum.exe` and verifies sidecar handshake/data-path behavior, rather than validating only archive layout.
+3. Replace the guarded local command executor with a declared platform sandbox/container backend; until then keep full command args visible and approval-required by default.
+4. Add reducer/hook-level Web connection state tests for reconnect, delete fallback, health routing, and rapid session switching.
+5. Add a safe local-file bridge for CLI agents that have native vision support and persist custom agent profiles server-side.
 
 ## Conventions / gotchas
 - `@quorum/core` stays **dependency-free**; anything needing network/env/SDKs lives in `@quorum/daemon`.
