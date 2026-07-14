@@ -96,10 +96,15 @@ export class ClaudeCodeAdapter extends BaseAgentAdapter {
     let wake: (() => void) | null = null;
     let stderr = "";
     let assistantText = "";
+    let emittedMessage = false;
+    let spawnError: Error | undefined;
     const push = (e: PartialRoomEvent) => { queue.push(e); wake?.(); wake = null; };
     const flushAssistant = () => {
       const text = assistantText.trim();
-      if (text) push(this.msg(text));
+      if (text) {
+        emittedMessage = true;
+        push(this.msg(text));
+      }
       assistantText = "";
     };
 
@@ -140,7 +145,7 @@ export class ClaudeCodeAdapter extends BaseAgentAdapter {
         if (ev.result && !assistantText.trim()) assistantText = String(ev.result);
         flushAssistant();
       } else if (ev.type === "error") {
-        push(this.msg(String(ev.message ?? "Claude Code CLI error")));
+        push({ type: "system", body: { level: "error", category: "cli_event", text: String(ev.message ?? "Claude Code CLI error") } });
       }
     });
     child.stderr?.on("data", (chunk) => { stderr += chunk.toString(); });
@@ -156,9 +161,9 @@ export class ClaudeCodeAdapter extends BaseAgentAdapter {
         wake = null;
       });
       child.on("error", (error) => {
+        spawnError = error;
         exitCode = 1;
         closed = true;
-        push(this.msg(`Claude Code CLI failed to start: ${error.message}`));
         resolve();
       });
     });
@@ -171,7 +176,12 @@ export class ClaudeCodeAdapter extends BaseAgentAdapter {
       }
       flushAssistant();
       while (queue.length) yield queue.shift()!;
-      if (exitCode && exitCode !== 0) {
+      if (spawnError) {
+        yield {
+          type: "system",
+          body: { level: "error", text: `Claude Code CLI failed to start: ${spawnError.message}`, category: "cli_not_found", detail: spawnError.message },
+        };
+      } else if (exitCode && exitCode !== 0) {
         const detail = stderr.trim() || `exit code ${exitCode}`;
         if (usedResume) {
           input.onNativeSessionResumeFailed?.(`Claude Code resume failed: ${detail}`);
@@ -180,7 +190,15 @@ export class ClaudeCodeAdapter extends BaseAgentAdapter {
           yield* this.takeTurnWithCli({ ...input, nativeSessionId: undefined });
           return;
         }
-        yield this.msg(`Claude Code CLI failed. ${detail}`);
+        yield {
+          type: "system",
+          body: { level: "error", text: `Claude Code CLI failed. ${detail}`, category: classifyCliFailure(detail), detail },
+        };
+      } else if (!emittedMessage) {
+        yield {
+          type: "system",
+          body: { level: "error", text: "Claude Code CLI completed without an assistant response", category: "empty_output", detail: stderr.trim() || undefined },
+        };
       }
     } finally {
       input.signal.removeEventListener("abort", onAbort);
@@ -303,4 +321,12 @@ function safeCliValue(value: string, label: string): string {
     throw new Error(`Claude Code ${label} contains unsupported command-line characters`);
   }
   return value;
+}
+
+function classifyCliFailure(detail: string): string {
+  const normalized = detail.toLowerCase();
+  if (normalized.includes("login") || normalized.includes("authentication") || normalized.includes("unauthorized") || normalized.includes("api key")) return "auth";
+  if (normalized.includes("unexpected argument") || normalized.includes("unknown option") || normalized.includes("usage:")) return "cli_arguments";
+  if (normalized.includes("timed out") || normalized.includes("timeout")) return "timeout";
+  return "cli_exit";
 }
