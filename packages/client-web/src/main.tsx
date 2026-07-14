@@ -2456,6 +2456,7 @@ function SessionSetupModal({
       display: participant.display,
       detail: formatAgentDetail(participant),
       active: true,
+      available: true,
     })),
     ...profiles.filter((preset) => !currentAgentIds.has(preset.id)).map((preset) => ({
       id: preset.id,
