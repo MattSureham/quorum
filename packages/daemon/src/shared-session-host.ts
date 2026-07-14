@@ -293,6 +293,22 @@ export async function startSharedSessionRoom(
       listWorkspaceDirectories,
       takeWriteFloor: () => session.takeWriteFloor(),
       releaseWriteFloor: () => session.releaseWriteFloor(),
+      rollback: workspace
+        ? async (toHead) => {
+            const lease = await workspace.acquireWriteFloor("rollback", humans[0]?.id ?? "human");
+            try {
+              await workspace.rollbackTo(toHead);
+            } finally {
+              lease.release();
+            }
+            await log.append({
+              author: { kind: "system", id: "workspace", display: "Workspace" },
+              type: "system",
+              body: { level: "warn", text: `rolled back to ${toHead}`, toHead },
+              visibility: "system",
+            });
+          }
+        : undefined,
       setPolicy: () => {
         void log.append({
           author: { kind: "system", id: "session", display: "SessionManager" },
@@ -351,9 +367,9 @@ export async function startSharedSessionRoom(
     return listRooms();
   }
 
-  const gateway = new Gateway(
+  const gatewayDeps: GatewayDeps = Object.assign(
+    primary.gatewayDeps,
     {
-      ...primary.gatewayDeps,
       authToken: opts.authToken,
       listCredentials: () => store.readProviderConfigViews(),
       setCredential: (input) => store.upsertProviderConfig(input),
@@ -378,8 +394,8 @@ export async function startSharedSessionRoom(
       deleteSession: deleteManaged,
       updateSessionLifecycle: updateLifecycle,
     },
-    opts.port,
   );
+  const gateway = new Gateway(gatewayDeps, opts.port);
   await gateway.ready;
 
   return {

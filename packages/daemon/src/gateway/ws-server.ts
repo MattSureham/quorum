@@ -119,7 +119,7 @@ export class Gateway {
   }
 
   private session(roomId: string): GatewaySessionDeps | undefined {
-    return this.sessions.get(roomId) ?? (roomId === this.deps.room.id ? this.deps : undefined);
+    return this.sessions.get(roomId);
   }
 
   private rooms(): Room[] {
@@ -318,7 +318,11 @@ export class Gateway {
         void Promise.resolve(session.releaseWriteFloor?.()).catch(() => {});
         break;
       case "rollback":
-        void session.rollback?.(m.toHead).catch((err) =>
+        if (!session.rollback) {
+          ws.send(JSON.stringify({ t: "error", text: "rollback is not available for this session" }));
+          break;
+        }
+        void session.rollback(m.toHead).catch((err) =>
           ws.send(JSON.stringify({ t: "error", text: `rollback failed: ${err instanceof Error ? err.message : String(err)}` })),
         );
         break;
