@@ -31,10 +31,10 @@ export class CodexAdapter extends BaseAgentAdapter {
     if (!this.threadId && input.nativeSessionId) this.threadId = input.nativeSessionId;
     const usedResume = !!this.threadId;
     const prompt = this.prompt(input);
-    const bin = this.opts.bin ?? "codex";
+    const bin = safeWindowsBinary(this.opts.bin ?? "codex");
     const sandbox = this.opts.sandbox ?? "workspace-write";
     const cwd = input.workspacePath ?? process.cwd();
-    const flags = ["--json", "--sandbox", sandbox, "--cd", cwd];
+    const flags = ["--json", "--sandbox", sandbox];
     if (this.opts.model) flags.push("-m", safeCliValue(this.opts.model, "model"));
     const threadId = this.threadId ? safeCliValue(this.threadId, "thread id") : undefined;
     const args = this.threadId
@@ -42,6 +42,7 @@ export class CodexAdapter extends BaseAgentAdapter {
       : ["exec", ...flags, "--skip-git-repo-check", "-"];
 
     const child = spawn(bin, args, {
+      cwd,
       shell: process.platform === "win32",
       stdio: ["pipe", "pipe", "pipe"],
     });
@@ -176,6 +177,13 @@ export class CodexAdapter extends BaseAgentAdapter {
 function safeCliValue(value: string, label: string): string {
   if (!/^[A-Za-z0-9._:/@+-]+$/.test(value)) {
     throw new Error(`Codex ${label} contains unsupported command-line characters`);
+  }
+  return value;
+}
+
+function safeWindowsBinary(value: string): string {
+  if (process.platform === "win32" && /[&|<>^%!\r\n"]/u.test(value)) {
+    throw new Error("Codex binary path contains unsupported Windows shell characters");
   }
   return value;
 }

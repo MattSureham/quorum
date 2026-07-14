@@ -64,7 +64,7 @@ export class ClaudeCodeAdapter extends BaseAgentAdapter {
     if (!this.sessionId && input.nativeSessionId) this.sessionId = input.nativeSessionId;
     const usedResume = !!this.sessionId;
     const prompt = this.prompt(input);
-    const bin = this.opts.bin ?? "claude";
+    const bin = safeWindowsBinary(this.opts.bin ?? "claude");
     const cwd = input.workspacePath ?? process.cwd();
     const args = [
       "-p",
@@ -319,6 +319,13 @@ export class ClaudeCodeAdapter extends BaseAgentAdapter {
 function safeCliValue(value: string, label: string): string {
   if (!/^[A-Za-z0-9._:/@+-]+$/.test(value)) {
     throw new Error(`Claude Code ${label} contains unsupported command-line characters`);
+  }
+  return value;
+}
+
+function safeWindowsBinary(value: string): string {
+  if (process.platform === "win32" && /[&|<>^%!\r\n"]/u.test(value)) {
+    throw new Error("Claude Code binary path contains unsupported Windows shell characters");
   }
   return value;
 }
