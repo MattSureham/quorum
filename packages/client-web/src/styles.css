@@ -1724,6 +1724,20 @@ h1 {
   white-space: nowrap;
 }
 
+.approval-args {
+  overflow: auto;
+  max-height: 140px;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid #ead8b4;
+  border-radius: 4px;
+  background: #fffdf8;
+  color: #493a1d;
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .approval-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
