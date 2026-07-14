@@ -1158,7 +1158,6 @@ function App() {
 
   const displayRoom = room ?? (sessionsLoaded ? emptyRoom : previewRoom);
   settingsRef.current = settings;
-  activeRoomIdRef.current = displayRoom.id || settings.roomId;
   const visibleRooms = (sessionsLoaded ? rooms : rooms.length ? rooms : [displayRoom])
     .filter((item) =>
       !deletingSessionIds.has(item.id) &&
@@ -1203,6 +1202,10 @@ function App() {
   useEffect(() => {
     saveSettings(settings);
   }, [settings]);
+
+  useEffect(() => {
+    if (room?.id && room.id === settingsRef.current.roomId) activeRoomIdRef.current = room.id;
+  }, [room?.id]);
 
   useEffect(() => {
     saveLanguage(language);
@@ -1492,8 +1495,9 @@ function App() {
   }
 
   function send(payload: Record<string, unknown>): boolean {
-    if (status !== "connected" || !wsRef.current) return false;
-    wsRef.current.send(JSON.stringify({ roomId: settings.roomId, ...payload }));
+    const socket = wsRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) return false;
+    socket.send(JSON.stringify({ roomId: settingsRef.current.roomId, ...payload }));
     return true;
   }
 

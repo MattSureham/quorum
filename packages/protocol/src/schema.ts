@@ -3,6 +3,35 @@
 // stays dependency-free. Requires `zod` (install before use).
 import { z } from "zod";
 
+const PermissionPolicySchema = z.enum(["read-only", "workspace-write", "approval-required", "full-auto"]);
+const AdapterConfigs = {
+  codex: z.object({
+    sandbox: z.enum(["read-only", "workspace-write", "danger-full-access"]).optional(),
+    model: z.string().min(1).max(200).optional(),
+    bin: z.string().min(1).max(1_024).optional(),
+    permissionPolicy: PermissionPolicySchema.optional(),
+  }).strict(),
+  "claude-code": z.object({
+    model: z.string().min(1).max(200).optional(),
+    permissionMode: z.enum(["default", "acceptEdits", "bypassPermissions", "plan"]).optional(),
+    transport: z.enum(["cli", "sdk"]).optional(),
+    bin: z.string().min(1).max(1_024).optional(),
+    inheritApiKeyEnv: z.boolean().optional(),
+    permissionPolicy: PermissionPolicySchema.optional(),
+  }).strict(),
+  "api-model": z.object({
+    model: z.string().min(1).max(200).optional(),
+    baseUrl: z.string().url().max(2_048).optional(),
+    apiKeyEnv: z.string().regex(/^[A-Z_][A-Z0-9_]*$/).max(128).optional(),
+    apiStyle: z.enum(["openai", "anthropic"]).optional(),
+    providerId: z.string().min(1).max(128).optional(),
+    role: z.string().max(500).optional(),
+    vision: z.boolean().optional(),
+    permissionPolicy: PermissionPolicySchema.optional(),
+  }).strict(),
+  openclaw: z.object({ permissionPolicy: PermissionPolicySchema.optional() }).strict(),
+} as const;
+
 const ParticipantDescriptorSchema = z.object({
   id: z.string(),
   kind: z.enum(["human", "agent", "system"]),
@@ -11,6 +40,17 @@ const ParticipantDescriptorSchema = z.object({
   adapterConfig: z.record(z.unknown()).optional(),
   persona: z.string().optional(),
   status: z.enum(["idle", "thinking", "active", "offline"]),
+}).superRefine((participant, ctx) => {
+  if (!participant.adapter || !participant.adapterConfig) return;
+  const schema = AdapterConfigs[participant.adapter as keyof typeof AdapterConfigs];
+  if (!schema) {
+    if (Object.keys(participant.adapterConfig).length) ctx.addIssue({ code: "custom", path: ["adapterConfig"], message: "unknown adapters cannot accept network-supplied configuration" });
+    return;
+  }
+  const parsed = schema.safeParse(participant.adapterConfig);
+  if (!parsed.success) {
+    for (const issue of parsed.error.issues) ctx.addIssue({ code: "custom", path: ["adapterConfig", ...issue.path], message: issue.message });
+  }
 });
 
 const SessionLifecycleSchema = z.enum(["draft", "active", "paused", "completed", "archived", "deleted"]);

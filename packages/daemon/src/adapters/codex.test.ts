@@ -87,6 +87,20 @@ describe("CodexAdapter", () => {
     expect(events.some((event) => event.type === "message" && (event.body as any).text === "rebuilt")).toBe(true);
   });
 
+  it("places Codex exec flags before the resume subcommand", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "quorum-codex-resume-"));
+    const argvPath = join(dir, "argv.txt");
+    const bin = await fakeCli(
+      `printf '%s' "$*" > '${argvPath}'\ncat >/dev/null\nprintf '%s\\n' '{"type":"item.completed","item":{"type":"agent_message","text":"resumed"}}'`,
+      `echo %* > "${argvPath}"\nmore >nul\necho {"type":"item.completed","item":{"type":"agent_message","text":"resumed"}}`,
+    );
+    const adapter = new CodexAdapter(input().self, { bin, sandbox: "read-only" });
+    await collect(adapter, input("thread-123"));
+    const { readFile } = await import("node:fs/promises");
+    const argv = (await readFile(argvPath, "utf8")).trim();
+    expect(argv).toMatch(/^exec --sandbox read-only resume thread-123 --json -$/);
+  });
+
   it("sends untrusted prompt content through stdin instead of argv", async () => {
     const dir = await mkdtemp(join(tmpdir(), "quorum-codex-stdin-"));
     const argvPath = join(dir, "argv.txt");

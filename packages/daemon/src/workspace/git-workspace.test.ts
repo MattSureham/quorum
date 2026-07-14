@@ -128,7 +128,15 @@ describe("GitWorkspace", () => {
     await exec("git", ["-C", dir, "checkout", "-b", "feature"]);
     await writeFile(join(dir, "dirty.txt"), "uncommitted\n");
 
-    await expect(new GitWorkspace(dir, "main").init()).rejects.toThrow("working tree is dirty");
+    await expect(new GitWorkspace(dir, "main").init()).rejects.toThrow("working tree has uncommitted changes");
     expect(await git(dir, ["branch", "--show-current"])).toBe("feature");
+  });
+
+  it("refuses a dirty baseline even when already on the target branch", async () => {
+    const { dir } = await makeWorkspace();
+    await writeFile(join(dir, "preexisting.txt"), "human change\n");
+
+    await expect(new GitWorkspace(dir, "main").init()).rejects.toThrow("working tree has uncommitted changes");
+    expect(await git(dir, ["status", "--short"])).toContain("preexisting.txt");
   });
 });
