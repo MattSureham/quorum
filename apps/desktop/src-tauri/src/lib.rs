@@ -108,9 +108,13 @@ fn sidecar_path_env() -> Option<std::ffi::OsString> {
         }
     }
 
-    paths.sort();
-    paths.dedup();
-    env::join_paths(paths).ok()
+    let mut unique = Vec::with_capacity(paths.len());
+    for path in paths {
+        if !unique.contains(&path) {
+            unique.push(path);
+        }
+    }
+    env::join_paths(unique).ok()
 }
 
 fn start_sidecar(app: &tauri::AppHandle, binary: &Path) -> Result<(Child, SidecarConnection), DesktopError> {
