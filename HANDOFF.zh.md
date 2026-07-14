@@ -6,7 +6,7 @@
 
 - 安全与可靠性复核后的阻断项已继续修复：内置 adapter 配置采用严格的按类型 schema；CLI health check 与 adapter 共用 Windows shell 参数校验；Codex resume 参数层级已纠正；等待共享 workspace 写锁的排队时间不再计入 agent 执行超时。
 - 前端发送改为读取当前 WebSocket `readyState` 与 refs，旧 room 不再在 render 时覆盖 active-room ref；审批超时/中断会写入终态；已有未提交改动的 workspace 会拒绝初始化。
-- 本地 `pnpm typecheck` 与 `pnpm test` 通过，当前为 `98/98`。仍需重新跑完整 Web/smoke/desktop 验证与 Windows workflow，并在真实 Windows 上做 `.cmd` 注入、session 切换和 portable 人工验收。
+- 本地 typecheck/test/Web/smoke/desktop 验证与 Windows workflow 均已通过；仍需在真实 Windows 上做 `.cmd` 注入、session 切换和 portable 人工验收。
 - `local-sandbox-executor` 仍不是真正的 OS 沙箱，不能宣称可隔离用户目录、网络或其他解释器。这仍是强沙箱发布声明的阻断项。
 - Windows run [29311886855](https://github.com/MattSureham/quorum/actions/runs/29311886855) 已全绿：typecheck、98 项测试、Bun sidecar、Web UI、NSIS、portable 组装/布局验证及全部 artifact 上传均通过。仍需在真实 Windows 机器上做最终人工体验与注入验收。
 

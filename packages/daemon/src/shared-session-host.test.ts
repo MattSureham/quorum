@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import WebSocket from "ws";
 import type { Room, RoomEvent } from "@quorum/protocol";
-import { startSharedSessionRoom } from "./shared-session-host.js";
+import { commandExists, startSharedSessionRoom } from "./shared-session-host.js";
 import { registerAdapter } from "./adapters/registry.js";
 import { GitWorkspace } from "./workspace/git-workspace.js";
 
@@ -34,6 +34,17 @@ function nextMessage(ws: WebSocket): Promise<any> {
 }
 
 describe("SharedSessionHost", () => {
+  it("rejects an unsafe Windows health-check binary before both command attempts", async () => {
+    let calls = 0;
+    const run = async () => {
+      calls++;
+      throw new Error("must not execute");
+    };
+
+    await expect(commandExists("codex & whoami", run, "win32")).resolves.toBe(false);
+    expect(calls).toBe(0);
+  });
+
   it("routes a human prompt through SessionManager and legacy echo adapter", async () => {
     const dir = await mkdtemp(join(tmpdir(), "quorum-shared-session-"));
     const room: Room = {
@@ -299,11 +310,25 @@ describe("SharedSessionHost", () => {
 
       ws.send(JSON.stringify({ t: "subscribe", roomId: "lock-second", sinceSeq: 0 }));
       expect((await nextMessage(ws)).t).toBe("snapshot");
+      const mainEvents: RoomEvent[] = [];
+      const secondEvents: RoomEvent[] = [];
+      const offMain = host.log.on((event) => mainEvents.push(event));
+      const collectSecond = (data: WebSocket.RawData) => {
+        const message = JSON.parse(String(data));
+        if (message.t === "event" && message.event.roomId === "lock-second") secondEvents.push(message.event);
+      };
+      ws.on("message", collectSecond);
       await host.session.submitUserPrompt("edit from main");
       ws.send(JSON.stringify({ t: "post_message", roomId: "lock-second", text: "edit from second" }));
       await waitFor(() => completedEditors === 2, 20_000);
+      await waitFor(() =>
+        mainEvents.some((event) => event.type === "turn_completed")
+        && secondEvents.some((event) => event.type === "turn_completed"),
+      20_000);
       expect(maxActiveEditors).toBe(1);
       expect(activeEditors).toBe(0);
+      offMain();
+      ws.off("message", collectSecond);
     } finally {
       ws.close();
       await host.stop();

@@ -6,8 +6,8 @@ export function safeCliValue(value: string, label: string): string {
   return value;
 }
 
-export function safeWindowsBinary(value: string, label = "CLI binary path"): string {
-  if (process.platform === "win32" && WINDOWS_SHELL_META.test(value)) {
+export function safeWindowsBinary(value: string, label = "CLI binary path", platform = process.platform): string {
+  if (platform === "win32" && WINDOWS_SHELL_META.test(value)) {
     throw new Error(`${label} contains unsupported Windows shell characters`);
   }
   return value;

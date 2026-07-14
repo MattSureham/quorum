@@ -72,14 +72,29 @@ function readyWorkspace(workspace: GitWorkspace, ready: Promise<void>): Workspac
   };
 }
 
-async function commandExists(bin: string): Promise<boolean> {
+type HealthCommandRunner = (
+  bin: string,
+  args: string[],
+  options: { timeout: number; shell: boolean },
+) => Promise<{ stdout: string; stderr: string }>;
+
+export async function commandExists(
+  bin: string,
+  run: HealthCommandRunner = exec,
+  platform = process.platform,
+): Promise<boolean> {
+  let safeBin: string;
   try {
-    bin = safeWindowsBinary(bin);
-    await exec(bin, ["--version"], { timeout: 2_500, shell: process.platform === "win32" });
+    safeBin = safeWindowsBinary(bin, "CLI binary path", platform);
+  } catch {
+    return false;
+  }
+  try {
+    await run(safeBin, ["--version"], { timeout: 2_500, shell: platform === "win32" });
     return true;
   } catch {
     try {
-      await exec(bin, ["--help"], { timeout: 2_500, shell: process.platform === "win32" });
+      await run(safeBin, ["--help"], { timeout: 2_500, shell: platform === "win32" });
       return true;
     } catch {
       return false;
