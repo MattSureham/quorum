@@ -14,6 +14,8 @@ This section is the entry point for the next agent. The security/reliability rev
 
 UI follow-up: provider model catalogs are no longer filtered out when the active SQLite database has no configured credential row. All five built-in provider groups remain visible and collapsed; New session lists their models as disabled `needs key` options until configuration succeeds. This prevents switching between dev/desktop/portable data paths from making the model catalog appear to vanish.
 
+Credential follow-up: the legacy `startRoom` gateway now exposes the same SQLite-backed `get_credentials` / `set_credential` handlers as the shared-session host and restores provider environment variables at startup. The CLI now passes `QUORUM_DB_PATH` to either kernel. Credential-save failures are surfaced inside the modal, and a WebSocket regression test verifies that only a masked preview is returned. Local verification is now 100/100 tests plus typecheck and Web production build. Credentials remain local to the selected SQLite database and are never embedded in portable artifacts.
+
 #### Review remediation status
 
 - **P0 Windows CLI command injection: implemented, requires Windows adversarial validation.** Codex and Claude Code now send prompts/context through stdin rather than command-line arguments. Dynamic model/native-session values are validated, and unsafe custom Windows binary paths are rejected. Windows still uses a shell to launch npm `.cmd` shims, so verify that prompts containing `&`, `|`, `%VAR%`, `^`, redirects, quotes, and newlines cannot create files or execute a second command.

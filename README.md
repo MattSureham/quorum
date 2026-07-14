@@ -389,6 +389,14 @@ work. Credentials are stored locally in the Quorum SQLite database, applied to
 the daemon process immediately, and only returned to the browser as masked
 previews.
 
+Credential saving is available in both the legacy conductor and shared-session
+daemon entrypoints. Save failures are shown inside the credential modal instead
+of being hidden behind it. `QUORUM_DB_PATH` is honored by both kernels, so a
+development, desktop, or portable instance consistently reads and writes the
+database selected for that instance. Credentials do not automatically migrate
+between different databases or machines, and packaged artifacts never include
+the developer's local keys.
+
 Built-in API profiles show the exact model id sent to the provider. Role labels
 such as analysis or fast do not claim a different underlying model; create a
 custom profile when a provider exposes a newer model id.
