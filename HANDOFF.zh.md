@@ -10,6 +10,7 @@
 - `local-sandbox-executor` 仍不是真正的 OS 沙箱，不能宣称可隔离用户目录、网络或其他解释器。这仍是强沙箱发布声明的阻断项。
 - Windows run [29314485107](https://github.com/MattSureham/quorum/actions/runs/29314485107) 已全绿：99 项测试、Bun/Web、NSIS、portable 组装、布局校验和所有 artifact 上传均通过。代码级验收完成；真实机器人工体验与 `.cmd` 对抗验收仍保留。
 - Agents & Models 侧栏现在固定显示顶部 `API keys` 配置入口；本地 CLI agents 保持可见，API 模型按 provider 折叠，避免模型卡片长期占满侧栏。
+- 五个内置 provider 的模型目录始终显示，不再因当前 SQLite 没有 credential row 而整组消失。New session 中未配置 key 的模型会显示“需要 key”并禁用；配置成功后立即可选。
 
 > 2026-07-07 架构更新：Quorum 正在迁移到 agent-framework 会议确定的共享 Session 架构。新的实施交接文档见 [`AGENT_FRAMEWORK_HANDOFF.md`](./AGENT_FRAMEWORK_HANDOFF.md)，完整复制材料在 [`docs/architecture/`](./docs/architecture/)。
 

@@ -339,7 +339,9 @@ Security/reliability hardening in the current shared-session path:
 The Agents & Models sidebar keeps local CLI agents visible and groups API model
 profiles into collapsible provider sections. The `API keys` button is pinned in
 the panel header and opens the credential modal; secrets are never displayed in
-the persistent sidebar.
+the persistent sidebar. Built-in provider catalogs remain visible even before a
+key is configured. Their models appear disabled with `needs key` in New session,
+then become selectable immediately after that provider is configured.
 
 - `@quorum/protocol` — event/room types + zod wire schema
 - `@quorum/core` — EventLog, Conductor, the three floor policies, projection — **dependency-free, tested**
