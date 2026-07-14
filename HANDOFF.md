@@ -1,10 +1,20 @@
 # HANDOFF
 
-Working handoff for an agent picking up **Quorum**. Current as of **2026-07-09** on `main`. 中文版见 [`HANDOFF.zh.md`](./HANDOFF.zh.md)。
+Working handoff for an agent picking up **Quorum**. Current as of **2026-07-14** on `main`. 中文版见 [`HANDOFF.zh.md`](./HANDOFF.zh.md)。
 
 > 2026-07-07 architecture update: Quorum is being migrated to the shared-session architecture from the agent-framework meeting. New implementation handoff: [`AGENT_FRAMEWORK_HANDOFF.md`](./AGENT_FRAMEWORK_HANDOFF.md). Full copied docs live in [`docs/architecture/`](./docs/architecture/).
 
 ## Current State For The Next Agent
+
+### 2026-07-14 collaboration checkpoint
+
+- `main` currently includes the Windows portable runtime fixes through `ba4a994`; the implementation was split into watcher-generated commits `ccbc1b5` and `ba4a994` after `dc0cffa` added clipboard image paste.
+- The latest successful Windows build is [Windows Packages run 29299927270](https://github.com/MattSureham/quorum/actions/runs/29299927270). Download artifact `quorum-windows-x64-portable`, fully extract its nested `windows-x64.zip`, and keep `sidecars/quorum-sidecar.exe` beside `Quorum.exe`.
+- A real Windows test of the previous portable artifact found two problems: Claude Code was falsely reported missing and new sessions could not be created. The current build fixes both suspected root causes, but **the user still needs to re-test this new artifact on the same Windows machine**.
+- Desktop runtime state is now deterministic: `%LOCALAPPDATA%\\dev.quorum.desktop\\quorum.sqlite`, `%LOCALAPPDATA%\\dev.quorum.desktop\\workspace`, and `%LOCALAPPDATA%\\dev.quorum.desktop\\sidecar.log`.
+- The Tauri launcher augments sidecar `PATH` with `%USERPROFILE%\\.local\\bin`, `%APPDATA%\\npm`, and `%LOCALAPPDATA%\\Programs\\Claude`. Health checks and both Claude Code/Codex adapters use Windows shell launching so `.cmd` shims work.
+- If re-test still fails, collect `sidecar.log`, the participant health tooltip, and the exact path returned by `where claude` and `where codex`. Do not revert to storing data relative to Explorer's current working directory.
+- Verification on the current code: `pnpm typecheck`, all 85 tests, Web production build, Tauri info, and Rust `cargo check` pass locally; run 29299927270 also passed Windows tests, Bun sidecar/Web/Tauri/NSIS builds, portable layout validation, and artifact upload.
 
 Latest migration commits:
 
@@ -415,11 +425,11 @@ What is already implemented:
 - Local CLI agents such as Claude Code use shell launching on Windows so `.cmd` shims work.
 - Claude Code and Codex native session/thread ids are stored in agent-private memory and resumed best-effort. Resume failure records a diagnostic warning and falls back to the Quorum context bundle. The context bundle includes checksum/seq/hash anchors and error-control rules so native hidden memory is treated as advisory when it conflicts with Quorum state.
 - Working-memory summaries can be created, persisted through `SqliteStore`, triggered through WebSocket `compact_memory`, inspected in the Web UI Memory panel, and automatically compacted after turns once configured event thresholds are reached.
-- Verification: `pnpm typecheck`, `pnpm test`, `pnpm --filter @quorum/client-web build`, `pnpm smoke:shared`, `pnpm smoke:sidecar`, `pnpm sidecar:node:smoke`, `pnpm sidecar:bun:smoke`, `pnpm desktop:check`, and `pnpm desktop:build` pass on macOS arm64. The **Windows Installer** GitHub Actions workflow now exists for Windows x64 NSIS artifact validation.
+- Verification: `pnpm typecheck`, `pnpm test`, `pnpm --filter @quorum/client-web build`, `pnpm smoke:shared`, `pnpm smoke:sidecar`, `pnpm sidecar:node:smoke`, `pnpm sidecar:bun:smoke`, `pnpm desktop:check`, and `pnpm desktop:build` pass on macOS arm64. The **Windows Packages** GitHub Actions workflow builds and validates Windows x64 NSIS and portable artifacts.
 
 What is not implemented yet:
 
-- **Installer-grade signed release is not done.** There is no signing/notarization and no auto-update yet. An unsigned Windows x64 NSIS test installer can be produced by manually running the **Windows Installer** GitHub Actions workflow; artifact/manual install validation still needs to be performed on a Windows machine.
+- **Installer-grade signed release is not done.** There is no signing/notarization and no auto-update yet. The **Windows Packages** workflow produces unsigned x64 NSIS and portable artifacts. The older portable build was manually tested and exposed runtime/PATH defects; the corrected run 29299927270 still needs manual re-validation on that Windows machine.
 - **Desktop double-click launch shell is scaffolded and macOS arm64 bundles build.** `apps/desktop` can launch the Web UI inside Tauri and start the compiled Bun sidecar through the Rust layer. `pnpm desktop:build` produces an unsigned `.app` and `.dmg`; the `.app` contains `Contents/Resources/sidecars/quorum-sidecar`.
 - **Developer one-command launch exists.** Use `pnpm dev` for the legacy kernel or `QUORUM_SESSION_KERNEL=shared pnpm dev` for the new shared-session kernel.
 - **Local sidecar entry exists and Bun compile is verified.** The sidecar can be run through tsx with `pnpm smoke:sidecar`, compiled with Bun using `pnpm sidecar:bun:build`, and verified with `pnpm sidecar:bun:smoke`.
@@ -522,9 +532,11 @@ SPEC.md       full design (Chinese): data model, Conductor state machine, adapte
 - **M6** remote (relay/E2E/pairing QR, more providers) — **not started**.
 
 ## Suggested next steps
-1. Add a safe local-file bridge for CLI agents that have native vision support.
-2. Persist custom agent profiles server-side instead of browser-only localStorage.
-3. Validate the unsigned NSIS artifact on a real Windows x64 machine, then add signing/updater work.
+1. Re-test `quorum-windows-x64-portable` from run 29299927270 on the original Windows machine: launch from Explorer, check Claude Code health, create a session with a selected workspace, send a Claude turn, restart, and Continue it.
+2. If that passes, add a Windows desktop smoke that starts `Quorum.exe` and verifies sidecar handshake/data-path behavior, rather than validating only archive layout.
+3. Add a safe local-file bridge for CLI agents that have native vision support.
+4. Persist custom agent profiles server-side instead of browser-only localStorage.
+5. Add signing/updater work after portable and NSIS manual acceptance is stable.
 
 ## Conventions / gotchas
 - `@quorum/core` stays **dependency-free**; anything needing network/env/SDKs lives in `@quorum/daemon`.
@@ -534,6 +546,12 @@ SPEC.md       full design (Chinese): data model, Conductor state machine, adapte
 
 ## Recent history
 ```
+ba4a994 chore(room): turn by human [out-of-band] (preserve PATH order/deduplicate Windows CLI paths)
+ccbc1b5 chore(room): turn by human [out-of-band] (Windows app-local data, CLI PATH, shell health checks)
+dc0cffa chore(room): turn by human [out-of-band] (clipboard image paste verification note)
+dc3a51e chore(room): turn by human [out-of-band] (clipboard image paste)
+c4a40b1 fix: launch Codex through Windows command shim
+d8d15d3 feat: package portable Windows build
 384c311 feat: auto-scroll transcript + run Claude with bypassPermissions
 28fccf9 fix: clear stale "Connection failed" banner once the socket connects
 2cc772e feat: wire M5 web interactions (approve/rollback/write-floor + reconnect)
