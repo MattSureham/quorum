@@ -301,6 +301,11 @@ wiring, and broader platform lifecycle hardening.
 
 Runnable shared-session application with persisted sessions, Web UI, and desktop packaging:
 
+Chat images can be added with the Image button or pasted directly into the
+message composer with `Ctrl/Cmd+V`. Pasted images use the same preview, removal,
+visibility, payload limits, and send path as uploaded files; ordinary text paste
+continues to work normally.
+
 - `@quorum/protocol` — event/room types + zod wire schema
 - `@quorum/core` — EventLog, Conductor, the three floor policies, projection — **dependency-free, tested**
 - `@quorum/daemon` — adapters (echo + real Claude Code / Codex / API), git workspace, SQLite store, WS gateway

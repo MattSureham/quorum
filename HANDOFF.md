@@ -343,6 +343,10 @@ The following is the implementation trail from this session. It is written for t
     - Files: Codex adapter and its cross-platform tests, `HANDOFF.md`.
     - Work: launches Codex with the Windows shell so npm-installed `codex.cmd` shims work, and replaces Unix-only fake CLI fixtures with equivalent `.cmd` fixtures. This was discovered by the first portable-package workflow run before packaging began.
 
+77. this change `feat: paste images into chat`
+    - Files: Web chat composer, `README.md`, `HANDOFF.md`.
+    - Work: accepts image files from the clipboard through `Ctrl/Cmd+V`, reuses the existing attachment preview/removal/send path and six-image queue, leaves ordinary text paste untouched, and reports image read failures instead of rejecting silently.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:
@@ -497,7 +501,7 @@ SPEC.md       full design (Chinese): data model, Conductor state machine, adapte
 - **Run visibility**: message sends should never appear silent. `packages/client-web/src/main.tsx` derives `RunStatus` from local submit time and room events; keep this banner updated when adding new phases or schedulers.
 - **Chat vs log**: the central Chat transcript should remain message-only. Keep non-message room/session events in diagnostics, recent activity, tool activity, memory, replay, or checkpoint panels; do not reintroduce raw event rows into the primary chat stream.
 - **Web UI language**: `packages/client-web/src/main.tsx` has a lightweight local `zhText` dictionary and `t()` helper. The language switcher lives in the left Connection panel and persists `quorum.client.language` in `localStorage`. When adding user-visible Web UI text, route it through `t()` or add a dictionary entry.
-- **Image chat**: `MessageBody.attachments` supports image data URLs. The Web UI handles upload/preview/display, `post_message` transports attachments, and `api-model` turns convert only current-epoch images to OpenAI-compatible `image_url` content. CLI agents see attachment metadata, not data URLs; add a safe file bridge before claiming local CLI vision support.
+- **Image chat**: `MessageBody.attachments` supports image data URLs. The Web UI handles file upload and clipboard image paste (`Ctrl/Cmd+V`) with the same preview/removal queue, `post_message` transports attachments, and `api-model` turns convert only current-epoch images to OpenAI-compatible `image_url` content. Plain-text paste is unchanged. CLI agents see attachment metadata, not data URLs; add a safe file bridge before claiming local CLI vision support.
 - **API-model failures**: `packages/daemon/src/adapters/api-model.ts` must never silently complete on missing keys, HTTP errors, or empty model responses. It should emit a visible message so the run-status banner and transcript explain what happened.
 - **The room (agents, policy, workspace)**: the initial room is still defined in `quorum.config.json` at the repo root (or `QUORUM_CONFIG=<path>`). `packages/cli/src/index.ts` loads it via `loadConfig()` and falls back to built-in defaults if the file is missing. New Web UI sessions may override `workspacePath` per session.
 - **Add an agent**: currently still add a `ParticipantDescriptor` to `participants[]` with an `adapter` + `adapterConfig`. `claude-code` runs the local `claude -p --verbose --output-format stream-json` CLI subprocess by default and should reuse Claude Code local auth; it strips `ANTHROPIC_API_KEY` unless `adapterConfig.inheritApiKeyEnv` is explicitly true. Set `adapterConfig.transport: "sdk"` only for the optional Agent SDK path. `codex` needs the `codex` CLI on PATH; `api-model` is any OpenAI-compatible endpoint; `echo` is the built-in fake.

@@ -116,6 +116,7 @@ const zhText: Record<string, string> = {
   "Check agents": "检查智能体",
   "Message the session": "发送消息到会话",
   "Image": "图片",
+  "Failed to read pasted image": "无法读取粘贴的图片",
   "Send": "发送",
   "Write floor held": "已持有写入权",
   "Take write floor": "获取写入权",
@@ -1539,12 +1540,28 @@ function App() {
     }
   }
 
-  async function attachImages(files: FileList | null) {
-    if (!files?.length) return;
+  async function attachImages(files: Iterable<File> | null) {
+    if (!files) return;
     const images = [...files].filter((file) => file.type.startsWith("image/"));
-    const loaded = await Promise.all(images.map(readImageAttachment));
-    setComposerAttachments((current) => [...current, ...loaded].slice(0, 6));
-    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (!images.length) return;
+    try {
+      const loaded = await Promise.all(images.map(readImageAttachment));
+      setComposerAttachments((current) => [...current, ...loaded].slice(0, 6));
+    } catch (attachmentError) {
+      setError(attachmentError instanceof Error ? attachmentError.message : t("Failed to read pasted image"));
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  function pasteImages(event: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const images = [...event.clipboardData.items]
+      .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => file !== null);
+    if (!images.length) return;
+    event.preventDefault();
+    void attachImages(images);
   }
 
   function removeAttachment(id: string) {
@@ -1897,6 +1914,7 @@ function App() {
           <textarea
             value={composer}
             onChange={(input) => setComposer(input.currentTarget.value)}
+            onPaste={pasteImages}
             onKeyDown={(key) => {
               if (key.key === "Enter" && (key.metaKey || key.ctrlKey)) sendMessage();
             }}
