@@ -107,7 +107,7 @@ async function checkParticipantHealth(participant: ParticipantDescriptor): Promi
     const bin = typeof cfg.bin === "string" ? cfg.bin : "codex";
     const ok = await commandExists(bin);
     if (!ok) return { ok: false, status: "offline", detail: `${bin} CLI not found on PATH` };
-    const compatibility = await commandSupports(bin, ["exec", "--help"], ["--json", "--sandbox", "--cd"]);
+    const compatibility = await commandSupports(bin, ["exec", "--help"], ["--json", "--sandbox"]);
     return compatibility.ok
       ? { ok: true, status: "idle", detail: `${bin} CLI found and non-interactive flags are compatible` }
       : { ok: false, status: "offline", detail: compatibility.detail };
