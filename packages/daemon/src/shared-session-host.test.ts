@@ -248,6 +248,7 @@ describe("SharedSessionHost", () => {
     const workspacePath = join(dir, "workspace");
     let activeEditors = 0;
     let maxActiveEditors = 0;
+    let completedEditors = 0;
     registerAdapter("shared-lock-test", (descriptor) => ({
       id: descriptor.id,
       descriptor,
@@ -257,6 +258,7 @@ describe("SharedSessionHost", () => {
         maxActiveEditors = Math.max(maxActiveEditors, activeEditors);
         await sleep(250);
         activeEditors--;
+        completedEditors++;
         yield { type: "message" as const, body: { text: "edited" } };
       },
       async interrupt() {},
@@ -294,25 +296,11 @@ describe("SharedSessionHost", () => {
 
       ws.send(JSON.stringify({ t: "subscribe", roomId: "lock-second", sinceSeq: 0 }));
       expect((await nextMessage(ws)).t).toBe("snapshot");
-      const mainEvents: RoomEvent[] = [];
-      const secondEvents: RoomEvent[] = [];
-      const offMain = host.log.on((event) => mainEvents.push(event));
-      const collectSecond = (data: WebSocket.RawData) => {
-        const message = JSON.parse(String(data));
-        if (message.t === "event" && message.event.roomId === "lock-second") secondEvents.push(message.event);
-      };
-      ws.on("message", collectSecond);
-
       await host.session.submitUserPrompt("edit from main");
       ws.send(JSON.stringify({ t: "post_message", roomId: "lock-second", text: "edit from second" }));
-      await waitFor(() =>
-        mainEvents.some((event) => event.type === "turn_completed")
-        && secondEvents.some((event) => event.type === "turn_completed"),
-      20_000);
+      await waitFor(() => completedEditors === 2, 20_000);
       expect(maxActiveEditors).toBe(1);
       expect(activeEditors).toBe(0);
-      offMain();
-      ws.off("message", collectSecond);
     } finally {
       ws.close();
       await host.stop();
