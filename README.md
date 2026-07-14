@@ -324,7 +324,9 @@ Security/reliability hardening in the current shared-session path:
   `codex exec --sandbox <mode> resume <thread-id> --json -`.
 - Opening an existing Git workspace never uses `checkout -B`. Existing branches
   are switched normally, missing branches are created, and a dirty tree blocks
-  branch switching instead of silently moving a branch pointer.
+  initialization instead of silently moving a branch pointer. For a brand-new
+  repository only, missing Git identity is filled with repo-local Quorum defaults;
+  user global Git configuration is never changed.
 - Sessions sharing one canonical workspace path share a single coordinator,
   write-floor mutex, checkpoint queue, and out-of-band watcher. Waiting for that
   lease is queue time and does not consume the agent execution deadline.

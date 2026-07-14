@@ -26,6 +26,10 @@ export class GitWorkspace implements WorkspaceManager {
     const isRepo = await this.git(["rev-parse", "--is-inside-work-tree"]).then(() => true, () => false);
     if (!isRepo) {
       await this.git(["init"]);
+      const hasName = await this.git(["config", "user.name"]).then(({ stdout }) => !!stdout.trim(), () => false);
+      const hasEmail = await this.git(["config", "user.email"]).then(({ stdout }) => !!stdout.trim(), () => false);
+      if (!hasName) await this.git(["config", "user.name", "Quorum"]);
+      if (!hasEmail) await this.git(["config", "user.email", "quorum@localhost"]);
       await this.git(["commit", "--allow-empty", "-m", "chore(room): init"]);
     }
     const dirty = await this.git(["status", "--porcelain"]).then(({ stdout }) => stdout.trim());
