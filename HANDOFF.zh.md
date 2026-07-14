@@ -8,7 +8,8 @@
 - 前端发送改为读取当前 WebSocket `readyState` 与 refs，旧 room 不再在 render 时覆盖 active-room ref；审批超时/中断会写入终态；已有未提交改动的 workspace 会拒绝初始化。
 - 本地 typecheck/test/Web/smoke/desktop 验证与 Windows workflow 均已通过；仍需在真实 Windows 上做 `.cmd` 注入、session 切换和 portable 人工验收。
 - `local-sandbox-executor` 仍不是真正的 OS 沙箱，不能宣称可隔离用户目录、网络或其他解释器。这仍是强沙箱发布声明的阻断项。
-- Windows run [29311886855](https://github.com/MattSureham/quorum/actions/runs/29311886855) 已通过当时的 98 项测试、Bun sidecar、Web UI、NSIS、portable 组装/布局验证及全部 artifact 上传。当前新增 health fallback 与双 room finalization 测试后为本地 `99/99`，需再跑一次 Windows workflow；真实机器人工体验与注入验收仍保留。
+- Windows run [29314485107](https://github.com/MattSureham/quorum/actions/runs/29314485107) 已全绿：99 项测试、Bun/Web、NSIS、portable 组装、布局校验和所有 artifact 上传均通过。代码级验收完成；真实机器人工体验与 `.cmd` 对抗验收仍保留。
+- Agents & Models 侧栏现在固定显示顶部 `API keys` 配置入口；本地 CLI agents 保持可见，API 模型按 provider 折叠，避免模型卡片长期占满侧栏。
 
 > 2026-07-07 架构更新：Quorum 正在迁移到 agent-framework 会议确定的共享 Session 架构。新的实施交接文档见 [`AGENT_FRAMEWORK_HANDOFF.md`](./AGENT_FRAMEWORK_HANDOFF.md)，完整复制材料在 [`docs/architecture/`](./docs/architecture/)。
 

@@ -527,6 +527,74 @@ textarea:focus {
   gap: 7px;
 }
 
+.panel-config-action {
+  min-height: 28px;
+  margin-left: auto;
+  padding: 4px 8px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.agent-model-panel .panel-title-action {
+  margin-left: 0;
+}
+
+.profile-group {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.profile-group-label {
+  color: #53645e;
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.provider-profile-group {
+  border: 1px solid #dce5e1;
+  border-radius: 7px;
+  background: #f8faf9;
+}
+
+.provider-profile-group summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 7px 8px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.provider-profile-group summary::-webkit-details-marker {
+  display: none;
+}
+
+.provider-profile-group summary > svg {
+  color: #61716c;
+  transition: transform 150ms ease;
+}
+
+.provider-profile-group[open] summary > svg {
+  transform: rotate(180deg);
+}
+
+.provider-group-name {
+  overflow: hidden;
+  color: #25342f;
+  font-size: 12px;
+  font-weight: 780;
+  text-overflow: ellipsis;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.provider-profile-group > .agent-model-list {
+  padding: 0 7px 7px;
+}
+
 .mini-heading {
   color: #66746f;
   font-size: 11px;

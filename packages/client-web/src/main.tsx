@@ -149,6 +149,9 @@ const zhText: Record<string, string> = {
   "Metadata only": "仅 metadata",
   "placeholder agent": "占位智能体",
   "Configure API keys": "配置 API keys",
+  "API keys": "API keys",
+  "Local agents": "本地智能体",
+  "models": "个模型",
   "Connect to a room before editing API credentials.": "连接到房间后才能编辑 API 凭证。",
   "Agent/model selection is room-based; provider keys only unlock API-model agents.": "智能体/模型选择按房间生效；provider keys 只用于解锁 API 模型智能体。",
   "Session diagnostics": "会话诊断",
@@ -2128,11 +2131,46 @@ function AgentModelPanel({
   t: Translate;
 }) {
   const roomAgents = participants.filter((participant) => participant.kind === "agent");
+  const localProfiles = profiles.filter((profile) => !profile.providerId);
+  const providerGroups = [...profiles.reduce((groups, profile) => {
+    if (!profile.providerId) return groups;
+    const current = groups.get(profile.providerId) ?? [];
+    current.push(profile);
+    groups.set(profile.providerId, current);
+    return groups;
+  }, new Map<string, AgentModelPreset[]>())];
+  const renderProfile = (preset: AgentModelPreset) => {
+    const view = preset.providerId ? views.find((provider) => provider.providerId === preset.providerId) : undefined;
+    const configured = preset.providerId ? view?.configured : preset.id !== "openclaw";
+    const state = preset.providerId
+      ? (configured ? `${t("key")} ${view?.apiKeyPreview ?? t("set")}` : t("needs key"))
+      : preset.id === "openclaw" ? t("adapter TBD") : t("local auth");
+    const statusClass = configured ? "credential-state configured" : "credential-state";
+    return (
+      <div key={preset.id} className="agent-model-row">
+        <Bot size={15} />
+        <div>
+          <strong>{preset.display}</strong>
+          <span>{profileSummary(preset, t)}</span>
+          <CapabilityBadges labels={capabilityBadgesForPreset(preset, !!configured)} t={t} />
+        </div>
+        {preset.custom ? (
+          <button type="button" className="icon-action profile-delete-action" title={t("Delete profile")} aria-label={`${t("Delete profile")} ${preset.display}`} onClick={() => onDeleteProfile(preset.id)}>
+            <Trash2 size={14} />
+          </button>
+        ) : <span className={statusClass}>{state}</span>}
+      </div>
+    );
+  };
   return (
     <section className="panel agent-model-panel">
       <div className="panel-title">
         <Settings2 size={16} />
         <span>{t("Agents & Models")}</span>
+        <button type="button" className="secondary-action panel-config-action" disabled={!connected} title={t("Configure API keys")} onClick={onConfigure}>
+          <KeyRound size={14} />
+          <span>{t("API keys")}</span>
+        </button>
         <button type="button" className="icon-action panel-title-action" disabled={!connected} title={t("Check agents")} aria-label={t("Check agents")} onClick={onCheckAgents}>
           <RefreshCcw size={14} />
         </button>
@@ -2155,31 +2193,27 @@ function AgentModelPanel({
       </div>
       <div className="agent-model-section">
         <div className="mini-heading">{t("Agent profiles")}</div>
-        <div className="agent-model-list">
-          {profiles.map((preset) => {
-            const view = preset.providerId ? views.find((provider) => provider.providerId === preset.providerId) : undefined;
-            const configured = preset.providerId ? view?.configured : preset.id !== "openclaw";
-            const state = preset.providerId
-              ? (configured ? `${t("key")} ${view?.apiKeyPreview ?? t("set")}` : t("needs key"))
-              : preset.id === "openclaw" ? t("adapter TBD") : t("local auth");
-            const statusClass = configured ? "credential-state configured" : "credential-state";
-            return (
-              <div key={preset.id} className="agent-model-row">
-                <Bot size={15} />
-                <div>
-                  <strong>{preset.display}</strong>
-                  <span>{profileSummary(preset, t)}</span>
-                  <CapabilityBadges labels={capabilityBadgesForPreset(preset, !!configured)} t={t} />
-                </div>
-                {preset.custom ? (
-                  <button type="button" className="icon-action profile-delete-action" title={t("Delete profile")} aria-label={`${t("Delete profile")} ${preset.display}`} onClick={() => onDeleteProfile(preset.id)}>
-                    <Trash2 size={14} />
-                  </button>
-                ) : <span className={statusClass}>{state}</span>}
-              </div>
-            );
-          })}
-        </div>
+        {localProfiles.length ? (
+          <div className="profile-group local-profile-group">
+            <div className="profile-group-label">{t("Local agents")}</div>
+            <div className="agent-model-list">{localProfiles.map(renderProfile)}</div>
+          </div>
+        ) : null}
+        {providerGroups.map(([providerId, providerProfiles]) => {
+          const view = views.find((provider) => provider.providerId === providerId);
+          return (
+            <details key={providerId} className="profile-group provider-profile-group">
+              <summary>
+                <span className="provider-group-name">{providerId}</span>
+                <span className={view?.configured ? "credential-state configured" : "credential-state"}>
+                  {providerProfiles.length} {t("models")} · {view?.configured ? `${t("key")} ${view.apiKeyPreview ?? t("set")}` : t("needs key")}
+                </span>
+                <ChevronDown size={15} />
+              </summary>
+              <div className="agent-model-list">{providerProfiles.map(renderProfile)}</div>
+            </details>
+          );
+        })}
       </div>
       <div className="agent-model-section custom-profile-section">
         <div className="mini-heading">{t("Custom profiles")}</div>
@@ -2199,10 +2233,6 @@ function AgentModelPanel({
           </button>
         </div>
       </div>
-      <button type="button" className="secondary-action provider-config-action" disabled={!connected} onClick={onConfigure}>
-        <KeyRound size={15} />
-        <span>{t("Configure API keys")}</span>
-      </button>
       {!connected ? <div className="muted-note">{t("Connect to a room before editing API credentials.")}</div> : null}
       <div className="muted-note">{t("Agent/model selection is room-based; provider keys only unlock API-model agents.")}</div>
     </section>

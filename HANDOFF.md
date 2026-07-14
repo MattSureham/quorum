@@ -10,7 +10,7 @@ Working handoff for an agent picking up **Quorum**. Current as of **2026-07-14**
 
 This section is the entry point for the next agent. The security/reliability review was implemented, but it still needs an independent acceptance pass before release.
 
-**Follow-up after independent review:** the blocking findings were addressed in the changes after `41cb88e`. Network-supplied built-in adapter configs now use strict per-adapter schemas; health checks and adapters share shell-safe binary validation; Codex resume uses `codex exec --sandbox ... resume <id> --json -`; workspace-lease queue time is excluded from agent execution timeout; WebSocket sends use the live socket plus settings refs; approval timeout/interrupt emits a terminal signal; and dirty workspace baselines are rejected. Local verification is `99/99`; Windows run [29311886855](https://github.com/MattSureham/quorum/actions/runs/29311886855) passed the preceding 98-test build/package workflow, and a fresh run must validate the added health-fallback and dual-room finalization assertions.
+**Follow-up after independent review:** the blocking findings were addressed in the changes after `41cb88e`. Network-supplied built-in adapter configs now use strict per-adapter schemas; health checks and adapters share shell-safe binary validation; Codex resume uses `codex exec --sandbox ... resume <id> --json -`; workspace-lease queue time is excluded from agent execution timeout; WebSocket sends use the live socket plus settings refs; approval timeout/interrupt emits a terminal signal; and dirty workspace baselines are rejected. Local verification is `99/99`; Windows run [29314485107](https://github.com/MattSureham/quorum/actions/runs/29314485107) passed all 99 tests, Bun/Web/NSIS/portable builds, layout validation, and artifact uploads. Code-level acceptance is complete; real-machine adversarial and UX checks remain release acceptance.
 
 #### Review remediation status
 
@@ -37,12 +37,12 @@ This section is the entry point for the next agent. The security/reliability rev
 2. Run `pnpm typecheck`, `pnpm test`, the Web production build, `pnpm smoke:shared`, `pnpm sidecar:bun:smoke`, and `pnpm desktop:check`.
 3. On Windows, exercise real Codex and Claude Code `.cmd` shims with adversarial prompts containing shell metacharacters. Confirm the prompt reaches the agent and no marker file, second command, variable expansion, or redirection side effect occurs.
 4. Verify Git workspace initialization does not move an existing branch head, refuses dirty-tree switching, and reports checkout failures.
-5. Start two sessions against the same workspace with editing agents. Confirm edits never overlap, only one watcher owns checkpoints, and both sessions complete. Diagnose/fix the current Windows timeout rather than merely increasing timeouts again.
+5. Start two sessions against the same workspace with editing agents. Confirm edits never overlap, only one watcher owns checkpoints, and both sessions complete. This now passes on Windows; investigate any future regression rather than merely increasing timeouts.
 6. Verify shared rollback under the workspace lock and verify deleting the primary session cannot be followed by subscribe/continue/list returning a ghost room.
 7. In the Web UI, rapidly switch sessions, disconnect/reconnect, receive agent health events, and delete the active session. Confirm reconnect and fallback always use the latest selected room.
 8. Create a long session, trigger compaction, and inspect adapter input to confirm only summaries plus bounded recent increments are sent and event sequence lineage remains intact.
 9. Exercise approval timeout, interrupt, full argument display, and denied tools. Do not approve a strong-sandbox security claim without adding real OS-level isolation.
-10. Re-run the Windows packaging workflow and require a green result plus hands-on portable/installer testing before calling the Windows release accepted.
+10. Windows packaging run 29314485107 is green. Hands-on portable/installer testing is still required before calling the Windows release accepted.
 
 ### 2026-07-14 collaboration checkpoint
 

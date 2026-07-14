@@ -336,6 +336,11 @@ Security/reliability hardening in the current shared-session path:
   security sandbox**. Treat approval-required mode as human-reviewed local
   execution until a platform sandbox/container backend is added.
 
+The Agents & Models sidebar keeps local CLI agents visible and groups API model
+profiles into collapsible provider sections. The `API keys` button is pinned in
+the panel header and opens the credential modal; secrets are never displayed in
+the persistent sidebar.
+
 - `@quorum/protocol` — event/room types + zod wire schema
 - `@quorum/core` — EventLog, Conductor, the three floor policies, projection — **dependency-free, tested**
 - `@quorum/daemon` — adapters (echo + real Claude Code / Codex / API), git workspace, SQLite store, WS gateway
