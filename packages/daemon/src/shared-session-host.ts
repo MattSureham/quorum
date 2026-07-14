@@ -288,7 +288,7 @@ export async function startSharedSessionRoom(
       approveTool: (callId, allow) => session.approveTool(callId, allow),
       compactMemory: (fromSeq, toSeq) => session.compactWorkingMemory(fromSeq, toSeq),
       listCredentials: () => store.readProviderConfigViews(),
-      setCredential: (input) => store.upsertProviderConfig(input),
+      setCredential: (input: Parameters<NonNullable<GatewayDeps["setCredential"]>>[0]) => store.upsertProviderConfig(input),
       checkAgents: () => checkRoomAgents(nextRoom),
       listWorkspaceDirectories,
       takeWriteFloor: () => session.takeWriteFloor(),
