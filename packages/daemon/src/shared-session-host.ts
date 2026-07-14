@@ -73,8 +73,8 @@ function readyWorkspace(workspace: GitWorkspace, ready: Promise<void>): Workspac
 }
 
 async function commandExists(bin: string): Promise<boolean> {
-  bin = safeWindowsBinary(bin);
   try {
+    bin = safeWindowsBinary(bin);
     await exec(bin, ["--version"], { timeout: 2_500, shell: process.platform === "win32" });
     return true;
   } catch {
@@ -88,8 +88,8 @@ async function commandExists(bin: string): Promise<boolean> {
 }
 
 async function commandSupports(bin: string, args: string[], required: string[]): Promise<{ ok: boolean; detail?: string }> {
-  bin = safeWindowsBinary(bin);
   try {
+    bin = safeWindowsBinary(bin);
     const { stdout, stderr } = await exec(bin, args, { timeout: 2_500, shell: process.platform === "win32" });
     const help = `${stdout}\n${stderr}`;
     const missing = required.filter((flag) => !help.includes(flag));
