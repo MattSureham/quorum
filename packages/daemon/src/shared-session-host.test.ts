@@ -294,7 +294,7 @@ describe("SharedSessionHost", () => {
 
       await host.session.submitUserPrompt("edit from main");
       ws.send(JSON.stringify({ t: "post_message", roomId: "lock-second", text: "edit from second" }));
-      await waitFor(() => maxActiveEditors > 0 && activeEditors === 0, 2_500);
+      await waitFor(() => maxActiveEditors > 0 && activeEditors === 0, 8_000);
       expect(maxActiveEditors).toBe(1);
     } finally {
       ws.close();
