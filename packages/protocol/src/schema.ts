@@ -5,6 +5,17 @@ import { z } from "zod";
 
 const PermissionPolicySchema = z.enum(["read-only", "workspace-write", "approval-required", "full-auto"]);
 const AdapterConfigs = {
+  echo: z.object({
+    text: z.string().max(20_000).optional(),
+    script: z.array(z.object({
+      delayMs: z.number().int().min(0).max(60_000).optional(),
+      type: z.enum(["message", "thinking", "floor_request", "tool"]).optional(),
+      text: z.string().max(20_000).optional(),
+      addressedTo: z.array(z.string().max(128)).max(100).optional(),
+      intent: z.enum(["reply", "rebut", "act"]).optional(),
+      tool: z.string().max(200).optional(),
+    }).strict()).max(100).optional(),
+  }).strict(),
   codex: z.object({
     sandbox: z.enum(["read-only", "workspace-write", "danger-full-access"]).optional(),
     model: z.string().min(1).max(200).optional(),
