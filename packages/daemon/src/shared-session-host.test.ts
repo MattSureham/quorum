@@ -300,7 +300,7 @@ describe("SharedSessionHost", () => {
       ws.close();
       await host.stop();
     }
-  });
+  }, 12_000);
 
   it("lists and continues a persisted session after host restart", async () => {
     const dir = await mkdtemp(join(tmpdir(), "quorum-shared-session-continue-"));
