@@ -75,12 +75,9 @@ export class ClaudeCodeAdapter extends BaseAgentAdapter {
       "text",
       "--permission-mode",
       this.opts.permissionMode ?? "acceptEdits",
-      "--append-system-prompt",
-      input.self.persona ?? input.protocol,
     ];
-    if (this.opts.model) args.push("--model", this.opts.model);
-    if (this.sessionId) args.push("--resume", this.sessionId);
-    args.push(prompt);
+    if (this.opts.model) args.push("--model", safeCliValue(this.opts.model, "model"));
+    if (this.sessionId) args.push("--resume", safeCliValue(this.sessionId, "session id"));
 
     const env = { ...process.env };
     if (!this.opts.inheritApiKeyEnv) delete env.ANTHROPIC_API_KEY;
@@ -88,8 +85,9 @@ export class ClaudeCodeAdapter extends BaseAgentAdapter {
       cwd,
       env,
       shell: process.platform === "win32",
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
     });
+    child.stdin?.end(prompt);
     this.child = child;
     const onAbort = () => child.kill("SIGINT");
     input.signal.addEventListener("abort", onAbort, { once: true });
@@ -298,4 +296,11 @@ export class ClaudeCodeAdapter extends BaseAgentAdapter {
     this.ac?.abort();
     this.child?.kill("SIGINT");
   }
+}
+
+function safeCliValue(value: string, label: string): string {
+  if (!/^[A-Za-z0-9._:/@+-]+$/.test(value)) {
+    throw new Error(`Claude Code ${label} contains unsupported command-line characters`);
+  }
+  return value;
 }

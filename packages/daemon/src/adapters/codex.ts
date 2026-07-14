@@ -35,15 +35,17 @@ export class CodexAdapter extends BaseAgentAdapter {
     const sandbox = this.opts.sandbox ?? "workspace-write";
     const cwd = input.workspacePath ?? process.cwd();
     const flags = ["--json", "--sandbox", sandbox, "--cd", cwd];
-    if (this.opts.model) flags.push("-m", this.opts.model);
+    if (this.opts.model) flags.push("-m", safeCliValue(this.opts.model, "model"));
+    const threadId = this.threadId ? safeCliValue(this.threadId, "thread id") : undefined;
     const args = this.threadId
-      ? ["exec", "resume", this.threadId, ...flags, prompt]
-      : ["exec", ...flags, "--skip-git-repo-check", prompt];
+      ? ["exec", "resume", threadId!, ...flags, "-"]
+      : ["exec", ...flags, "--skip-git-repo-check", "-"];
 
     const child = spawn(bin, args, {
       shell: process.platform === "win32",
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
     });
+    child.stdin?.end(prompt);
     this.child = child;
     const onAbort = () => child.kill("SIGINT");
     input.signal.addEventListener("abort", onAbort, { once: true });
@@ -169,6 +171,13 @@ export class CodexAdapter extends BaseAgentAdapter {
   async interrupt(): Promise<void> {
     this.child?.kill("SIGINT");
   }
+}
+
+function safeCliValue(value: string, label: string): string {
+  if (!/^[A-Za-z0-9._:/@+-]+$/.test(value)) {
+    throw new Error(`Codex ${label} contains unsupported command-line characters`);
+  }
+  return value;
 }
 
 function classifyCliFailure(detail: string): string {
