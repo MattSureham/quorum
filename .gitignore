@@ -4,6 +4,7 @@ node_modules/
 dist/
 dist-sidecar/
 dist-portable/
+.*.bun-build
 target/
 **/target/
 apps/desktop/src-tauri/gen/schemas/
