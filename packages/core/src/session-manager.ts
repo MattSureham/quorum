@@ -190,7 +190,7 @@ export class SessionManager {
       if (!this.running) this.running = true;
       this.releaseWriteFloor("human resumed the room");
       const event = await this.append("message", { text, ...(attachments.length ? { attachments } : {}) }, "participant", {
-        author: { kind: "human", id: "human", display: "Human" },
+        author: this.humanAuthor(),
         addressedTo,
       });
       const prompt = { text, addressedTo, attachments, eventSeq: event.seq };
@@ -931,6 +931,10 @@ export class SessionManager {
 
   private participants(): ParticipantDescriptor[] {
     return [...(this.opts.humans ?? []), ...this.opts.agents.map((agent) => agent.descriptor)];
+  }
+
+  private humanAuthor(): ParticipantDescriptor {
+    return this.opts.humans?.[0] ?? { kind: "human", id: "human", display: "Human", status: "idle" };
   }
 
   private agentCapabilities(agent: ISpeakerAgent): Capabilities {

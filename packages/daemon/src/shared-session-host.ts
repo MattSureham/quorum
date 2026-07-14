@@ -284,7 +284,7 @@ export async function startSharedSessionRoom(
       room: nextRoom,
       humanId: humans[0]?.id,
       postMessage: (text, addressedTo, attachments) => session.submitUserPrompt(text, addressedTo, attachments),
-      interrupt: (hard) => session.interrupt("human", hard),
+      interrupt: (hard) => session.interrupt(humans[0]?.id ?? "human", hard),
       approveTool: (callId, allow) => session.approveTool(callId, allow),
       compactMemory: (fromSeq, toSeq) => session.compactWorkingMemory(fromSeq, toSeq),
       listCredentials: () => store.readProviderConfigViews(),
