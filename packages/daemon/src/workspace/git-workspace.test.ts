@@ -108,4 +108,27 @@ describe("GitWorkspace", () => {
       unwatch();
     }
   });
+
+  it("switches to an existing branch without resetting its head", async () => {
+    const { dir } = await makeWorkspace();
+    const mainHead = await git(dir, ["rev-parse", "main"]);
+    await exec("git", ["-C", dir, "checkout", "-b", "feature"]);
+    await writeFile(join(dir, "feature.txt"), "feature\n");
+    await exec("git", ["-C", dir, "add", "feature.txt"]);
+    await exec("git", ["-C", dir, "commit", "-m", "feature"]);
+
+    await new GitWorkspace(dir, "main").init();
+
+    expect(await git(dir, ["branch", "--show-current"])).toBe("main");
+    expect(await git(dir, ["rev-parse", "main"])).toBe(mainHead);
+  });
+
+  it("refuses to switch branches with a dirty working tree", async () => {
+    const { dir } = await makeWorkspace();
+    await exec("git", ["-C", dir, "checkout", "-b", "feature"]);
+    await writeFile(join(dir, "dirty.txt"), "uncommitted\n");
+
+    await expect(new GitWorkspace(dir, "main").init()).rejects.toThrow("working tree is dirty");
+    expect(await git(dir, ["branch", "--show-current"])).toBe("feature");
+  });
 });

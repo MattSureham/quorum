@@ -86,4 +86,21 @@ describe("CodexAdapter", () => {
     expect(failures).toHaveLength(1);
     expect(events.some((event) => event.type === "message" && (event.body as any).text === "rebuilt")).toBe(true);
   });
+
+  it("sends untrusted prompt content through stdin instead of argv", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "quorum-codex-stdin-"));
+    const argvPath = join(dir, "argv.txt");
+    const stdinPath = join(dir, "stdin.txt");
+    const marker = "PROMPT_INJECTION_7f3 & echo unsafe | whoami";
+    const bin = await fakeCli(
+      `printf '%s' "$*" > '${argvPath}'\ncat > '${stdinPath}'\nprintf '%s\\n' '{"type":"item.completed","item":{"type":"agent_message","text":"ok"}}'`,
+      `echo %* > "${argvPath}"\nmore > "${stdinPath}"\necho {"type":"item.completed","item":{"type":"agent_message","text":"ok"}}`,
+    );
+    const adapter = new CodexAdapter(input().self, { bin, sandbox: "read-only" });
+    await collect(adapter, { ...input(), protocol: marker });
+
+    const { readFile } = await import("node:fs/promises");
+    expect(await readFile(argvPath, "utf8")).not.toContain(marker);
+    expect(await readFile(stdinPath, "utf8")).toContain(marker);
+  });
 });
