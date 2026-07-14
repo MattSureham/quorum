@@ -40,7 +40,10 @@ export class CodexAdapter extends BaseAgentAdapter {
       ? ["exec", "resume", this.threadId, ...flags, prompt]
       : ["exec", ...flags, "--skip-git-repo-check", prompt];
 
-    const child = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(bin, args, {
+      shell: process.platform === "win32",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
     this.child = child;
     const onAbort = () => child.kill("SIGINT");
     input.signal.addEventListener("abort", onAbort, { once: true });

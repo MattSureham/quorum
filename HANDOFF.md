@@ -339,6 +339,10 @@ The following is the implementation trail from this session. It is written for t
     - Work: assembles the raw Tauri `quorum-desktop.exe` as `Quorum.exe` beside `sidecars/quorum-sidecar.exe`, adds usage notes, creates a ZIP and SHA-256 checksum, validates the artifact layout in CI, and uploads it as `quorum-windows-x64-portable` alongside the NSIS installer.
     - Verification: `pnpm typecheck`, all 85 tests, Web production build, shared-session smoke, compiled Bun sidecar smoke, desktop Tauri info, and Rust `cargo check` pass on macOS arm64. Portable assembly and launch remain enforced by the Windows workflow because PowerShell/Windows binaries cannot be run on this host.
 
+76. this change `fix: run Codex CLI through Windows command shim`
+    - Files: Codex adapter and its cross-platform tests, `HANDOFF.md`.
+    - Work: launches Codex with the Windows shell so npm-installed `codex.cmd` shims work, and replaces Unix-only fake CLI fixtures with equivalent `.cmd` fixtures. This was discovered by the first portable-package workflow run before packaging began.
+
 What is already implemented:
 
 - The meeting handoff and guide were copied into this repo:
