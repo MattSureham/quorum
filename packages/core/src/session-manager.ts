@@ -359,7 +359,7 @@ export class SessionManager {
       prompt,
       phase: this.phase,
       participants: this.participants(),
-      transcript: this.opts.log.replay(0),
+      transcript: this.boundedTranscript(),
       lastTurnId: this.lastTurnId,
     };
 
@@ -368,7 +368,7 @@ export class SessionManager {
       : [...this.byId.values()];
     const bids = await Promise.all(
       eligible.map((agent) =>
-        agent.bid(ctx).then((bid) => bid).catch(() => undefined),
+        this.collectBidWithTimeout(agent, ctx),
       ),
     );
 
@@ -388,6 +388,21 @@ export class SessionManager {
         });
       }
     });
+  }
+
+  private async collectBidWithTimeout(agent: ISpeakerAgent, ctx: BidContext): Promise<Bid | undefined> {
+    const timeoutMs = this.opts.bidWindowMs ?? 2_000;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        agent.bid(ctx).catch(() => undefined),
+        new Promise<undefined>((resolve) => {
+          timer = setTimeout(() => resolve(undefined), timeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 
   private async arbitrateIfPossible(): Promise<void> {
@@ -830,20 +845,32 @@ export class SessionManager {
 
   private async requestToolApproval(req: ToolCallRequest): Promise<ToolCallResult> {
     const callId = req.callId ?? ulid();
+    const signal = this.active?.ac.signal;
     await this.mailbox.enqueue("toolCall", () =>
       this.append("tool_call", { tool: req.tool, args: req.args, callId }, "participant", this.activeAuthorOptions()),
     );
     const allow = await new Promise<boolean>((resolve) => {
-      this.pendingToolApprovals.set(callId, { tool: req.tool, resolve });
+      let settled = false;
+      const finish = (value: boolean) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", denyOnAbort);
+        this.pendingToolApprovals.delete(callId);
+        resolve(value);
+      };
+      const denyOnAbort = () => finish(false);
+      const timer = setTimeout(() => finish(false), Math.min(this.opts.turnTimeoutMs ?? 120_000, 60_000));
+      signal?.addEventListener("abort", denyOnAbort, { once: true });
+      this.pendingToolApprovals.set(callId, { tool: req.tool, resolve: finish });
       void this.mailbox.enqueue("requestToolApproval", () =>
         this.append("system", {
           level: "warn",
-          text: `approval needed: ${req.tool} [${callId}] — approve or deny`,
-          approval: { callId, tool: req.tool, state: "requested" },
+          text: `approval needed: ${req.tool} ${JSON.stringify(req.args ?? {}).slice(0, 2_000)} [${callId}] — approve or deny`,
+          approval: { callId, tool: req.tool, args: req.args, state: "requested" },
         }, "system", { turnId: this.active?.turnId }),
       ).catch(() => {
-        this.pendingToolApprovals.delete(callId);
-        resolve(false);
+        finish(false);
       });
     });
     const result = allow

@@ -786,7 +786,7 @@ function modeView(room: Room, events: RoomEvent[], t: Translate): ModeView {
       remainingAgentIds,
     };
   }
-  if (room.policy.noConsecutive) {
+  if (room.schedulerMode === "raise-hand") {
     return {
       label: t("Raise hand mode"),
       detail: t("Agents request the floor and wait until the current speaker finishes."),
