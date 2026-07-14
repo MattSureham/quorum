@@ -346,6 +346,7 @@ The following is the implementation trail from this session. It is written for t
 77. this change `feat: paste images into chat`
     - Files: Web chat composer, `README.md`, `HANDOFF.md`.
     - Work: accepts image files from the clipboard through `Ctrl/Cmd+V`, reuses the existing attachment preview/removal/send path and six-image queue, leaves ordinary text paste untouched, and reports image read failures instead of rejecting silently.
+    - Verification: `pnpm typecheck`, all 85 tests, and the Web production build pass. Browser interaction inspection was attempted against the local Vite app, but no controllable browser was available in this session.
 
 What is already implemented:
 
