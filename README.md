@@ -318,11 +318,16 @@ Security/reliability hardening in the current shared-session path:
 - Claude Code and Codex prompts are written to subprocess stdin. User prompt and
   dynamic room context never enter the Windows shell command line; model/native
   session identifiers accepted as CLI arguments are restricted to safe characters.
+  Built-in adapter configs are validated by strict per-adapter schemas at the
+  WebSocket boundary, and health checks use the same shell-safe binary validation.
+- Codex native continuation uses the CLI's required argument hierarchy:
+  `codex exec --sandbox <mode> resume <thread-id> --json -`.
 - Opening an existing Git workspace never uses `checkout -B`. Existing branches
   are switched normally, missing branches are created, and a dirty tree blocks
   branch switching instead of silently moving a branch pointer.
 - Sessions sharing one canonical workspace path share a single coordinator,
-  write-floor mutex, checkpoint queue, and out-of-band watcher.
+  write-floor mutex, checkpoint queue, and out-of-band watcher. Waiting for that
+  lease is queue time and does not consume the agent execution deadline.
 - Working-memory summaries bound subsequent agent transcripts to post-summary
   events; without a summary, only the latest 60 events are passed as transcript.
 - The local command executor is a cwd/env/timeout/pattern guardrail, **not an OS
