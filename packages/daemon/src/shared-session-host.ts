@@ -7,7 +7,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { createParticipant } from "./adapters/registry.js";
-import { Gateway, type GatewaySessionDeps } from "./gateway/ws-server.js";
+import { Gateway, type GatewayDeps, type GatewaySessionDeps } from "./gateway/ws-server.js";
 import { SqliteStore } from "./persistence/sqlite-store.js";
 import { createLocalSandboxToolExecutor } from "./tools/local-sandbox-executor.js";
 import { GitWorkspace } from "./workspace/git-workspace.js";
