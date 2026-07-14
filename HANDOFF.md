@@ -6,6 +6,42 @@ Working handoff for an agent picking up **Quorum**. Current as of **2026-07-14**
 
 ## Current State For The Next Agent
 
+### 2026-07-14 independent validation handoff
+
+This section is the entry point for the next agent. The security/reliability review was implemented, but it still needs an independent acceptance pass before release.
+
+#### Review remediation status
+
+- **P0 Windows CLI command injection: implemented, requires Windows adversarial validation.** Codex and Claude Code now send prompts/context through stdin rather than command-line arguments. Dynamic model/native-session values are validated, and unsafe custom Windows binary paths are rejected. Windows still uses a shell to launch npm `.cmd` shims, so verify that prompts containing `&`, `|`, `%VAR%`, `^`, redirects, quotes, and newlines cannot create files or execute a second command.
+- **P0 Git branch reset: implemented and covered locally.** `GitWorkspace.init()` no longer uses `checkout -B`; it preserves an existing branch head, creates a missing branch normally, and refuses a dirty-tree branch switch instead of swallowing the failure.
+- **P0 shared workspace write lock: implemented, but Windows CI is not green.** Sessions using the same canonical `realpath` share one workspace coordinator, write mutex/checkpoint queue, and watcher. Conflicting active branches are rejected. The integration test passes locally but currently times out on Windows; treat this as unresolved until the Windows test is deterministic and green.
+- **P1 bounded context: implemented.** Bids and turns use post-summary increments after compaction, or a capped recent-event window before compaction, instead of replaying the entire event log into every adapter call.
+- **P1 shared rollback: implemented.** Rollback now runs through the shared workspace lease and emits an event; the gateway returns an explicit error when rollback is unavailable.
+- **P1 frontend stale WebSocket state: implemented, test gap remains.** Current settings and active room are read through refs for reconnect, health routing, deletion fallback, creation, continuation, and room switching. No dedicated browser state-machine regression test was added, so this needs manual rapid-switch/reconnect validation.
+- **P1 deleted primary ghost session: implemented and tested.** The gateway no longer falls back to constructor-time deps, and the primary registry keeps one object identity.
+- **P1 sandbox boundary: intentionally not resolved as OS isolation.** `local-sandbox-executor` is only a guarded local command runner. It limits cwd/environment/time/output and applies command patterns, but it can still read user files, access the network, or invoke another interpreter. Approval cards now show complete arguments and approvals abort/expire, but this must remain a documented release blocker if Quorum claims strong sandboxing.
+- **Other review items: implemented.** Claude spawn/nonzero/empty-output failures become failed turns; `bidWindowMs` now bounds individual bids; room-configured human ids are used; open-discussion labels use `schedulerMode`; Tauri sidecar handshake has a timeout and kills failed children.
+
+#### Current CI and local verification
+
+- Latest Windows run: [29304261126](https://github.com/MattSureham/quorum/actions/runs/29304261126), **failed** with `92/93` tests passing. The only failure was `SharedSessionHost > serializes editable turns across sessions sharing one canonical workspace`, which timed out waiting for completion. Because tests failed, this run did not produce a newly validated installer/portable artifact.
+- Two earlier retries, [29303623917](https://github.com/MattSureham/quorum/actions/runs/29303623917) and [29303946101](https://github.com/MattSureham/quorum/actions/runs/29303946101), failed at the same test timing boundary. Windows did pass the new Codex/Claude stdin-injection regression tests in those runs.
+- Local verification after the implementation: `pnpm typecheck`, `pnpm test` (`93/93`), Web production build, `pnpm smoke:shared`, `pnpm sidecar:bun:smoke`, Tauri info, and Rust `cargo check` passed. The latest event-based shared-workspace test passed locally (`7/7` in its file).
+- A Bun temporary build file was briefly committed and then deleted by the room watcher. It is absent from the current tree; `.*.bun-build` is now ignored. It remains in Git history and may increase clone size until history is deliberately cleaned in a separately approved maintenance operation.
+
+#### Independent acceptance checklist
+
+1. Review the security/reliability changes from the pre-review baseline through current `HEAD`; pay particular attention to `codex.ts`, `claude-code.ts`, `git-workspace.ts`, `shared-session-host.ts`, `session-manager.ts`, `ws-server.ts`, `main.tsx`, `local-sandbox-executor.ts`, and Tauri `lib.rs`.
+2. Run `pnpm typecheck`, `pnpm test`, the Web production build, `pnpm smoke:shared`, `pnpm sidecar:bun:smoke`, and `pnpm desktop:check`.
+3. On Windows, exercise real Codex and Claude Code `.cmd` shims with adversarial prompts containing shell metacharacters. Confirm the prompt reaches the agent and no marker file, second command, variable expansion, or redirection side effect occurs.
+4. Verify Git workspace initialization does not move an existing branch head, refuses dirty-tree switching, and reports checkout failures.
+5. Start two sessions against the same workspace with editing agents. Confirm edits never overlap, only one watcher owns checkpoints, and both sessions complete. Diagnose/fix the current Windows timeout rather than merely increasing timeouts again.
+6. Verify shared rollback under the workspace lock and verify deleting the primary session cannot be followed by subscribe/continue/list returning a ghost room.
+7. In the Web UI, rapidly switch sessions, disconnect/reconnect, receive agent health events, and delete the active session. Confirm reconnect and fallback always use the latest selected room.
+8. Create a long session, trigger compaction, and inspect adapter input to confirm only summaries plus bounded recent increments are sent and event sequence lineage remains intact.
+9. Exercise approval timeout, interrupt, full argument display, and denied tools. Do not approve a strong-sandbox security claim without adding real OS-level isolation.
+10. Re-run the Windows packaging workflow and require a green result plus hands-on portable/installer testing before calling the Windows release accepted.
+
 ### 2026-07-14 collaboration checkpoint
 
 - `main` currently includes the Windows portable runtime fixes through `ba4a994`; the implementation was split into watcher-generated commits `ccbc1b5` and `ba4a994` after `dc0cffa` added clipboard image paste.
