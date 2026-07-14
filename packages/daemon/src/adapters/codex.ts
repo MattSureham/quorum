@@ -3,6 +3,7 @@ import { createInterface } from "node:readline";
 import { BaseAgentAdapter } from "./base.js";
 import { isRoomTool, normalizeToolName, runRoomTool, type TurnInput, type PartialRoomEvent } from "@quorum/core";
 import type { ParticipantDescriptor, Capabilities } from "@quorum/protocol";
+import { safeCliValue, safeWindowsBinary } from "./cli-safety.js";
 
 export interface CodexOptions {
   sandbox?: "read-only" | "workspace-write" | "danger-full-access";
@@ -32,13 +33,13 @@ export class CodexAdapter extends BaseAgentAdapter {
     const usedResume = !!this.threadId;
     const prompt = this.prompt(input);
     const bin = safeWindowsBinary(this.opts.bin ?? "codex");
-    const sandbox = this.opts.sandbox ?? "workspace-write";
+    const sandbox = safeCliValue(this.opts.sandbox ?? "workspace-write", "Codex sandbox");
     const cwd = input.workspacePath ?? process.cwd();
     const flags = ["--json", "--sandbox", sandbox];
     if (this.opts.model) flags.push("-m", safeCliValue(this.opts.model, "model"));
     const threadId = this.threadId ? safeCliValue(this.threadId, "thread id") : undefined;
     const args = this.threadId
-      ? ["exec", "resume", threadId!, ...flags, "-"]
+      ? ["exec", ...flags, "resume", threadId!, "--json", "-"]
       : ["exec", ...flags, "--skip-git-repo-check", "-"];
 
     const child = spawn(bin, args, {
@@ -172,20 +173,6 @@ export class CodexAdapter extends BaseAgentAdapter {
   async interrupt(): Promise<void> {
     this.child?.kill("SIGINT");
   }
-}
-
-function safeCliValue(value: string, label: string): string {
-  if (!/^[A-Za-z0-9._:/@+-]+$/.test(value)) {
-    throw new Error(`Codex ${label} contains unsupported command-line characters`);
-  }
-  return value;
-}
-
-function safeWindowsBinary(value: string): string {
-  if (process.platform === "win32" && /[&|<>^%!\r\n"]/u.test(value)) {
-    throw new Error("Codex binary path contains unsupported Windows shell characters");
-  }
-  return value;
 }
 
 function classifyCliFailure(detail: string): string {

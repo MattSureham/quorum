@@ -28,12 +28,12 @@ export class GitWorkspace implements WorkspaceManager {
       await this.git(["init"]);
       await this.git(["commit", "--allow-empty", "-m", "chore(room): init"]);
     }
-    const current = await this.git(["branch", "--show-current"]).then(({ stdout }) => stdout.trim());
-    if (current === this.branch) return;
     const dirty = await this.git(["status", "--porcelain"]).then(({ stdout }) => stdout.trim());
     if (dirty) {
-      throw new Error(`cannot switch workspace from ${current || "detached HEAD"} to ${this.branch}: working tree is dirty`);
+      throw new Error("cannot initialize workspace: working tree has uncommitted changes; commit or stash them first");
     }
+    const current = await this.git(["branch", "--show-current"]).then(({ stdout }) => stdout.trim());
+    if (current === this.branch) return;
     const exists = await this.git(["show-ref", "--verify", "--quiet", `refs/heads/${this.branch}`]).then(() => true, () => false);
     await this.git(exists ? ["checkout", this.branch] : ["checkout", "-b", this.branch]);
   }

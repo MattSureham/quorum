@@ -3,6 +3,7 @@ import { createInterface } from "node:readline";
 import { BaseAgentAdapter } from "./base.js";
 import { ROOM_TOOLS, runRoomTool, ulid, type RoomToolSpec, type TurnInput, type PartialRoomEvent } from "@quorum/core";
 import type { ParticipantDescriptor, Capabilities } from "@quorum/protocol";
+import { safeCliValue, safeWindowsBinary } from "./cli-safety.js";
 
 export interface ClaudeOptions {
   model?: string;
@@ -74,7 +75,7 @@ export class ClaudeCodeAdapter extends BaseAgentAdapter {
       "--input-format",
       "text",
       "--permission-mode",
-      this.opts.permissionMode ?? "acceptEdits",
+      safeCliValue(this.opts.permissionMode ?? "acceptEdits", "Claude Code permission mode"),
     ];
     if (this.opts.model) args.push("--model", safeCliValue(this.opts.model, "model"));
     if (this.sessionId) args.push("--resume", safeCliValue(this.sessionId, "session id"));
@@ -314,20 +315,6 @@ export class ClaudeCodeAdapter extends BaseAgentAdapter {
     this.ac?.abort();
     this.child?.kill("SIGINT");
   }
-}
-
-function safeCliValue(value: string, label: string): string {
-  if (!/^[A-Za-z0-9._:/@+-]+$/.test(value)) {
-    throw new Error(`Claude Code ${label} contains unsupported command-line characters`);
-  }
-  return value;
-}
-
-function safeWindowsBinary(value: string): string {
-  if (process.platform === "win32" && /[&|<>^%!\r\n"]/u.test(value)) {
-    throw new Error("Claude Code binary path contains unsupported Windows shell characters");
-  }
-  return value;
 }
 
 function classifyCliFailure(detail: string): string {

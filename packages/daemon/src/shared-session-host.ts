@@ -7,6 +7,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { createParticipant } from "./adapters/registry.js";
+import { safeWindowsBinary } from "./adapters/cli-safety.js";
 import { Gateway, type GatewayDeps, type GatewaySessionDeps } from "./gateway/ws-server.js";
 import { SqliteStore } from "./persistence/sqlite-store.js";
 import { createLocalSandboxToolExecutor } from "./tools/local-sandbox-executor.js";
@@ -72,6 +73,7 @@ function readyWorkspace(workspace: GitWorkspace, ready: Promise<void>): Workspac
 }
 
 async function commandExists(bin: string): Promise<boolean> {
+  bin = safeWindowsBinary(bin);
   try {
     await exec(bin, ["--version"], { timeout: 2_500, shell: process.platform === "win32" });
     return true;
@@ -86,6 +88,7 @@ async function commandExists(bin: string): Promise<boolean> {
 }
 
 async function commandSupports(bin: string, args: string[], required: string[]): Promise<{ ok: boolean; detail?: string }> {
+  bin = safeWindowsBinary(bin);
   try {
     const { stdout, stderr } = await exec(bin, args, { timeout: 2_500, shell: process.platform === "win32" });
     const help = `${stdout}\n${stderr}`;
