@@ -4,6 +4,15 @@
 
 ## 2026-07-14 独立验收状态
 
+### 最新 credential 与 portable 验收目标
+
+- credential 路径修复位于 `efa11e1`、`8538ec3`、`ae87db3`，文档更新位于 `bdd726c`。legacy gateway 已能持久化 provider credentials，保存错误会显示在弹窗内，`QUORUM_DB_PATH` 在 legacy/shared 两种 kernel 下均生效。
+- 本地已通过 typecheck、`100/100` 测试和 Web production build；使用全新临时 SQLite 的真实浏览器验证中，DeepSeek 点击保存后由 `not set` 变为掩码状态 `set ...5678`，原始测试 key 未返回浏览器。
+- **Windows portable 验收者不需要 clone 或 pull 仓库。** 等待当前 `main` 的 Windows Packages workflow 完成，下载 `quorum-windows-x64-portable` artifact，完整解压内层 ZIP 后直接运行 `Quorum.exe`。只有从源码自行构建时才需要 pull。
+- 不要用旧 portable artifact 验收本轮修复；下载前确认 workflow 对应提交包含 `bdd726c` 或其后继提交。
+- portable artifact 不包含开发者的 API keys。新 Windows 机器需要在 **API keys** 中配置一次；数据保存在 `%LOCALAPPDATA%\\dev.quorum.desktop\\quorum.sqlite`，不会从 macOS、其他 Windows 机器或其他 SQLite 路径自动迁移。
+- Windows 人工验收：保存临时 DeepSeek key 后卡片应显示 `set ...xxxx`；关闭弹窗后 DeepSeek provider 不再显示“需要 key”；New session 中 DeepSeek 模型可选择；重启 `Quorum.exe` 后配置仍存在。保存失败必须在弹窗内明确显示，不能表现为按钮无响应。
+
 - 安全与可靠性复核后的阻断项已继续修复：内置 adapter 配置采用严格的按类型 schema；CLI health check 与 adapter 共用 Windows shell 参数校验；Codex resume 参数层级已纠正；等待共享 workspace 写锁的排队时间不再计入 agent 执行超时。
 - 前端发送改为读取当前 WebSocket `readyState` 与 refs，旧 room 不再在 render 时覆盖 active-room ref；审批超时/中断会写入终态；已有未提交改动的 workspace 会拒绝初始化。
 - 本地 typecheck/test/Web/smoke/desktop 验证与 Windows workflow 均已通过；仍需在真实 Windows 上做 `.cmd` 注入、session 切换和 portable 人工验收。
