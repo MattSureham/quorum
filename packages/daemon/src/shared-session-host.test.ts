@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import WebSocket from "ws";
 import type { Room, RoomEvent } from "@quorum/protocol";
 import { startSharedSessionRoom } from "./shared-session-host.js";
+import { registerAdapter } from "./adapters/registry.js";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -236,6 +237,65 @@ describe("SharedSessionHost", () => {
         "charlie",
       ]);
       expect(seen.some((event) => event.type === "bid_submitted")).toBe(false);
+    } finally {
+      ws.close();
+      await host.stop();
+    }
+  });
+
+  it("serializes editable turns across sessions sharing one canonical workspace", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "quorum-shared-workspace-lock-"));
+    const workspacePath = join(dir, "workspace");
+    let activeEditors = 0;
+    let maxActiveEditors = 0;
+    registerAdapter("shared-lock-test", (descriptor) => ({
+      id: descriptor.id,
+      descriptor,
+      capabilities: () => ({ canEditFiles: true, canRunCommands: false, supportsToolApproval: false, nativeTools: ["edit"] }),
+      async *takeTurn() {
+        activeEditors++;
+        maxActiveEditors = Math.max(maxActiveEditors, activeEditors);
+        await sleep(250);
+        activeEditors--;
+        yield { type: "message" as const, body: { text: "edited" } };
+      },
+      async interrupt() {},
+    }));
+    const room: Room = {
+      id: "lock-main",
+      title: "Lock main",
+      workspacePath,
+      branch: "main",
+      policy: { name: "free-for-all", maxTurnsPerTopic: 1, noConsecutive: true, turnDeadlineMs: 2_000 },
+      participants: [
+        { id: "human", kind: "human", display: "Human", status: "idle" },
+        { id: "editor-main", kind: "agent", display: "Editor main", adapter: "shared-lock-test", status: "idle" },
+      ],
+      createdAt: Date.now(),
+    };
+    const host = await startSharedSessionRoom(room, { dbPath: join(dir, "room.sqlite"), port: 0 });
+    const ws = await connect(host.gateway.url());
+    try {
+      ws.send(JSON.stringify({
+        t: "create_session",
+        roomId: "lock-main",
+        session: {
+          id: "lock-second",
+          title: "Lock second",
+          mode: "open-discussion",
+          workspacePath,
+          participants: [
+            { id: "human", kind: "human", display: "Human", status: "idle" },
+            { id: "editor-second", kind: "agent", display: "Editor second", adapter: "shared-lock-test", status: "idle" },
+          ],
+        },
+      }));
+      expect((await nextMessage(ws)).t).toBe("session_created");
+
+      await host.session.submitUserPrompt("edit from main");
+      ws.send(JSON.stringify({ t: "post_message", roomId: "lock-second", text: "edit from second" }));
+      await waitFor(() => maxActiveEditors > 0 && activeEditors === 0, 2_500);
+      expect(maxActiveEditors).toBe(1);
     } finally {
       ws.close();
       await host.stop();
