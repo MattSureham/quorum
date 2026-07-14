@@ -421,12 +421,13 @@ interface AgentModelPreset {
   baseUrl?: string;
   apiStyle?: "openai" | "anthropic";
   custom?: boolean;
+  available?: boolean;
 }
 
 const agentModelPresets: AgentModelPreset[] = [
-  { id: "codex", display: "Codex", adapter: "codex", detail: "CLI agent; uses the local Codex session/auth", credential: "Codex CLI", role: "local builder" },
-  { id: "claude-code", display: "Claude Code", adapter: "claude-code", detail: "CLI/SDK agent; uses Claude Code auth", credential: "Claude Code auth", role: "local reviewer" },
-  { id: "openclaw", display: "OpenClaw", adapter: "openclaw", detail: "Agent adapter placeholder; not installed in this build", credential: "Agent-specific auth", role: "placeholder agent" },
+  { id: "codex", display: "Codex", adapter: "codex", detail: "CLI agent; uses the local Codex session/auth", credential: "Codex CLI", role: "local builder", available: true },
+  { id: "claude-code", display: "Claude Code", adapter: "claude-code", detail: "CLI/SDK agent; uses Claude Code auth", credential: "Claude Code auth", role: "local reviewer", available: true },
+  { id: "openclaw", display: "OpenClaw", adapter: "openclaw", detail: "Agent adapter placeholder; not installed in this build", credential: "Agent-specific auth", role: "placeholder agent", available: false },
 ];
 
 const providerModelCatalog: Array<{
@@ -459,11 +460,12 @@ const providerModelCatalog: Array<{
 ];
 
 function providerCatalogProfiles(views: ProviderConfigView[]): AgentModelPreset[] {
-  const configured = new Map(views.filter((view) => view.configured).map((view) => [view.providerId, view]));
-  return providerModelCatalog.flatMap((entry) => {
-    const view = configured.get(entry.providerId);
-    if (!view) return [];
-    return [{
+  const byProvider = new Map(views.map((view) => [view.providerId, view]));
+  const presetByProvider = new Map(credentialPresets.map((preset) => [preset.providerId, preset]));
+  return providerModelCatalog.map((entry) => {
+    const view = byProvider.get(entry.providerId);
+    const preset = presetByProvider.get(entry.providerId);
+    return {
       id: `${entry.providerId}-${entry.model.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`,
       display: entry.label,
       adapter: "api-model",
@@ -474,10 +476,11 @@ function providerCatalogProfiles(views: ProviderConfigView[]): AgentModelPreset[
       role: entry.role,
       vision: entry.vision,
       flagship: entry.flagship,
-      apiKeyEnv: view.envVar,
-      baseUrl: view.baseUrl,
+      apiKeyEnv: view?.envVar ?? preset?.envVar,
+      baseUrl: view?.baseUrl ?? preset?.baseUrl,
       apiStyle: entry.providerId === "anthropic" ? "anthropic" as const : "openai" as const,
-    }];
+      available: !!view?.configured,
+    };
   });
 }
 
@@ -1172,7 +1175,6 @@ function App() {
   const agentProfiles = useMemo(() => {
     const viewsByProvider = new Map(credentialViews.map((view) => [view.providerId, view]));
     const availableCustom = customProfiles
-      .filter((profile) => !profile.providerId || viewsByProvider.get(profile.providerId)?.configured)
       .map((profile) => {
         const view = profile.providerId ? viewsByProvider.get(profile.providerId) : undefined;
         return {
@@ -1180,6 +1182,7 @@ function App() {
           apiKeyEnv: view?.envVar,
           baseUrl: view?.baseUrl,
           apiStyle: profile.providerId === "anthropic" ? "anthropic" as const : "openai" as const,
+          available: !profile.providerId || !!view?.configured,
         };
       });
     return [...agentModelPresets, ...providerCatalogProfiles(credentialViews), ...availableCustom];
@@ -2459,6 +2462,7 @@ function SessionSetupModal({
       display: preset.display,
       detail: profileSummary(preset, t),
       active: false,
+      available: preset.available !== false,
     })),
   ];
   const modes: Array<{ id: SessionMode; label: string; detail: string }> = [
@@ -2640,9 +2644,10 @@ function SessionSetupModal({
             <div className="mini-heading">{t("Participants")}</div>
             <div className="participant-picker-list">
               {participantOptions.map((participant) => (
-                <label key={participant.id} className="participant-picker-row">
+                <label key={participant.id} className={participant.available === false ? "participant-picker-row unavailable" : "participant-picker-row"}>
                   <input
                     type="checkbox"
+                    disabled={participant.available === false}
                     checked={draft.participantIds.includes(participant.id)}
                     onChange={() => toggleParticipant(participant.id)}
                   />
@@ -2650,7 +2655,7 @@ function SessionSetupModal({
                     <strong>{participant.display}</strong>
                     <span>{participant.detail}</span>
                   </div>
-                  <i>{participant.active ? t("current room") : t("available")}</i>
+                  <i>{participant.active ? t("current room") : participant.available === false ? t("needs key") : t("available")}</i>
                 </label>
               ))}
             </div>

@@ -937,6 +937,15 @@ textarea:focus {
   background: #ffffff;
 }
 
+.participant-picker-row.unavailable {
+  opacity: 0.62;
+}
+
+.participant-picker-row.unavailable input,
+.participant-picker-row.unavailable i {
+  cursor: not-allowed;
+}
+
 .participant-picker-row input {
   width: 16px;
   height: 16px;
