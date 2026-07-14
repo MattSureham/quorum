@@ -14,6 +14,7 @@ Latest migration commits:
 - The Node fallback spike adds `pnpm sidecar:node:build` and `pnpm sidecar:node:smoke`.
 - The packaging env commit adds project-local Bun/Rust setup under `.tools/` and validates Bun single-file sidecar compile with `pnpm sidecar:bun:smoke`.
 - The desktop shell spike adds `apps/desktop`, `pnpm desktop:check`, `pnpm desktop:dev`, `pnpm desktop:build`, and a Tauri command that starts the compiled Bun sidecar and returns its authenticated WebSocket URL to the React client.
+- The Windows packaging workflow also emits an unsigned portable x64 ZIP containing `Quorum.exe`, `sidecars/quorum-sidecar.exe`, usage notes, and a SHA-256 checksum.
 
 ## This Session Implementation Log
 
@@ -332,6 +333,11 @@ The following is the implementation trail from this session. It is written for t
     - Files: protocol command, WebSocket gateway/test, shared host directory service, Web Session setup/styles, `README.md`, `HANDOFF.md`.
     - Work: adds read-only `list_workspace_directories` request/response handling and an inline Web folder navigator with parent/subfolder navigation and an explicit “Select this folder” action. Desktop continues to use the native OS picker; browser mode selects absolute paths on the connected daemon machine.
     - Verification: `pnpm typecheck`, all 85 tests, Web production build, and shared-session smoke pass.
+
+75. this change `feat: package portable Windows build`
+    - Files: Windows packaging workflow, PowerShell portable assembler, package scripts, `README.md`, `HANDOFF.md`.
+    - Work: assembles the raw Tauri `quorum-desktop.exe` as `Quorum.exe` beside `sidecars/quorum-sidecar.exe`, adds usage notes, creates a ZIP and SHA-256 checksum, validates the artifact layout in CI, and uploads it as `quorum-windows-x64-portable` alongside the NSIS installer.
+    - Verification: `pnpm typecheck`, all 85 tests, Web production build, shared-session smoke, compiled Bun sidecar smoke, desktop Tauri info, and Rust `cargo check` pass on macOS arm64. Portable assembly and launch remain enforced by the Windows workflow because PowerShell/Windows binaries cannot be run on this host.
 
 What is already implemented:
 

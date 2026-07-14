@@ -3,6 +3,7 @@ node_modules/
 .tools/
 dist/
 dist-sidecar/
+dist-portable/
 target/
 **/target/
 apps/desktop/src-tauri/gen/schemas/

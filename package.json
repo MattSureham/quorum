@@ -22,6 +22,7 @@
     "desktop:dev": "bash -lc 'source .tools/packaging-env.sh && pnpm --filter @quorum/desktop tauri dev'",
     "desktop:build": "bash -lc 'source .tools/packaging-env.sh && pnpm --filter @quorum/desktop tauri build'",
     "desktop:check": "bash -lc 'source .tools/packaging-env.sh && pnpm --filter @quorum/desktop tauri info && cd apps/desktop/src-tauri && cargo check'",
+    "portable:windows:package": "pwsh -File scripts/package-windows-portable.ps1",
     "packaging:env": "bash scripts/setup-packaging-env.sh",
     "sidecar:bun:build": "tsx scripts/build-sidecar-bun.ts",
     "sidecar:bun:smoke": "tsx scripts/bun-sidecar-smoke.ts",

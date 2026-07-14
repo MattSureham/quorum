@@ -265,14 +265,30 @@ Installer-grade signed release is not done yet. Unsigned test builds are now
 available for macOS and Windows:
 
 - macOS arm64: `pnpm desktop:build` produces an unsigned `.app` and `.dmg`.
-- Windows x64: manually run the **Windows Installer** GitHub Actions workflow.
+- Windows x64: manually run the **Windows Packages** GitHub Actions workflow.
   It runs typecheck/tests, builds the sidecar/Web UI, builds an unsigned NSIS
-  installer, and uploads these artifacts:
+  installer and portable ZIP, then uploads these artifacts:
   - `quorum-windows-nsis-installer` — the one-click `.exe` installer
+  - `quorum-windows-x64-portable` — an extract-and-run ZIP plus SHA-256 checksum
   - `quorum-windows-bundle-output` — the full Tauri bundle directory
   - `quorum-windows-sidecar` — the bundled `quorum-sidecar.exe` for debugging
 
-The Windows test installer is unsigned. Windows may show an "unknown publisher"
+For the portable build, extract the whole ZIP to a writable folder and launch
+`Quorum.exe`. No installer or registry setup is required, but the adjacent
+`sidecars` directory must stay in place. Windows 10/11 x64 and Microsoft Edge
+WebView2 Runtime are required; current Windows installations normally include
+WebView2. The portable archive can also be assembled after a Windows Tauri
+release build:
+
+```powershell
+pnpm portable:windows:package
+```
+
+This writes `dist-portable/windows-x64.zip` and
+`dist-portable/windows-x64.zip.sha256`, and fails if either required executable
+is missing.
+
+The Windows test installer and portable executable are unsigned. Windows may show an "unknown publisher"
 or SmartScreen warning. Manual acceptance check: install the `.exe`, launch
 Quorum, confirm the UI connects to the sidecar, send a message to the Echo
 session, create a session with a workspace path, and confirm closing the app

@@ -1,11 +1,11 @@
-name: Windows Installer
+name: Windows Packages
 
 on:
   workflow_dispatch:
 
 jobs:
   build-windows-installer:
-    name: Build unsigned Windows NSIS installer
+    name: Build unsigned Windows installer and portable ZIP
     runs-on: windows-latest
 
     steps:
@@ -49,6 +49,24 @@ jobs:
       - name: Build unsigned NSIS installer
         run: pnpm --filter @quorum/desktop tauri build --target x86_64-pc-windows-msvc --bundles nsis
 
+      - name: Assemble portable Windows package
+        shell: pwsh
+        run: ./scripts/package-windows-portable.ps1
+
+      - name: Validate portable package layout
+        shell: pwsh
+        run: |
+          $required = @(
+            "dist-portable/windows-x64/Quorum.exe",
+            "dist-portable/windows-x64/sidecars/quorum-sidecar.exe",
+            "dist-portable/windows-x64/README.txt",
+            "dist-portable/windows-x64.zip",
+            "dist-portable/windows-x64.zip.sha256"
+          )
+          foreach ($path in $required) {
+            if (-not (Test-Path $path -PathType Leaf)) { throw "Missing portable artifact: $path" }
+          }
+
       - name: Upload NSIS installer
         uses: actions/upload-artifact@v4
         with:
@@ -72,4 +90,13 @@ jobs:
         with:
           name: quorum-windows-sidecar
           path: dist-sidecar/bun/quorum-sidecar.exe
+          if-no-files-found: error
+
+      - name: Upload portable Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: quorum-windows-x64-portable
+          path: |
+            dist-portable/windows-x64.zip
+            dist-portable/windows-x64.zip.sha256
           if-no-files-found: error
