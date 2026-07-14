@@ -40,7 +40,8 @@ export type GatewaySessionDeps = Omit<GatewayDeps, "authToken" | "listSessions" 
 /**
  * Thin WebSocket gateway. Clients render the event stream and send commands.
  * v1 binds to localhost; add pairing / relay / E2E for remote (M6).
- * The daemon never stores provider API keys — agents use their own credentials.
+ * CLI agents use their own auth. API-model provider keys may be persisted in
+ * the local SQLite store; gateway responses expose masked previews only.
  */
 export class Gateway {
   private readonly wss: WebSocketServer;

@@ -12,6 +12,8 @@
 - 不要用旧 portable artifact 验收本轮修复；下载前确认 workflow 对应提交包含 `bdd726c` 或其后继提交。
 - portable artifact 不包含开发者的 API keys。新 Windows 机器需要在 **API keys** 中配置一次；数据保存在 `%LOCALAPPDATA%\\dev.quorum.desktop\\quorum.sqlite`，不会从 macOS、其他 Windows 机器或其他 SQLite 路径自动迁移。
 - Windows 人工验收：保存临时 DeepSeek key 后卡片应显示 `set ...xxxx`；关闭弹窗后 DeepSeek provider 不再显示“需要 key”；New session 中 DeepSeek 模型可选择；重启 `Quorum.exe` 后配置仍存在。保存失败必须在弹窗内明确显示，不能表现为按钮无响应。
+- 安全契约与 profile 后续修复：`SPEC.md` 已改为与实现一致，明确 API-model keys 以明文 JSON 存于本地 SQLite，目前没有 Keychain、Windows Credential Manager 或字段加密，只依赖系统账户与文件权限。自定义 API profile 现在必须填写 provider；旧版无 provider 的 profile 会迁移到 `openai` 并受凭据 gating。新增 2 项纯 UI 状态测试覆盖迁移、必填 provider 和重复 id；本地 typecheck、Web build、`102/102` 测试通过。
+- 以上修复提交仍需针对当前 HEAD 重新运行 Windows Packages workflow；不能用 `298a2f1` 对应的旧绿色 run 29314485107 代表本轮覆盖。
 
 - 安全与可靠性复核后的阻断项已继续修复：内置 adapter 配置采用严格的按类型 schema；CLI health check 与 adapter 共用 Windows shell 参数校验；Codex resume 参数层级已纠正；等待共享 workspace 写锁的排队时间不再计入 agent 执行超时。
 - 前端发送改为读取当前 WebSocket `readyState` 与 refs，旧 room 不再在 render 时覆盖 active-room ref；审批超时/中断会写入终态；已有未提交改动的 workspace 会拒绝初始化。

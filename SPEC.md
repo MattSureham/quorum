@@ -632,7 +632,7 @@ type ServerMessage =
 ### 10.2 鉴权（v1）
 - daemon 默认 `bind 127.0.0.1`。
 - 配对：daemon 生成密钥对，打印配对串/二维码（含公钥）；客户端用它建立会话。v1 可先用一个本地 token 简化；M6 再上 relay/隧道 + 端到端加密。
-- **daemon 绝不存储任何 provider 的 API key**：Claude/Codex 用各自已配置的凭证在 daemon 的用户上下文里跑（沿用 Paseo 安全模型）。
+- **凭据边界（当前实现）**：Claude Code/Codex 继续使用各自 CLI 的本地登录，不由 Quorum 存储凭据。用户通过 Web UI 配置的 API-model provider key 会由 daemon 持久化到当前实例的本地 SQLite `provider_configs` 表，并仅向客户端返回掩码预览。当前没有接入 Windows Credential Manager、macOS Keychain，也没有数据库字段加密；机密性仅依赖操作系统账户隔离和数据库文件权限。portable artifact 不包含开发者凭据，凭据也不会跨机器或跨 SQLite 路径自动迁移。正式处理高价值生产凭据前，应迁移到系统凭据库或采用受系统密钥保护的加密存储。
 
 ---
 

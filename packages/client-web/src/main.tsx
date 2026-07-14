@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { canCreateCustomApiProfile, normalizeStoredCustomProfile } from "./profile-config.js";
 import {
   Activity,
   AlertTriangle,
@@ -1065,14 +1066,15 @@ function loadCustomProfiles(): AgentModelPreset[] {
     const parsed = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(parsed)) return [];
     return parsed
-      .filter((item) => typeof item?.id === "string" && typeof item?.display === "string")
+      .map(normalizeStoredCustomProfile)
+      .filter((item): item is NonNullable<typeof item> => !!item)
       .map((item) => ({
         id: item.id,
         display: item.display,
         adapter: "api-model",
         detail: "Direct API model agent",
-        credential: `${item.providerId ?? "custom"} API key`,
-        providerId: typeof item.providerId === "string" ? item.providerId : undefined,
+        credential: `${item.providerId} API key`,
+        providerId: item.providerId,
         model: typeof item.model === "string" ? item.model : undefined,
         role: typeof item.role === "string" ? item.role : "analysis model",
         vision: !!item.vision,
@@ -1700,14 +1702,15 @@ function App() {
 
   function addCustomProfile() {
     const id = profileDraft.id.trim().toLowerCase();
-    if (!id || agentProfiles.some((profile) => profile.id === id) || customProfiles.some((profile) => profile.id === id)) return;
+    const providerId = profileDraft.providerId.trim().toLowerCase();
+    if (!canCreateCustomApiProfile(profileDraft, [...agentProfiles, ...customProfiles].map((profile) => profile.id))) return;
     const nextProfile: AgentModelPreset = {
       id,
       display: profileDraft.display.trim() || id,
       adapter: "api-model",
       detail: "Direct API model agent",
-      credential: `${profileDraft.providerId.trim() || "custom"} API key`,
-      providerId: profileDraft.providerId.trim() || undefined,
+      credential: `${providerId} API key`,
+      providerId,
       model: profileDraft.model.trim() || undefined,
       role: profileDraft.role.trim() || "analysis model",
       vision: profileDraft.vision,
@@ -2231,7 +2234,7 @@ function AgentModelPanel({
             <input type="checkbox" checked={profileDraft.vision} onChange={(input) => onProfileDraft((current) => ({ ...current, vision: input.currentTarget.checked }))} />
             <span>{t("vision")}</span>
           </label>
-          <button type="button" className="secondary-action" disabled={!profileDraft.id.trim()} onClick={onAddProfile}>
+          <button type="button" className="secondary-action" disabled={!profileDraft.id.trim() || !profileDraft.providerId.trim()} onClick={onAddProfile}>
             <Plus size={14} />
             <span>{t("Add profile")}</span>
           </button>

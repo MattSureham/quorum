@@ -389,6 +389,13 @@ work. Credentials are stored locally in the Quorum SQLite database, applied to
 the daemon process immediately, and only returned to the browser as masked
 previews.
 
+Provider keys are currently stored as plaintext JSON inside that local SQLite
+database. Quorum does not yet use macOS Keychain, Windows Credential Manager,
+or field-level database encryption, so confidentiality depends on the current
+OS account and database file permissions. Use appropriately scoped test keys
+until system credential-store integration is available. Codex and Claude Code
+credentials remain managed by their own CLIs and are not stored by Quorum.
+
 Credential saving is available in both the legacy conductor and shared-session
 daemon entrypoints. Save failures are shown inside the credential modal instead
 of being hidden behind it. `QUORUM_DB_PATH` is honored by both kernels, so a
@@ -400,6 +407,10 @@ the developer's local keys.
 Built-in API profiles show the exact model id sent to the provider. Role labels
 such as analysis or fast do not claim a different underlying model; create a
 custom profile when a provider exposes a newer model id.
+Custom API profiles require an explicit provider id and remain unavailable until
+that provider has a configured key. Profiles created by older builds without a
+provider id are migrated to the OpenAI credential boundary rather than treated
+as locally authenticated agents.
 
 After a provider API key is configured, Session setup exposes that provider's
 language-model catalog as individual participants. The built-in catalog includes
