@@ -372,7 +372,7 @@ export async function startSharedSessionRoom(
     {
       authToken: opts.authToken,
       listCredentials: () => store.readProviderConfigViews(),
-      setCredential: (input) => store.upsertProviderConfig(input),
+      setCredential: (input: Parameters<NonNullable<GatewayDeps["setCredential"]>>[0]) => store.upsertProviderConfig(input),
       listSessions: listRooms,
       createSession: (input: CreateSessionInput) => {
         if (managed.has(input.id) || store.readSessionRoom(input.id)) throw new Error(`session already exists: ${input.id}`);
