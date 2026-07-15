@@ -14,6 +14,7 @@ import { createLocalSandboxToolExecutor } from "./tools/local-sandbox-executor.j
 import { GitWorkspace } from "./workspace/git-workspace.js";
 
 const exec = promisify(execFile);
+const MIN_AGENT_TURN_DEADLINE_MS = 180_000;
 
 export interface SharedSessionHost {
   log: EventLog;
@@ -40,9 +41,10 @@ interface SharedWorkspaceCoordinator {
 }
 
 function policyForMode(mode: SessionMode, base: Room["policy"]): Room["policy"] {
-  if (mode === "raise-hand") return { ...base, name: "free-for-all", noConsecutive: true };
-  if (mode === "round-robin") return { ...base, name: "directed", noConsecutive: true };
-  return { ...base, name: "free-for-all" };
+  const turnDeadlineMs = Math.max(base.turnDeadlineMs, MIN_AGENT_TURN_DEADLINE_MS);
+  if (mode === "raise-hand") return { ...base, name: "free-for-all", noConsecutive: true, turnDeadlineMs };
+  if (mode === "round-robin") return { ...base, name: "directed", noConsecutive: true, turnDeadlineMs };
+  return { ...base, name: "free-for-all", turnDeadlineMs };
 }
 
 function ensureHuman(participants: ParticipantDescriptor[]): ParticipantDescriptor[] {
@@ -294,7 +296,7 @@ export async function startSharedSessionRoom(
       noConsecutive: nextRoom.policy.noConsecutive,
       toolExecutor: nextRoom.workspacePath ? createLocalSandboxToolExecutor({ workspacePath: nextRoom.workspacePath }) : undefined,
       settlingWindowMs: 400,
-      turnTimeoutMs: nextRoom.policy.turnDeadlineMs,
+      turnTimeoutMs: Math.max(nextRoom.policy.turnDeadlineMs, MIN_AGENT_TURN_DEADLINE_MS),
     });
     session.start();
     const gatewayDeps: GatewaySessionDeps = {

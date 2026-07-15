@@ -105,6 +105,7 @@ export class SessionManager {
   private currentAddressedTo: string[] = [];
   private currentAttachments: ImageAttachment[] = [];
   private turnsThisTopic = 0;
+  private lastTurnOutcome?: "done" | "cancelled" | "failed";
   private wrapUpActive = false;
   private pendingPrompts: PendingPrompt[] = [];
   private roundRobinQueue: string[] = [];
@@ -152,7 +153,7 @@ export class SessionManager {
   start(): void {
     this.running = true;
     if (this.pendingPrompts.length) {
-      void this.mailbox.enqueue("restoreQueuedPrompt", () => this.activateNextQueuedPrompt()).catch(() => undefined);
+      this.runInBackground("restore queued prompt", this.mailbox.enqueue("restoreQueuedPrompt", () => this.activateNextQueuedPrompt()));
     }
   }
 
@@ -270,7 +271,7 @@ export class SessionManager {
     this.humanWriteLease?.release();
     this.humanWriteLease = undefined;
     void this.append("system", { level: "info", text: `write floor released — ${reason}` }, "system");
-    void this.mailbox.enqueue("writeFloorReleased", () => this.continueAfterWriteFloor()).catch(() => undefined);
+    this.runInBackground("resume after write floor", this.mailbox.enqueue("writeFloorReleased", () => this.continueAfterWriteFloor()));
   }
 
   async drain(): Promise<void> {
@@ -458,7 +459,7 @@ export class SessionManager {
       reason,
       deadlineMs: this.opts.turnTimeoutMs ?? 120_000,
     });
-    void this.runTurn(agent, turnId, generation, ac);
+    this.runInBackground(`run turn ${turnId}`, this.runTurn(agent, turnId, generation, ac));
   }
 
   private async runTurn(agent: ISpeakerAgent, turnId: string, generation: number, ac: AbortController): Promise<void> {
@@ -471,6 +472,7 @@ export class SessionManager {
     let toolCalls = 0;
     let outputs = 0;
     let failure: { message: string; category?: string; detail?: string } | undefined;
+    let timedOut = false;
 
     await this.mailbox.enqueue("turnStarted", async () => {
       await this.transition("speaking", { turnId, speakerId: agent.id, generation });
@@ -484,7 +486,11 @@ export class SessionManager {
       }
       // Workspace contention is queueing time. The agent execution deadline
       // starts only after this turn owns the shared write floor.
-      timeout = setTimeout(() => ac.abort(), this.opts.turnTimeoutMs ?? 120_000);
+      const turnTimeoutMs = this.opts.turnTimeoutMs ?? 120_000;
+      timeout = setTimeout(() => {
+        timedOut = true;
+        ac.abort();
+      }, turnTimeoutMs);
       const ctx: TurnContext = {
         sessionId: this.opts.sessionId,
         turnId,
@@ -501,7 +507,7 @@ export class SessionManager {
 
       for await (const delta of agent.speak(ctx, this.runtime(), ac.signal)) {
         if (ac.signal.aborted) {
-          outcome = "cancelled";
+          outcome = timedOut ? "failed" : "cancelled";
           break;
         }
         if (delta.type === "done") break;
@@ -518,19 +524,26 @@ export class SessionManager {
         });
       }
     } catch (err) {
-      outcome = ac.signal.aborted ? "cancelled" : "failed";
-      if (!ac.signal.aborted) failure = {
+      outcome = timedOut ? "failed" : ac.signal.aborted ? "cancelled" : "failed";
+      if (!ac.signal.aborted || timedOut) failure = {
         message: err instanceof Error ? err.message : String(err),
-        category: "adapter_exception",
+        category: timedOut ? "timeout" : "adapter_exception",
       };
     } finally {
       if (timeout) clearTimeout(timeout);
-      if (ac.signal.aborted && outcome === "done") outcome = "cancelled";
+      if (timedOut) {
+        outcome = "failed";
+        failure = {
+          message: `${agent.descriptor.display} timed out after ${this.opts.turnTimeoutMs ?? 120_000}ms without completing a response`,
+          category: "timeout",
+        };
+      } else if (ac.signal.aborted && outcome === "done") outcome = "cancelled";
       if (this.running) await this.mailbox.enqueue("finishTurn", async () => {
         if (!this.active || this.active.turnId !== turnId || this.active.generation !== generation) return;
         this.lastTurnId = turnId;
         this.lastSpeakerId = agent.id;
         this.turnsThisTopic++;
+        this.lastTurnOutcome = outcome;
         this.active = undefined;
         this.recentSpeakerCounts.set(agent.id, (this.recentSpeakerCounts.get(agent.id) ?? 0) + 1);
         const eventType = outcome === "done" ? "turn_completed" : outcome === "cancelled" ? "turn_cancelled" : "turn_failed";
@@ -569,8 +582,8 @@ export class SessionManager {
         await this.append("floor_release", { turnId, reason: outcome === "done" ? "done" : outcome });
         await this.maybeAutoCompactWorkingMemory();
         await this.transition("settling", { turnId, settlingWindowMs: this.opts.settlingWindowMs ?? 400 });
-        if (this.pendingPrompts.length) void this.activateNextQueuedPrompt();
-        else void this.settleAndArbitrate();
+        if (this.pendingPrompts.length) this.runInBackground("activate queued prompt", this.activateNextQueuedPrompt());
+        else this.runInBackground(`settle turn ${turnId}`, this.settleAndArbitrate());
       }).catch(async (err) => {
         if (!this.running) return;
         await this.append("system", {
@@ -600,6 +613,10 @@ export class SessionManager {
       if (this.wrapUpActive) {
         this.pendingBids.clear();
         await this.transition("idle", { reason: "topic wrapped up", turns: this.turnsThisTopic });
+        return "none";
+      }
+      if (this.lastTurnOutcome && this.lastTurnOutcome !== "done" && this.pendingBids.size === 0) {
+        await this.transition("idle", { reason: "all candidate turns failed", turns: this.turnsThisTopic });
         return "none";
       }
       if (this.turnsThisTopic >= maxTurns - 1) {
@@ -632,6 +649,21 @@ export class SessionManager {
 
   private wrapUpPrompt(prompt: string): string {
     return `${prompt}\n\n[QUORUM WRAP UP] This is the final turn for this topic. State the concrete final answer or plan now. Preserve unresolved disagreements explicitly and leave unfinished work for Continue Session.`;
+  }
+
+  private runInBackground(label: string, task: Promise<unknown>): void {
+    void task.catch(async (err) => {
+      if (!this.running) return;
+      try {
+        await this.append("system", {
+          level: "error",
+          text: `${label} failed: ${err instanceof Error ? err.message : String(err)}`,
+        }, "system");
+      } catch {
+        // Persistence itself failed; do not turn a background failure into an
+        // unhandled rejection that terminates the daemon.
+      }
+    });
   }
 
   private orderedAgentIds(): string[] {
