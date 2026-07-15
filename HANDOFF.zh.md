@@ -2,6 +2,14 @@
 
 给接手 **Quorum** 的下一个 agent 的工作交接。截至 **2026-07-15**，以 `main` 当前 HEAD 为准。English version: [`HANDOFF.md`](./HANDOFF.md)。
 
+## 2026-07-15 富文本聊天与图表输出
+
+- Chat 不再把消息当作单纯的 `pre-wrap` 文本，而是渲染经过清洗的 GitHub-flavored Markdown。支持紧凑标题、列表/任务列表、表格、引用、安全链接、代码块、Markdown 图片，以及原有的上传/粘贴图片附件；附件与 Markdown 图片均可从预览打开原图。
+- fenced `mermaid` 代码块会按需渲染流程图、时序图、饼图、XY 图及 Mermaid 的其他图形。普通消息不会加载 Mermaid；无效图表会保留可读源码，不会留下空白聊天。
+- 安全边界保持严格：禁用原始 HTML，Markdown AST 经过 `rehype-sanitize`，拒绝可执行协议和 `file:` 图片，禁止 Mermaid 单图配置与主动内容 hook，Mermaid 使用 `securityLevel: strict` 并关闭 HTML label，最终 SVG 在插入前还会经过 DOMPurify。
+- `SessionManager` 会向每个 agent 声明 GFM/Mermaid 展示能力，并要求视觉内容旁保留文字结论。CLI 与 API agent 因而都能主动使用富文本，但权威事件格式不变，event log 仍保存原始 Markdown 文本。
+- 新回归会在服务端渲染代表性的 GFM/Mermaid 消息，并检查图片/图表安全门。typecheck、`123/123` 测试、Web production build、EventLog/shared/source/Node/Bun sidecar smoke 与 Rust `cargo check` 已通过。Mermaid 被拆成按需 chunks，普通主 bundle 不会执行它；Vite 会对几个超过 500 kB 的按需 Mermaid 图形 chunk 给出预期警告，虽然不影响普通聊天加载，仍需关注安装包/下载体积。当前 in-app browser 仍没有可连接实例，因此本环境无法完成截图/点击验收。`pnpm audit --prod` 因 npm 已停用当前 pnpm 9 使用的 audit endpoint 而返回 HTTP 410，不能把这次命令误报成“无漏洞”。
+
 ## 2026-07-15 自定义顺序与参考讨论轮数
 
 - New Session 新增可用图标上下移动的参与者顺序，以及 1-12 的“目标讨论轮数”。参与者数组顺序仍是持久化顺序的唯一来源：按序陈述每轮严格遵循，自由讨论和举手模式则用它处理同分 bid。

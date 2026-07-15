@@ -1039,6 +1039,11 @@ export class SessionManager {
       "- Do not silently fill gaps from memory. If a required fact is absent or ambiguous, say what is uncertain.",
       "- If the user asks to continue prior work, continue from the latest head seq and avoid re-deciding settled points unless new evidence appears.",
       "- Do not assume the user's topic concerns the host application or workspace project unless the human prompt explicitly says so.",
+      "",
+      "Response presentation capabilities:",
+      "- The chat renders GitHub-flavored Markdown, including headings, lists, task lists, tables, blockquotes, links, images, and fenced code blocks.",
+      "- When a diagram or data chart materially improves the answer, use a fenced `mermaid` block. Mermaid supports flowcharts, sequence diagrams, pie charts, and XY charts.",
+      "- Keep a concise textual conclusion alongside any visual. Do not use raw HTML or per-diagram Mermaid configuration directives.",
     ].join("\n");
   }
 

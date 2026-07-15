@@ -6,6 +6,14 @@ Working handoff for an agent picking up **Quorum**. Current as of **2026-07-15**
 
 ## Current State For The Next Agent
 
+### 2026-07-15 rich chat output and diagrams
+
+- Chat messages now render sanitized GitHub-flavored Markdown instead of plain `pre-wrap` text. Supported presentation includes compact headings, lists/task lists, tables, blockquotes, safe links, fenced code, Markdown images, and the existing uploaded/pasted image attachments. Attachment and Markdown images open at full size from their preview.
+- Fenced `mermaid` blocks are lazy-rendered for flowcharts, sequence diagrams, pie charts, XY charts, and Mermaid's other diagram types. Mermaid is not loaded for ordinary messages. Invalid diagrams show a readable source fallback instead of blank chat.
+- The rendering boundary is intentionally strict: raw HTML is skipped, `rehype-sanitize` processes the Markdown tree, executable/file image protocols are rejected, per-diagram Mermaid configuration and active-content hooks are blocked, Mermaid uses `securityLevel: strict` with HTML labels disabled, and DOMPurify sanitizes the generated SVG before insertion.
+- `SessionManager` tells every agent about the available GFM/Mermaid presentation surface and asks for a textual conclusion alongside visuals. This makes rich output discoverable to CLI and API agents without changing the authoritative event format; message text remains Markdown in the event log.
+- New coverage server-renders representative GFM and Mermaid messages and checks image/diagram security gates. Typecheck, `123/123` tests, Web production build, EventLog/shared/source/Node/Bun sidecar smokes, and Rust `cargo check` pass. Mermaid is dynamically split into on-demand chunks; the ordinary main bundle does not execute Mermaid. Vite reports its expected over-500 kB warning for several lazy Mermaid diagram chunks, so package/download size should be monitored even though normal chat does not load those chunks. The in-app browser still exposed no browser instance, so screenshot/click QA remains unavailable in this environment. `pnpm audit --prod` could not return a vulnerability result because npm retired the audit endpoint used by this pinned pnpm 9 client (HTTP 410); do not misreport that command as a clean audit.
+
 ### 2026-07-15 configurable order and advisory discussion rounds
 
 - New Session now exposes an ordered participant list with icon controls plus a 1-12 `Target discussion rounds` input. The selected participant array remains the persisted source of order. Round robin follows it strictly in every round; open-discussion and raise-hand arbitration use it to break otherwise equal bids.

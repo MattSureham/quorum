@@ -568,6 +568,16 @@ prompts and agent/model replies. Floor grants, bids, thinking updates, tool
 events, checkpoints, and other operational records stay in the less prominent
 diagnostics/checkpoint panels so the primary surface does not read like a log.
 
+Agent replies are rendered as sanitized GitHub-flavored Markdown rather than a
+plain text blob. Chat supports compact headings, lists and task lists, tables,
+blockquotes, links, fenced code, and Markdown images. A fenced `mermaid` block
+renders flowcharts, sequence diagrams, pie charts, and XY charts on demand. Raw
+HTML is disabled; Mermaid per-diagram configuration and active-content hooks are
+rejected, Mermaid runs in strict mode, and generated SVG is sanitized before it
+is inserted into the page. Invalid diagrams retain a readable source fallback.
+Every agent receives these presentation capabilities in its turn context and is
+asked to keep a textual conclusion alongside any visual.
+
 Chat messages can include image attachments. The Web UI sends image data as
 message attachments, renders thumbnails in the transcript, and keeps those
 attachments in the event log. Direct `api-model` agents receive attached images

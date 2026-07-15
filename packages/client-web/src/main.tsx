@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { canCreateCustomApiProfile, normalizeStoredCustomProfile } from "./profile-config.js";
+import { RichMessage } from "./rich-message.js";
 import { latestTerminalTurnAfter } from "./run-status.js";
 import {
   Activity,
@@ -119,6 +120,10 @@ const zhText: Record<string, string> = {
   "Check agents": "检查智能体",
   "Message the session": "发送消息到会话",
   "Image": "图片",
+  "Image blocked": "图片已拦截",
+  "Diagram unavailable": "图表无法渲染",
+  "Rendering diagram": "正在渲染图表",
+  "Rendered diagram": "已渲染图表",
   "Failed to read pasted image": "无法读取粘贴的图片",
   "Send": "发送",
   "Write floor held": "已持有写入权",
@@ -2054,7 +2059,7 @@ function App() {
           </div>
           <div className="event-feed" ref={feedRef} onScroll={onFeedScroll}>
             {chatEvents.length ? (
-              chatEvents.map((item) => <ChatMessageRow key={item.id} event={item} />)
+              chatEvents.map((item) => <ChatMessageRow key={item.id} event={item} t={t} />)
             ) : (
               <div className="empty-chat">
                 <MessageSquare size={18} />
@@ -3325,7 +3330,7 @@ function MemoryPanel({
   );
 }
 
-function ChatMessageRow({ event }: { event: RoomEvent }) {
+function ChatMessageRow({ event, t }: { event: RoomEvent; t: Translate }) {
   const body = event.body as MessageBody;
   return (
     <article className={`chat-message-row ${event.author.kind}`}>
@@ -3333,12 +3338,14 @@ function ChatMessageRow({ event }: { event: RoomEvent }) {
         <strong>{event.author.display}</strong>
         <time>{new Date(event.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
       </div>
-      {body.text ? <div className="chat-message-body">{body.text}</div> : null}
+      {body.text ? <div className="chat-message-body"><RichMessage text={body.text} t={t} /></div> : null}
       {body.attachments?.length ? (
         <div className="chat-message-attachments">
           {body.attachments.map((image) => (
             <figure key={image.id}>
-              <img src={image.dataUrl} alt={image.name} />
+              <a href={image.dataUrl} target="_blank" rel="noreferrer noopener">
+                <img src={image.dataUrl} alt={image.name} loading="lazy" />
+              </a>
               <figcaption>{image.name}</figcaption>
             </figure>
           ))}
