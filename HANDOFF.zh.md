@@ -2,6 +2,15 @@
 
 给接手 **Quorum** 的下一个 agent 的工作交接。截至 **2026-07-15**，以 `main` 当前 HEAD 为准。English version: [`HANDOFF.md`](./HANDOFF.md)。
 
+## 2026-07-15 无回复与断线可靠性跟进
+
+- 已从 `.quorum/webui-smoke.sqlite` 还原用户截图中的 `session-mrlhfbcu`：Claude Code、Codex、DeepSeek 均成功提交 bid，随后三个 turn 都在继承的 30 秒期限内零输出超时。旧逻辑把它们记为取消，并重新开启 follow-up 抢麦，最终事件 `#39` 停在 `collecting_bids`，因此 UI 看起来既没有回答又一直卡住。旧开发进程稍后确实重启过，但旧 stdout 已不可得，所以不声称已经证明具体的进程退出原因。
+- shared-session 对新建及持久化房间均设置至少 180 秒的 agent 执行期限。超时会写入 category 为 `timeout` 的结构化 `turn_failed`；所有候选都失败后回到 `idle`，不再静默循环收集 bid。Web 运行横幅会直接显示实际失败原因。
+- daemon 重启恢复会把悬空 turn 结算为 `daemon_restart` 失败、释放 floor、记录警告，并把瞬态 phase 收敛到 `idle`。不会自动重放中断的 agent turn，因为其中的工具或工作区写入可能已经产生副作用；持久化的 `paused`/`ended` 状态保持不变。
+- WebSocket 断开时会显示 close code/reason。Tauri 客户端重连前会重新调用 `get_sidecar_connection`，由 Rust 在需要时拉起新的 sidecar。`pnpm dev` 现在会保留 Vite，并在 daemon 意外退出后一秒自动重启 daemon。
+- 已使用保存的 DeepSeek credential、`deepseek-v4-pro` profile 和同一个问题进行独立真实调用，约 5.1 秒得到回答；过程中没有输出或提交原始 key。这证明当前 provider/key/model 链路可用，但不能反推此前三个 30 秒窗口为何都没有输出。
+- 本地已通过 `pnpm typecheck`、`104/104`、Web production build、shared/source/Node/Bun sidecar smokes 和 Rust `cargo check`。Node fallback smoke 只在与全套测试并发时超过一次 5 秒握手窗口，单独重跑 2.8 秒通过。当前 in-app browser runtime 没有可连接浏览器，因此本轮有协议/集成验证，但尚无新的点击式浏览器验收；这些提交仍待新的 Windows Packages workflow。
+
 ## 2026-07-15 Windows credential 保存跟进
 
 - 用户反馈最新 Windows portable 中 DeepSeek 保存仍表现为无响应。此前本地浏览器与绿色 Windows build 没有在真实 Windows 上交互验证打包后的 desktop/sidecar 组合，因此不能视为充分验收。

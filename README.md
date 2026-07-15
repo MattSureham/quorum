@@ -57,6 +57,10 @@ To run the daemon against the new kernel during migration:
 QUORUM_SESSION_KERNEL=shared pnpm dev
 ```
 
+`pnpm dev` keeps Vite running and automatically restarts the local daemon if it
+exits unexpectedly. The Web client reconnects to the current runtime; the Tauri
+client also asks the desktop host to restart a dead sidecar before reconnecting.
+
 To test the Web UI without Claude/Codex credentials, run the shared kernel with
 the deterministic echo config:
 
@@ -165,7 +169,14 @@ processed through a FIFO queue, with a fresh epoch and bid collection after the
 active turn. Adapter failures use structured `turn_failed`/`turn_trace` payloads
 instead of appearing as successful turns with no visible reply.
 Queued prompt markers are replayed after daemon restart, so an accepted but not
-yet activated prompt is not stranded when the process exits mid-turn.
+yet activated prompt is not stranded when the process exits mid-turn. New
+shared sessions use a minimum three-minute agent execution deadline. A deadline
+is reported as a visible timeout failure, and when every candidate fails the
+scheduler returns to `idle` instead of silently reopening bid collection.
+If the host restarts during a transient phase or active turn, Quorum closes the
+orphaned turn with a `daemon_restart` failure and normalizes the room to `idle`.
+It deliberately does not replay an interrupted agent turn because its tools or
+workspace edits may already have produced side effects.
 
 The Codex CLI adapter accepts both current `item.type` JSONL events and older
 `item.item_type` events. Spawn errors, stderr/non-zero exits, authentication or

@@ -6,6 +6,15 @@ Working handoff for an agent picking up **Quorum**. Current as of **2026-07-15**
 
 ## Current State For The Next Agent
 
+### 2026-07-15 no-reply/disconnect reliability follow-up
+
+- The reported room (`session-mrlhfbcu`) was reconstructed from `.quorum/webui-smoke.sqlite`. Claude Code, Codex, and DeepSeek all bid successfully, then each turn hit the inherited 30-second deadline with zero output. Those deadlines were recorded as cancellations, and the scheduler reopened a follow-up bid round, leaving event `#39` at `collecting_bids`; this explains the no-reply/stuck UI. The old dev process restarted later, but its stdout was unavailable, so the exact process-exit trigger is not claimed as proven.
+- Shared-session runtime now enforces a 180-second minimum agent execution deadline for both newly created and persisted rooms. A deadline emits structured `turn_failed` data with category `timeout`; if every candidate fails, the topic returns to `idle` instead of looping into another bid window. The Web run banner displays the actual failure message.
+- Restart recovery now closes an orphaned active turn with category `daemon_restart`, releases its floor, records a warning, and normalizes any transient runtime phase to `idle`. Interrupted turns are not automatically replayed because tools or workspace edits may already have produced side effects. Persisted `paused` and `ended` phases remain stable.
+- The Web client reconnect path now reports WebSocket close code/reason. In Tauri it re-invokes `get_sidecar_connection`, allowing Rust to replace a dead sidecar before reconnecting. `pnpm dev` now leaves Vite running and automatically restarts an unexpectedly exited daemon after one second.
+- The saved DeepSeek credential and `deepseek-v4-pro` profile were exercised outside the affected room with the same question; a real reply completed in about 5.1 seconds. No raw credential was printed or added to artifacts. This establishes that the provider/key/model path works now, but does not prove why the earlier request spent all three 30-second windows without output.
+- Local verification: `pnpm typecheck`, `104/104` tests, Web production build, shared/source/Node/Bun sidecar smokes, and Rust `cargo check` pass. The Node fallback smoke exceeded its five-second handshake only while run concurrently with the complete suite, then passed alone in 2.8 seconds. The in-app browser runtime exposed no browser instance, so this follow-up has protocol/integration coverage but no new click-driven browser pass yet. A fresh Windows Packages run is still pending for these commits.
+
 ### 2026-07-15 Windows credential-save follow-up
 
 - The user reported that DeepSeek Save still appeared inert in the downloaded Windows portable even though the previous local browser test and Windows build were green. Treat the earlier acceptance as insufficient because it did not exercise the packaged desktop/sidecar pair interactively on Windows.
