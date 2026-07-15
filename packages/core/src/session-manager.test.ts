@@ -306,6 +306,32 @@ describe("SessionManager", () => {
       await session.stop();
     }
   });
+
+  it("records execution deadlines as failed turns and stops after all candidates fail", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const session = new SessionManager({
+      sessionId: "room",
+      title: "Timeout",
+      log,
+      agents: [new InterruptibleSpeaker("slow", { confidence: 1 })],
+      settlingWindowMs: 10,
+      turnTimeoutMs: 30,
+    });
+    session.start();
+    try {
+      await session.submitUserPrompt("answer eventually");
+      await waitFor(() => session.snapshot().phase === "idle" && log.replay(0).some((event) => event.type === "turn_failed"));
+
+      const failed = log.replay(0).find((event) => event.type === "turn_failed");
+      expect((failed?.body as any).failure).toMatchObject({ category: "timeout" });
+      expect((failed?.body as any).failure.message).toContain("timed out after 30ms");
+      expect(log.replay(0).filter((event) => event.type === "phase_changed" && (event.body as any).to === "collecting_bids")).toHaveLength(1);
+      expect(log.replay(0).some((event) => event.type === "turn_cancelled")).toBe(false);
+    } finally {
+      await session.stop();
+    }
+  });
+
   it("queues bids during speaking and selects the next speaker only after turn completion", async () => {
     const log = new EventLog("room", new InMemoryStore());
     const events: RoomEvent[] = [];
