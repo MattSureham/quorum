@@ -525,12 +525,15 @@ export class SqliteStore implements EventStore {
             INSERT INTO bids
               (session_id, epoch, agent_id, bid_id, kind, confidence, reply_to_turn_id, revision, status, created_seq, data)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?)
-            ON CONFLICT(session_id, bid_id) DO UPDATE SET
+            ON CONFLICT(session_id, epoch, agent_id) DO UPDATE SET
+              bid_id=excluded.bid_id,
               kind=excluded.kind,
               confidence=excluded.confidence,
               reply_to_turn_id=excluded.reply_to_turn_id,
               revision=excluded.revision,
               status='submitted',
+              created_seq=excluded.created_seq,
+              settled_seq=NULL,
               data=excluded.data
           `)
           .run(

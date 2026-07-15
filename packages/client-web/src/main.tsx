@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { canCreateCustomApiProfile, normalizeStoredCustomProfile } from "./profile-config.js";
+import { latestTerminalTurnAfter } from "./run-status.js";
 import {
   Activity,
   AlertTriangle,
@@ -761,14 +762,6 @@ function unresolvedToolCall(events: RoomEvent[], afterSeq: number): ToolCallBody
   return [...calls.values()].at(-1);
 }
 
-function latestTurnFailedAfter(events: RoomEvent[], seq: number): RoomEvent | undefined {
-  return [...events].reverse().find((item) => item.seq > seq && item.type === "turn_failed");
-}
-
-function latestTurnCompletedAfter(events: RoomEvent[], seq: number): RoomEvent | undefined {
-  return [...events].reverse().find((item) => item.seq > seq && item.type === "turn_completed");
-}
-
 function latestAgentOutputAfter(events: RoomEvent[], seq: number): RoomEvent | undefined {
   return [...events].reverse().find((item) =>
     item.seq > seq &&
@@ -966,6 +959,7 @@ function projectSharedSession(events: RoomEvent[]): SharedSessionProjection {
 function describeRunStatus({
   connected,
   events,
+  participants,
   shared,
   lastSubmittedAt,
   now,
@@ -973,6 +967,7 @@ function describeRunStatus({
 }: {
   connected: boolean;
   events: RoomEvent[];
+  participants: ParticipantDescriptor[];
   shared: SharedSessionProjection;
   lastSubmittedAt?: number;
   now: number;
@@ -991,14 +986,18 @@ function describeRunStatus({
   const afterPromptSeq = humanMessage?.seq ?? 0;
   const pendingApproval = pendingApprovals(events).at(-1);
   const toolCall = unresolvedToolCall(events, afterPromptSeq);
-  const failed = latestTurnFailedAfter(events, afterPromptSeq);
-  const completed = latestTurnCompletedAfter(events, afterPromptSeq);
+  const terminalTurn = latestTerminalTurnAfter(events, afterPromptSeq);
+  const failed = terminalTurn?.type === "turn_failed" ? terminalTurn : undefined;
+  const completed = terminalTurn?.type === "turn_completed" ? terminalTurn : undefined;
   const agentOutput = latestAgentOutputAfter(events, afterPromptSeq);
   if (failed) {
     const failure = (failed.body as any)?.failure;
-    const detail = typeof failure?.message === "string"
+    const speakerId = String((failed.body as any)?.speakerId ?? "");
+    const speaker = participants.find((participant) => participant.id === speakerId)?.display ?? speakerId;
+    const failureDetail = typeof failure?.message === "string"
       ? failure.message
       : t("The latest agent turn failed. Check diagnostics for details.");
+    const detail = speaker ? `${speaker}: ${failureDetail}` : failureDetail;
     return { state: "error", label: t("Turn failed"), detail, lastEvent };
   }
   if (pendingApproval) {
@@ -1224,8 +1223,8 @@ function App() {
   const shared = useMemo(() => projectSharedSession(displayEvents), [displayEvents]);
   const t = useMemo<Translate>(() => (text) => translate(language, text), [language]);
   const runStatus = useMemo(
-    () => describeRunStatus({ connected, events: displayEvents, shared, lastSubmittedAt, now, t }),
-    [connected, displayEvents, shared, lastSubmittedAt, now, t],
+    () => describeRunStatus({ connected, events: displayEvents, participants, shared, lastSubmittedAt, now, t }),
+    [connected, displayEvents, participants, shared, lastSubmittedAt, now, t],
   );
 
   useEffect(() => {

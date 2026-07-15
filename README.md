@@ -183,7 +183,13 @@ workspace edits may already have produced side effects.
 The Codex CLI adapter accepts both current `item.type` JSONL events and older
 `item.item_type` events. Spawn errors, stderr/non-zero exits, authentication or
 argument failures, and successful runs with no assistant message are surfaced
-as failed turns; native resume fallback is attempted at most once.
+as failed turns; native resume fallback is attempted at most once. A Codex
+`turn.failed` event is classified from its reported detail, so request timeouts
+appear as `timeout` rather than a generic adapter failure. The run banner names
+the failed participant and follows the newest terminal turn, preventing an
+earlier failure from hiding a later successful reply. Open-discussion follow-up
+bids replace the same agent's derived bid row for that epoch while the
+append-only event log retains every bid revision.
 
 Shared-session modes are enforced by the scheduler. Addressed prompts only ask
 the selected agents to bid; `noConsecutive` uses the actual last speaker id;

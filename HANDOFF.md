@@ -6,6 +6,13 @@ Working handoff for an agent picking up **Quorum**. Current as of **2026-07-15**
 
 ## Current State For The Next Agent
 
+### 2026-07-15 Codex timeout and follow-up bid recovery
+
+- The user was correct that Codex, not Claude Code, failed in `session-mrlkcmvc`. Claude Code completed in 43.1 seconds with one message; Codex then failed after 50.7 seconds with `Reconnecting... 2/5 (request timed out)` and zero outputs; DeepSeek completed afterward in 29.9 seconds with one message.
+- Two Quorum bugs obscured that sequence. The run banner preferred any earlier `turn_failed` over a later `turn_completed`, and did not name the failed speaker. It now evaluates the newest terminal turn after the human prompt and prefixes failure detail with the participant display name.
+- After DeepSeek completed, the open-discussion scheduler accepted another Codex bid in the same epoch, but the SQLite projection's unique `(session_id, epoch, agent_id)` index rejected the new bid id. The append-only event log was intact, but the projection error left the room in `collecting_bids`. The derived bid row now atomically replaces the prior revision and clears its settled state; all bid events remain authoritative in the event log.
+- Codex JSONL `turn.failed` detail now passes through the CLI failure classifier, so this failure is category `timeout` instead of `adapter_error`. Regression coverage checks terminal-turn ordering, same-epoch rebids, and Codex timeout classification.
+
 ### 2026-07-15 stable development credential store
 
 - Root cause of repeated DeepSeek setup was database identity, not provider authentication: the repository contained seven local Session/test SQLite files. The active daemon used `.quorum/webui-smoke.sqlite`, where DeepSeek/OpenAI/Zhipu were configured, while the normal `.quorum/quorum.sqlite` contained no provider rows. Switching launch commands therefore looked like credentials had been erased.

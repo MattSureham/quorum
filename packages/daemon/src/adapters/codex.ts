@@ -102,7 +102,10 @@ export class CodexAdapter extends BaseAgentAdapter {
             push({ type: "thinking", body: { text: "Native Codex thread resume failed; retrying with Quorum context bundle." } });
             break;
           }
-          push({ type: "system", body: { level: "error", text: ev.error?.message ?? "codex turn failed" } });
+          {
+            const detail = ev.error?.message ?? "codex turn failed";
+            push({ type: "system", body: { level: "error", text: detail, category: classifyCliFailure(detail), detail } });
+          }
           break;
         case "error":
           push({ type: "system", body: { level: "error", text: ev.message ?? "codex error" } });

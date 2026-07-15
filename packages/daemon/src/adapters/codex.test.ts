@@ -75,6 +75,19 @@ describe("CodexAdapter", () => {
     }));
   });
 
+  it("classifies a Codex turn.failed timeout", async () => {
+    const bin = await fakeCli(
+      `printf '%s\n' '{"type":"turn.failed","error":{"message":"Reconnecting... 2/5 (request timed out)"}}'`,
+      `echo {"type":"turn.failed","error":{"message":"Reconnecting... 2/5 (request timed out)"}}`,
+    );
+    const adapter = new CodexAdapter(input().self, { bin, sandbox: "read-only" });
+    const events = await collect(adapter);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "system",
+      body: expect.objectContaining({ level: "error", category: "timeout", text: expect.stringContaining("request timed out") }),
+    }));
+  });
+
   it("falls back from native resume only once", async () => {
     const bin = await fakeCli(
       `case " $* " in\n  *" resume "*) echo 'native thread missing' >&2; exit 9 ;;\n  *) printf '%s\\n' '{"type":"thread.started","thread_id":"thread-2"}' '{"type":"item.completed","item":{"type":"agent_message","text":"rebuilt"}}';;\nesac`,

@@ -110,6 +110,51 @@ describe("SqliteStore", () => {
     }
   });
 
+  it("replaces a settled agent bid when the same epoch reopens for follow-up", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "quorum-sqlite-rebid-"));
+    const dbPath = join(dir, "quorum.sqlite");
+    const store = new SqliteStore(dbPath);
+    const log = new EventLog("session-rebid", store);
+    const bid = (bidId: string, revision: number) => ({
+      author: { kind: "agent" as const, id: "codex", display: "Codex" },
+      type: "bid_submitted" as const,
+      body: {
+        bid: {
+          bidId,
+          agentId: "codex",
+          epoch: 1,
+          kind: "answer",
+          confidence: 0.8,
+          createdAtSeq: revision + 1,
+          expiresAfterRound: 2,
+          revision,
+        },
+      },
+      visibility: "debug" as const,
+    });
+
+    await log.append(bid("bid-1", 0));
+    await log.append({
+      author: { kind: "system", id: "session", display: "SessionManager" },
+      type: "bid_settled",
+      body: { bidId: "bid-1", action: "confirmed" },
+      visibility: "debug",
+    });
+    await log.append(bid("bid-2", 1));
+    store.close();
+
+    const db = new Database(dbPath);
+    try {
+      const rows = db.prepare("SELECT bid_id, status, created_seq, settled_seq, revision FROM bids WHERE session_id=?").all("session-rebid") as any[];
+      const eventCount = db.prepare("SELECT COUNT(*) AS count FROM events WHERE room_id=? AND type='bid_submitted'").get("session-rebid") as any;
+      expect(rows).toEqual([{ bid_id: "bid-2", status: "submitted", created_seq: 3, settled_seq: null, revision: 1 }]);
+      expect(eventCount.count).toBe(2);
+    } finally {
+      db.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("migrates an existing legacy events table without losing replay", async () => {
     const dir = await mkdtemp(join(tmpdir(), "quorum-sqlite-legacy-"));
     const dbPath = join(dir, "legacy.sqlite");

@@ -2,6 +2,13 @@
 
 给接手 **Quorum** 的下一个 agent 的工作交接。截至 **2026-07-15**，以 `main` 当前 HEAD 为准。English version: [`HANDOFF.md`](./HANDOFF.md)。
 
+## 2026-07-15 Codex 超时与 follow-up bid 恢复
+
+- 用户判断正确：`session-mrlkcmvc` 中失败的是 Codex，不是 Claude Code。Claude Code 用时约 43.1 秒并输出一条消息；Codex 随后运行约 50.7 秒，以 `Reconnecting... 2/5 (request timed out)` 失败且零输出；DeepSeek 之后约 29.9 秒成功输出一条消息。
+- 两个 Quorum 问题掩盖了真实顺序。运行横幅过去会让任意较早的 `turn_failed` 压过之后的 `turn_completed`，且不显示失败者。现在只依据当前 human prompt 之后最新的 turn 终态，并在失败原因前显示参与者名称。
+- DeepSeek 完成后，开放讨论调度器在同一 epoch 收到 Codex 的新 bid；SQLite 派生表的唯一 `(session_id, epoch, agent_id)` 索引却拒绝新 bid id，导致房间停在 `collecting_bids`。现在同 agent/epoch 的新 revision 会原子替换旧派生行并清除 settled 状态；append-only event log 仍保留全部 bid 事件。
+- Codex JSONL `turn.failed` 现在经过 CLI failure classifier，这次错误会归类为 `timeout`，不再是笼统的 `adapter_error`。新增回归覆盖终态先后顺序、同 epoch 重复 bid 和 Codex 超时分类。
+
 ## 2026-07-15 开发环境固定 credential 存储
 
 - DeepSeek 反复要求配置的根因是数据库身份，而不是 provider 鉴权：仓库中实际存在七份本地 Session/测试 SQLite。当前 daemon 使用 `.quorum/webui-smoke.sqlite`，其中配置了 DeepSeek/OpenAI/智谱；正常默认 `.quorum/quorum.sqlite` 却没有 provider row。切换启动命令后便看起来像 key 被清空。
