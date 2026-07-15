@@ -1,11 +1,9 @@
-import { spawn, execFile } from "node:child_process";
+import { spawn } from "node:child_process";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { promisify } from "node:util";
 import type { RoomEvent } from "@quorum/protocol";
 
-const exec = promisify(execFile);
 const sidecarName = process.platform === "win32" ? "quorum-sidecar.exe" : "quorum-sidecar";
 const DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const DOCX_BASE64 = "UEsDBBQAAAAIAAKO71x5bjPX6AAAAK0BAAATABwAW0NvbnRlbnRfVHlwZXNdLnhtbFVUCQADU1dXalNXV2p1eAsAAQT1AQAABBQAAAB9UMlOwzAQ/RVrrihx4IAQitMDyxE4lA8Y2ZPEqjd53NL+PU5bekCF48xb9frV3juxo8w2BgW3bQeCgo7GhknB5/q1eQDBBYNBFwMpOBDDaujXh0QsqjawgrmU9Cgl65k8chsThYqMMXss9cyTTKg3OJG867p7qWMoFEpTFg8Y+mcaceuKeNnX96lHJscgnk7EJUsBpuSsxlJxuQvmV0pzTmir8sjh2Sa+qQSQVxMW5O+As+69DpOtIfGBubyhryz5FbORJuqtr8r2f5srPeM4Wk0X/eKWctTEXBf3rr0gHm346S+Pcw/fUEsDBAoAAAAAAAKO71wAAAAAAAAAAAAAAAAGABwAX3JlbHMvVVQJAANTV1dqU1dXanV4CwABBPUBAAAEFAAAAFBLAwQUAAAACAACju9cm/036q0AAAApAQAACwAcAF9yZWxzLy5yZWxzVVQJAANTV1dqU1dXanV4CwABBPUBAAAEFAAAAI3POw7CMAwG4KtE3mlaBoRQ0y4IqSsqB7ASN61oHkrCo7cnAwNFDIy2f3+W6/ZpZnanECdnBVRFCYysdGqyWsClP232wGJCq3B2lgQsFKFt6jPNmPJKHCcfWTZsFDCm5A+cRzmSwVg4TzZPBhcMplwGzT3KK2ri27Lc8fBpwNpknRIQOlUB6xdP/9huGCZJRydvhmz6ceIrkWUMmpKAhwuKq3e7yCzwpuarF5sXUEsDBAoAAAAAAAKO71wAAAAAAAAAAAAAAAAFABwAd29yZC9VVAkAA1NXV2pTV1dqdXgLAAEE9QEAAAQUAAAAUEsDBBQAAAAIAAKO71y5oAWDxQAAACIBAAARABwAd29yZC9kb2N1bWVudC54bWxVVAkAA1NXV2pTV1dqdXgLAAEE9QEAAAQUAAAAbY/NTsQwDIRfJcqdpnBAqGq7BxBXQIDE1SSmrWjsyE7p7tuTLAckxGUs/8yncX84xtV8oejCNNjLprUGyXNYaBrs68v9xY01moECrEw42BOqPYz93gX2W0TKpgBIu32wc86pc079jBG04YRUdh8sEXJpZXI7S0jCHlULP67uqm2vXYSFbEW+czjVmqpIlTw+bSxbNHcPt28Gj1nA55LUFNKn9q5eVJWzpr/mZ/RMwSQQmATS3PzrUPT5Udx58BPB/b43fgNQSwECHgMUAAAACAACju9ceW4z1+gAAACtAQAAEwAYAAAAAAABAAAApIEAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFVUBQADU1dXanV4CwABBPUBAAAEFAAAAFBLAQIeAwoAAAAAAAKO71wAAAAAAAAAAAAAAAAGABgAAAAAAAAAEADtQTUBAABfcmVscy9VVAUAA1NXV2p1eAsAAQT1AQAABBQAAABQSwECHgMUAAAACAACju9cm/036q0AAAApAQAACwAYAAAAAAABAAAApIF1AQAAX3JlbHMvLnJlbHNVVAUAA1NXV2p1eAsAAQT1AQAABBQAAABQSwECHgMKAAAAAAACju9cAAAAAAAAAAAAAAAABQAYAAAAAAAAABAA7UFnAgAAd29yZC9VVAUAA1NXV2p1eAsAAQT1AQAABBQAAABQSwECHgMUAAAACAACju9cuaAFg8UAAAAiAQAAEQAYAAAAAAABAAAApIGmAgAAd29yZC9kb2N1bWVudC54bWxVVAUAA1NXV2p1eAsAAQT1AQAABBQAAABQSwUGAAAAAAUABQCYAQAAtgMAAAAA";
@@ -132,7 +130,7 @@ function roundTrip(handshake: Handshake): Promise<RoomEvent[]> {
   });
 }
 
-await exec("tsx", ["scripts/build-sidecar-bun.ts"], { cwd: process.cwd() });
+await import("./build-sidecar-bun.js");
 
 const dir = await mkdtemp(join(tmpdir(), "quorum-bun-sidecar-smoke-"));
 const proc = spawn(resolve("dist-sidecar/bun", sidecarName), [], {

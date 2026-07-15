@@ -1,11 +1,8 @@
-import { spawn, execFile } from "node:child_process";
+import { spawn } from "node:child_process";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { promisify } from "node:util";
 import type { RoomEvent } from "@quorum/protocol";
-
-const exec = promisify(execFile);
 
 interface Handshake {
   port: number;
@@ -60,7 +57,7 @@ function roundTrip(handshake: Handshake): Promise<RoomEvent[]> {
   });
 }
 
-await exec("tsx", ["scripts/build-sidecar-node.ts"], { cwd: process.cwd() });
+await import("./build-sidecar-node.js");
 
 const dir = await mkdtemp(join(tmpdir(), "quorum-node-sidecar-smoke-"));
 const proc = spawn(resolve("dist-sidecar/node/quorum-sidecar"), [], {
