@@ -8,7 +8,7 @@
 - 直接运行本机 `codex exec` 复现了同一个 JSONL `error`，但 CLI 随后继续重试、发出 WebSocket 降级 HTTPS 的通知，并最终正常返回 `OK`。Quorum 过去把第一个可恢复 `error` 错当成终局失败；现在它会被记录为非聊天 transport notice，并继续等待 assistant message。只有 `turn.failed`、进程非零退出、deadline 或最终空输出才判失败；fake CLI 回归覆盖“重连后成功”。
 - 模型把问题理解成 Quorum 相关，是 host 主动注入造成的，不是跨 Session 记忆恢复。该房间的 workspace 是 `/Users/matthew/Projects/quorum`；每个 turn 都收到标题为 `Quorum Context Bundle` 的 bundle，里面重复产品名与路径；Claude Code 还以该仓库为 `cwd`。DeepSeek 随后又在同一 Session transcript 中看到了 Claude 已经 Quorum 化的首轮回答。该房间没有 shared memory，也没有 long-term memory；唯一 working summary 到 `#96` 才生成。
 - continuity bundle 现改为中性的 shared Session metadata，并明确 host/application 名称、participant id、Session metadata 和 workspace path 都不是用户话题；除非 human prompt 明说，否则禁止推断问题与 host 或 workspace 项目有关。未选择 workspace 时，Codex/Claude Code 会在 OS 临时目录中的独立 Session 目录运行，不再偷偷继承 daemon 的 Quorum 仓库 cwd。
-- New Session 不再自动填入当前房间的 workspace path；项目目录必须由用户显式选择，避免从 Quorum 项目房间发起通用讨论时继续继承该仓库上下文。
+- New Session 不再自动填入当前房间的 workspace path；项目目录必须由用户显式选择，避免从 Quorum 项目房间发起通用讨论时继续继承该仓库上下文。Windows Packages run [29398330270](https://github.com/MattSureham/quorum/actions/runs/29398330270) 已在 `d20acce` 上全绿，包括 115 项测试、Web/Bun、NSIS、portable 布局验证和全部 artifact 上传。
 - 真实端到端验证创建了一个无 workspace 的临时 Codex-only Session，并询问通用的 agent 熵增问题。Codex 经历 transport 重试后成功返回一句通用回答、写入 `turn_completed`，没有提到 Quorum 或代码库；临时 Session 随后已删除。
 - 本地已通过 typecheck、`115/115`、Web production build、shared/source/Node/Bun sidecar smokes 和 Rust `cargo check`。Windows Packages run [29397682665](https://github.com/MattSureham/quorum/actions/runs/29397682665) 已在 `605ea77` 上全绿：115 项测试、Bun/Web、未签名 NSIS、portable 组装/布局验证和全部 artifact 上传均通过。当前机器没有完整 Xcode，因此未重跑 macOS bundle。
 
