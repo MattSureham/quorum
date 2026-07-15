@@ -285,6 +285,38 @@ describe("SessionManager", () => {
     }
   });
 
+  it("closes an orphaned agent turn and normalizes the phase after restart", async () => {
+    const store = new InMemoryStore();
+    const before = new EventLog("room", store);
+    const author = { kind: "system" as const, id: "session", display: "SessionManager" };
+    await before.append({ author, type: "phase_changed", body: { from: "idle", to: "collecting_bids", epoch: 1 } });
+    await before.append({ author, type: "phase_changed", body: { from: "collecting_bids", to: "arbitrating", epoch: 1 } });
+    await before.append({ author, type: "phase_changed", body: { from: "arbitrating", to: "speaker_granted", turnId: "turn-1", speakerId: "agent" } });
+    await before.append({ author, type: "phase_changed", body: { from: "speaker_granted", to: "speaking", turnId: "turn-1", speakerId: "agent" } });
+    await before.append({ author, type: "turn_started", body: { turnId: "turn-1", speakerId: "agent", generation: 7 }, turnId: "turn-1" });
+
+    const after = new EventLog("room", store);
+    const restarted = new SessionManager({
+      sessionId: "room",
+      title: "Restart recovery",
+      log: after,
+      agents: [new StubSpeaker("agent")],
+    });
+    restarted.start();
+    try {
+      await waitFor(() => after.replay(0).some((event) => event.type === "phase_changed" && (event.body as any).recovered));
+
+      const events = after.replay(0);
+      const failure = events.find((event) => event.type === "turn_failed");
+      expect((failure?.body as any).failure).toMatchObject({ category: "daemon_restart" });
+      expect(events.some((event) => event.type === "floor_release" && (event.body as any).reason === "daemon_restart")).toBe(true);
+      expect(projectSessionState(events)).toMatchObject({ phase: "idle", activeTurn: undefined, lastTurnId: "turn-1" });
+      expect(restarted.snapshot()).toMatchObject({ phase: "idle", activeTurn: undefined, lastTurnId: "turn-1" });
+    } finally {
+      await restarted.stop();
+    }
+  });
+
   it("records structured adapter failures as failed turns", async () => {
     const log = new EventLog("room", new InMemoryStore());
     const session = new SessionManager({

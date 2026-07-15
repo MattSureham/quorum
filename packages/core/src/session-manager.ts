@@ -67,6 +67,11 @@ interface PendingPrompt {
   eventSeq: number;
 }
 
+interface InterruptedRuntimeState {
+  phase: SessionPhase;
+  activeTurn?: { turnId: string; speakerId: string; generation: number };
+}
+
 const systemAuthor = { kind: "system" as const, id: "session", display: "SessionManager" };
 const CONTEXT_EVENT_TYPES = new Set<RoomEvent["type"]>([
   "message",
@@ -114,6 +119,7 @@ export class SessionManager {
   private humanWriteLease?: WriteLease;
   private readonly pendingToolApprovals = new Map<string, { tool: string; resolve: (allow: boolean) => void }>();
   private lastCompactedSeq = 0;
+  private interruptedRuntime?: InterruptedRuntimeState;
 
   constructor(private readonly opts: SessionManagerOptions) {
     for (const agent of opts.agents) this.byId.set(agent.id, agent);
@@ -124,6 +130,11 @@ export class SessionManager {
       this.epoch = projected.epoch;
       this.lastTurnId = projected.lastTurnId;
       this.lastSpeakerId = projected.lastSpeakerId;
+      if (projected.phase === "paused" || projected.phase === "ended") {
+        this.phase = projected.phase;
+      } else if (projected.phase !== "idle") {
+        this.interruptedRuntime = { phase: projected.phase, activeTurn: projected.activeTurn };
+      }
       const activatedPromptSeqs = new Set(replay
         .filter((event) => event.type === "phase_changed" && typeof (event.body as any)?.promptSeq === "number")
         .map((event) => (event.body as any).promptSeq as number));
@@ -152,9 +163,48 @@ export class SessionManager {
 
   start(): void {
     this.running = true;
-    if (this.pendingPrompts.length) {
-      this.runInBackground("restore queued prompt", this.mailbox.enqueue("restoreQueuedPrompt", () => this.activateNextQueuedPrompt()));
+    if (this.interruptedRuntime || (this.pendingPrompts.length && this.phase === "idle")) {
+      this.runInBackground("restore session runtime", this.mailbox.enqueue("restoreSessionRuntime", async () => {
+        await this.recoverInterruptedRuntime();
+        if (this.pendingPrompts.length && this.phase === "idle") await this.activateNextQueuedPrompt();
+      }));
     }
+  }
+
+  private async recoverInterruptedRuntime(): Promise<void> {
+    const interrupted = this.interruptedRuntime;
+    if (!interrupted) return;
+    this.interruptedRuntime = undefined;
+
+    if (interrupted.activeTurn) {
+      const { turnId, speakerId, generation } = interrupted.activeTurn;
+      this.lastTurnId = turnId;
+      this.lastSpeakerId = speakerId;
+      this.lastTurnOutcome = "failed";
+      await this.append("turn_failed", {
+        turnId,
+        speakerId,
+        generation,
+        failure: {
+          category: "daemon_restart",
+          message: "The host stopped before this agent turn completed. The turn was not replayed to avoid duplicating tool or workspace side effects.",
+        },
+      }, "system", { turnId });
+      await this.append("floor_release", { turnId, reason: "daemon_restart" }, "system", { turnId });
+    }
+
+    await this.append("system", {
+      level: "warn",
+      text: `Recovered an interrupted ${interrupted.phase} runtime after host restart; the session is idle and ready to retry.`,
+      recovery: { from: interrupted.phase, to: "idle", reason: "daemon_restart" },
+    }, "system");
+    await this.append("phase_changed", {
+      from: interrupted.phase,
+      to: "idle",
+      reason: "host restarted; incomplete runtime state cleared",
+      recovered: true,
+    });
+    this.phase = "idle";
   }
 
   async stop(): Promise<void> {

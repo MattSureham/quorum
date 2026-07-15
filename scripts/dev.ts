@@ -1,13 +1,13 @@
 // One command to bring up a full local stack: the daemon (WS gateway on 8787)
-// and the web client (Vite on 5173). Ctrl-C — or either process dying — tears
-// the whole stack down, so no daemon is ever left orphaned on its fixed port.
+// and the web client (Vite on 5173). A crashed daemon is restarted while Vite
+// stays available, allowing the browser to reconnect without losing its UI.
 // Dependency-free: just node + the repo's tsx.
 import { spawn, type ChildProcess } from "node:child_process";
 
 const children: { name: string; proc: ChildProcess }[] = [];
 let stopping = false;
 
-function start(name: string, command: string, args: string[]): void {
+function start(name: string, command: string, args: string[], restartOnExit = false): void {
   // detached => each child leads its own process group, so on shutdown we can
   // signal the whole group (kill -pid) and also reach grandchildren (tsx->node,
   // pnpm->vite) instead of leaking them.
@@ -15,10 +15,18 @@ function start(name: string, command: string, args: string[]): void {
   children.push({ name, proc });
   proc.on("error", (err) => {
     console.error(`[dev] failed to start ${name}: ${err.message}`);
-    void stop(1);
   });
-  proc.on("exit", (code, signal) => {
+  proc.on("close", (code, signal) => {
+    const index = children.findIndex((child) => child.proc === proc);
+    if (index >= 0) children.splice(index, 1);
     if (stopping) return;
+    if (restartOnExit) {
+      console.error(`\n[dev] ${name} exited (${signal ?? code}) — restarting in 1s.`);
+      setTimeout(() => {
+        if (!stopping) start(name, command, args, true);
+      }, 1_000);
+      return;
+    }
     console.log(`\n[dev] ${name} exited (${signal ?? code}) — stopping the rest.`);
     void stop(typeof code === "number" ? code : 1);
   });
@@ -53,7 +61,7 @@ async function stop(code: number): Promise<void> {
 process.on("SIGINT", () => void stop(0));
 process.on("SIGTERM", () => void stop(0));
 
-start("daemon", "tsx", ["packages/cli/src/index.ts"]);
+start("daemon", "tsx", ["packages/cli/src/index.ts"], true);
 start("web", "pnpm", ["--filter", "@quorum/client-web", "dev"]);
 
-console.log("[dev] daemon -> ws://127.0.0.1:8787   web -> http://127.0.0.1:5173   (Ctrl-C stops both)");
+console.log("[dev] daemon -> ws://127.0.0.1:8787   web -> http://127.0.0.1:5173   (daemon auto-restarts; Ctrl-C stops both)");
