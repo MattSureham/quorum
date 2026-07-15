@@ -9,7 +9,7 @@
 - 每次凭据保存现在必须带 request id，成功与 `credential_error` 会按请求关联；每张 provider 卡片直接显示保存中、成功或错误。Bun compiled smoke 也会实际保存临时凭据、验证掩码并禁止原 key 泄露。
 - desktop/sidecar 握手升级到协议版本 2。混用不同 portable 构建中的 `Quorum.exe` 与 `sidecars\\quorum-sidecar.exe` 会被明确拒绝；portable README 要求完整替换解压目录，不能只覆盖主 exe。
 - 截图最可能的解释是新版 `Quorum.exe` 搭配旧 sidecar，但在拿到 Windows `%LOCALAPPDATA%\\dev.quorum.desktop\\sidecar.log` 和两个二进制 hash 前仍不能当作已证实根因。
-- 本地 typecheck、`102/102`、Web build、source/Bun/Node sidecar smoke、Rust check、compiled-sidecar SQLite 保存、UI 成功回执和 UI 超时错误路径均通过。本轮仍需新的 Windows Packages run 与真实机器复测。
+- 本地 typecheck、`102/102`、Web build、source/Bun/Node sidecar smoke、Rust check、compiled-sidecar SQLite 保存、UI 成功回执和 UI 超时错误路径均通过。Windows Packages run [29384116932](https://github.com/MattSureham/quorum/actions/runs/29384116932) 已在代码提交 `8d62e0e` 上全绿：测试、compiled Bun sidecar、Web UI、NSIS、portable 组装/布局验证和所有 artifact 上传均通过。仍需在全新空目录解压后进行真实 Windows 复测。
 
 ## 2026-07-14 独立验收状态
 
