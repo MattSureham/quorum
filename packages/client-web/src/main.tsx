@@ -994,7 +994,13 @@ function describeRunStatus({
   const failed = latestTurnFailedAfter(events, afterPromptSeq);
   const completed = latestTurnCompletedAfter(events, afterPromptSeq);
   const agentOutput = latestAgentOutputAfter(events, afterPromptSeq);
-  if (failed) return { state: "error", label: t("Turn failed"), detail: t("The latest agent turn failed. Check diagnostics for details."), lastEvent };
+  if (failed) {
+    const failure = (failed.body as any)?.failure;
+    const detail = typeof failure?.message === "string"
+      ? failure.message
+      : t("The latest agent turn failed. Check diagnostics for details.");
+    return { state: "error", label: t("Turn failed"), detail, lastEvent };
+  }
   if (pendingApproval) {
     return { state: "approval", label: t("Waiting approval"), detail: `${waitingPrefix}${t("Approve or deny the requested tool call:")} ${pendingApproval.tool}`, lastEvent };
   }
@@ -1260,7 +1266,26 @@ function App() {
     if (teardownRef.current) return;
     const attempt = attemptRef.current++;
     const delay = Math.min(15_000, 500 * 2 ** attempt);
-    reconnectTimerRef.current = setTimeout(() => connect(settingsRef.current, true), delay);
+    reconnectTimerRef.current = setTimeout(() => void reconnectCurrentRuntime(), delay);
+  }
+
+  async function reconnectCurrentRuntime() {
+    if (teardownRef.current) return;
+    try {
+      // In Tauri this asks Rust for the live sidecar connection. If the child
+      // exited, Rust starts a replacement and returns its new port/token.
+      const next = await resolveDesktopSettings(settingsRef.current);
+      if (teardownRef.current) return;
+      settingsRef.current = next;
+      setSettings(next);
+      setDraftSettings(next);
+      connect(next, true);
+    } catch (err) {
+      if (teardownRef.current) return;
+      setStatus("error");
+      setError(err instanceof Error ? err.message : "Failed to restart desktop sidecar");
+      scheduleReconnect();
+    }
   }
 
   function connect(next = settingsRef.current, resume = false) {
@@ -1423,9 +1448,10 @@ function App() {
           }
         }
       });
-      socket.addEventListener("close", () => {
+      socket.addEventListener("close", (event) => {
         if (wsRef.current !== socket || teardownRef.current) return; // replaced or intentional
         setStatus("offline");
+        setError(`Connection closed (${event.code})${event.reason ? `: ${event.reason}` : ""}; reconnecting`);
         scheduleReconnect();
       });
       socket.addEventListener("error", () => {
