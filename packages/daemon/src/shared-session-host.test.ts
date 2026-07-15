@@ -168,6 +168,7 @@ describe("SharedSessionHost", () => {
       expect(created.t).toBe("session_created");
       expect(created.room.id).toBe("second-room");
       expect(created.room.workspacePath).toBe(join(dir, "second-workspace"));
+      expect(created.room.policy.turnDeadlineMs).toBe(180_000);
       expect(created.rooms.map((item: Room) => item.id)).toEqual(["main-room", "second-room"]);
 
       ws.send(JSON.stringify({ t: "subscribe", roomId: "second-room", sinceSeq: 0 }));
