@@ -8,8 +8,9 @@
 - shared-session 对新建及持久化房间均设置至少 180 秒的 agent 执行期限。超时会写入 category 为 `timeout` 的结构化 `turn_failed`；所有候选都失败后回到 `idle`，不再静默循环收集 bid。Web 运行横幅会直接显示实际失败原因。
 - daemon 重启恢复会把悬空 turn 结算为 `daemon_restart` 失败、释放 floor、记录警告，并把瞬态 phase 收敛到 `idle`。不会自动重放中断的 agent turn，因为其中的工具或工作区写入可能已经产生副作用；持久化的 `paused`/`ended` 状态保持不变。
 - WebSocket 断开时会显示 close code/reason。Tauri 客户端重连前会重新调用 `get_sidecar_connection`，由 Rust 在需要时拉起新的 sidecar。`pnpm dev` 现在会保留 Vite，并在 daemon 意外退出后一秒自动重启 daemon。
-- 已使用保存的 DeepSeek credential、`deepseek-v4-pro` profile 和同一个问题进行独立真实调用，约 5.1 秒得到回答；过程中没有输出或提交原始 key。这证明当前 provider/key/model 链路可用，但不能反推此前三个 30 秒窗口为何都没有输出。
-- 本地已通过 `pnpm typecheck`、`104/104`、Web production build、shared/source/Node/Bun sidecar smokes 和 Rust `cargo check`。Node fallback smoke 只在与全套测试并发时超过一次 5 秒握手窗口，单独重跑 2.8 秒通过。当前 in-app browser runtime 没有可连接浏览器，因此本轮有协议/集成验证，但尚无新的点击式浏览器验收；这些提交仍待新的 Windows Packages workflow。
+- 先使用保存的 DeepSeek credential、`deepseek-v4-pro` profile 和同一个问题做了独立真实调用，约 5.1 秒得到回答；随后通过 live gateway 的 `create_session -> subscribe -> post_message` 完整路径再次收到 DeepSeek 完整回复，并删除临时 Session。过程中没有输出或提交原始 key。这证明当前 provider/key/model 与 shared-session 消息链路可用，但不能反推此前三个 30 秒窗口为何都没有输出。
+- daemon 自动恢复已人工通过：只终止 daemon 进程组后，Vite 仍监听 `5173`；`scripts/dev.ts` 一秒后拉起新 daemon，`8787` 由新进程恢复监听，新 WebSocket 客户端可继续列出持久化房间。
+- 本地已通过 `pnpm typecheck`、`104/104`、Web production build、shared/source/Node/Bun sidecar smokes 和 Rust `cargo check`。Node fallback smoke 只在与全套测试并发时超过一次 5 秒握手窗口，单独重跑 2.8 秒通过。当前 in-app browser runtime 没有可连接浏览器，因此本轮有真实 gateway/集成验证，但尚无新的点击式浏览器验收。Windows Packages run [29385964268](https://github.com/MattSureham/quorum/actions/runs/29385964268) 已在 `3c144ba` 上全绿：104 项测试、Bun/Web、未签名 NSIS、portable 组装/布局验证和所有 artifact 上传均通过；真实 Windows portable 体验仍属于人工发布验收。
 
 ## 2026-07-15 Windows credential 保存跟进
 
