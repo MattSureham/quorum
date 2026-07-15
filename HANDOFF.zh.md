@@ -8,6 +8,7 @@
 - 两个 Quorum 问题掩盖了真实顺序。运行横幅过去会让任意较早的 `turn_failed` 压过之后的 `turn_completed`，且不显示失败者。现在只依据当前 human prompt 之后最新的 turn 终态，并在失败原因前显示参与者名称。
 - DeepSeek 完成后，开放讨论调度器在同一 epoch 收到 Codex 的新 bid；SQLite 派生表的唯一 `(session_id, epoch, agent_id)` 索引却拒绝新 bid id，导致房间停在 `collecting_bids`。现在同 agent/epoch 的新 revision 会原子替换旧派生行并清除 settled 状态；append-only event log 仍保留全部 bid 事件。
 - Codex JSONL `turn.failed` 现在经过 CLI failure classifier，这次错误会归类为 `timeout`，不再是笼统的 `adapter_error`。新增回归覆盖终态先后顺序、同 epoch 重复 bid 和 Codex 超时分类。
+- 本地已通过 typecheck、`110/110`、Web production build、shared/source/Node/Bun sidecar smokes 和 Rust `cargo check`。当前 in-app browser 没有可用实例，因此 UI 行为通过纯状态测试与受影响持久化房间的真实 WebSocket replay 验证。Windows Packages run [29389046867](https://github.com/MattSureham/quorum/actions/runs/29389046867) 已在 `1da49e8` 上全绿：110 项测试、Bun/Web、未签名 NSIS、portable 组装/布局校验和全部 artifact 上传均通过。
 
 ## 2026-07-15 开发环境固定 credential 存储
 
