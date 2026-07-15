@@ -235,7 +235,7 @@ export class SessionManager {
     const next = this.pendingPrompts.shift();
     if (!next) return;
     await this.activatePrompt(next);
-    if (!this.isRoundRobin()) void this.collectAndMaybeArbitrate(next.text);
+    if (!this.isRoundRobin()) this.runInBackground("collect bids for queued prompt", this.collectAndMaybeArbitrate(next.text));
   }
 
   async submitBid(bid: Bid): Promise<void> {
@@ -270,7 +270,7 @@ export class SessionManager {
     this.humanHoldsWriteFloor = false;
     this.humanWriteLease?.release();
     this.humanWriteLease = undefined;
-    void this.append("system", { level: "info", text: `write floor released — ${reason}` }, "system");
+    this.runInBackground("record write floor release", this.append("system", { level: "info", text: `write floor released — ${reason}` }, "system"));
     this.runInBackground("resume after write floor", this.mailbox.enqueue("writeFloorReleased", () => this.continueAfterWriteFloor()));
   }
 
