@@ -6,6 +6,14 @@ Working handoff for an agent picking up **Quorum**. Current as of **2026-07-15**
 
 ## Current State For The Next Agent
 
+### 2026-07-15 stable development credential store
+
+- Root cause of repeated DeepSeek setup was database identity, not provider authentication: the repository contained seven local Session/test SQLite files. The active daemon used `.quorum/webui-smoke.sqlite`, where DeepSeek/OpenAI/Zhipu were configured, while the normal `.quorum/quorum.sqlite` contained no provider rows. Switching launch commands therefore looked like credentials had been erased.
+- `pnpm dev` now sets a stable absolute `QUORUM_CREDENTIAL_DB_PATH` at `.quorum/credentials.sqlite`, independently of `QUORUM_DB_PATH`. Both shared and legacy hosts read/write provider credentials through this store; sidecar/direct launches can opt in with the same environment variable. Desktop/portable behavior remains unchanged because Tauri already uses one stable OS app-data database.
+- On first use of a dedicated credential store, missing provider rows are copied from the selected Session database. Existing canonical rows win, so an older test DB cannot overwrite a configured key. The user's existing DeepSeek/OpenAI/Zhipu rows were migrated locally without printing raw values; no credential database is tracked by Git or included in artifacts.
+- A new shared-host regression starts with a credential in one Session DB, migrates it, switches to a fresh second Session DB, and confirms the masked DeepSeek credential remains available while the second Session DB has no provider rows. Startup logs now display both Session DB and credential DB paths.
+- Local verification passes typecheck, `105/105` tests, Web production build, shared/source/Node/Bun sidecar smokes, and Rust `cargo check`. A fresh Windows Packages run is still pending for this credential-store change.
+
 ### 2026-07-15 no-reply/disconnect reliability follow-up
 
 - The reported room (`session-mrlhfbcu`) was reconstructed from `.quorum/webui-smoke.sqlite`. Claude Code, Codex, and DeepSeek all bid successfully, then each turn hit the inherited 30-second deadline with zero output. Those deadlines were recorded as cancellations, and the scheduler reopened a follow-up bid round, leaving event `#39` at `collecting_bids`; this explains the no-reply/stuck UI. The old dev process restarted later, but its stdout was unavailable, so the exact process-exit trigger is not claimed as proven.

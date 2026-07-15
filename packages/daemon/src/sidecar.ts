@@ -49,6 +49,7 @@ const room: Room = {
 
 const host = await startSharedSessionRoom(room, {
   dbPath: process.env.QUORUM_DB_PATH,
+  credentialDbPath: process.env.QUORUM_CREDENTIAL_DB_PATH,
   port: 0,
   authToken: token,
 });

@@ -1,7 +1,7 @@
 import { EventLog, Conductor, freeForAll, directed, makeModerated } from "@quorum/core";
 import type { Participant, ConductorPolicy } from "@quorum/core";
 import type { Room, ConductorPolicyConfig } from "@quorum/protocol";
-import { SqliteStore } from "./persistence/sqlite-store.js";
+import { openCredentialStore, SqliteStore } from "./persistence/sqlite-store.js";
 import { GitWorkspace } from "./workspace/git-workspace.js";
 import { Gateway, type GatewayDeps } from "./gateway/ws-server.js";
 import { createParticipant } from "./adapters/registry.js";
@@ -24,9 +24,10 @@ export interface RoomHost {
 }
 
 /** Wire store -> log -> conductor -> participants -> workspace -> gateway for one room. */
-export async function startRoom(room: Room, opts: { dbPath?: string; port?: number } = {}): Promise<RoomHost> {
+export async function startRoom(room: Room, opts: { dbPath?: string; credentialDbPath?: string; port?: number } = {}): Promise<RoomHost> {
   const store = new SqliteStore(opts.dbPath);
-  store.applyProviderConfigsToEnv();
+  const credentialStore = openCredentialStore(store, opts.dbPath, opts.credentialDbPath);
+  credentialStore.applyProviderConfigsToEnv();
   const log = new EventLog(room.id, store);
 
   const participants: Participant[] = room.participants
@@ -72,8 +73,8 @@ export async function startRoom(room: Room, opts: { dbPath?: string; port?: numb
       approveTool: (callId, allow) => conductor.resolveToolApproval(callId, allow),
       takeWriteFloor: () => conductor.takeWriteFloor(),
       releaseWriteFloor: () => conductor.releaseWriteFloor(),
-      listCredentials: () => store.readProviderConfigViews(),
-      setCredential: (input: Parameters<NonNullable<GatewayDeps["setCredential"]>>[0]) => store.upsertProviderConfig(input),
+      listCredentials: () => credentialStore.readProviderConfigViews(),
+      setCredential: (input: Parameters<NonNullable<GatewayDeps["setCredential"]>>[0]) => credentialStore.upsertProviderConfig(input),
       rollback: ws
         ? async (toHead) => {
             // Serialize behind any active edit, then reset, then announce (SPEC §7.4).
@@ -103,6 +104,7 @@ export async function startRoom(room: Room, opts: { dbPath?: string; port?: numb
       unwatch?.();
       await conductor.stop();
       await gateway.close();
+      if (credentialStore !== store) credentialStore.close();
       store.close();
     },
   };

@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import type { Room, RoomEvent, SharedMemoryCommand, WriteResult } from "@quorum/protocol";
 import type { MemorySummary } from "@quorum/protocol";
 import type { EventStore } from "@quorum/core";
@@ -36,6 +36,7 @@ export interface SessionRow {
 }
 
 const require = createRequire(import.meta.url);
+export const DEFAULT_SQLITE_PATH = ".quorum/quorum.sqlite";
 
 interface SqliteDb {
   pragma?(source: string): unknown;
@@ -73,7 +74,7 @@ function json(value: unknown): string {
 export class SqliteStore implements EventStore {
   private readonly db: SqliteDb;
 
-  constructor(path = ".quorum/quorum.sqlite") {
+  constructor(path = DEFAULT_SQLITE_PATH) {
     mkdirSync(dirname(path), { recursive: true });
     this.db = openDatabase(path);
     this.db.pragma?.("journal_mode = WAL");
@@ -603,4 +604,26 @@ export class SqliteStore implements EventStore {
       .prepare("UPDATE sessions SET head_seq=?, updated_at=? WHERE session_id=?")
       .run(e.seq, e.ts, e.roomId);
   }
+}
+
+/**
+ * Keep provider credentials stable when a developer swaps the session/event DB.
+ * Existing provider rows are copied only when the dedicated store has no row,
+ * so an old test database can never overwrite the canonical credential value.
+ */
+export function openCredentialStore(
+  sessionStore: SqliteStore,
+  sessionDbPath?: string,
+  credentialDbPath?: string,
+): SqliteStore {
+  if (!credentialDbPath || resolve(credentialDbPath) === resolve(sessionDbPath ?? DEFAULT_SQLITE_PATH)) {
+    return sessionStore;
+  }
+  const credentialStore = new SqliteStore(credentialDbPath);
+  for (const view of sessionStore.readProviderConfigViews()) {
+    if (credentialStore.readProviderConfig(view.providerId)) continue;
+    const config = sessionStore.readProviderConfig(view.providerId);
+    if (config) credentialStore.upsertProviderConfig(config);
+  }
+  return credentialStore;
 }

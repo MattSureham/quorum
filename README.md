@@ -60,6 +60,8 @@ QUORUM_SESSION_KERNEL=shared pnpm dev
 `pnpm dev` keeps Vite running and automatically restarts the local daemon if it
 exits unexpectedly. The Web client reconnects to the current runtime; the Tauri
 client also asks the desktop host to restart a dead sidecar before reconnecting.
+Development credentials use the stable `.quorum/credentials.sqlite` store even
+when `QUORUM_DB_PATH` selects a different session/event database.
 
 To test the Web UI without Claude/Codex credentials, run the shared kernel with
 the deterministic echo config:
@@ -409,11 +411,16 @@ credentials remain managed by their own CLIs and are not stored by Quorum.
 
 Credential saving is available in both the legacy conductor and shared-session
 daemon entrypoints. Save failures are shown inside the credential modal instead
-of being hidden behind it. `QUORUM_DB_PATH` is honored by both kernels, so a
-development, desktop, or portable instance consistently reads and writes the
-database selected for that instance. Credentials do not automatically migrate
-between different databases or machines, and packaged artifacts never include
-the developer's local keys.
+of being hidden behind it. `QUORUM_DB_PATH` selects session/event data in both
+kernels. `pnpm dev` separately defaults `QUORUM_CREDENTIAL_DB_PATH` to
+`.quorum/credentials.sqlite`, so changing a test Session database no longer
+makes configured providers disappear. On first use, missing provider rows are
+copied from the selected legacy Session database; an existing row in the stable
+credential store is never overwritten by an older test database. Direct daemon
+launches may set `QUORUM_CREDENTIAL_DB_PATH` explicitly. Desktop and portable
+builds keep their single stable database in the OS app-data directory. Keys do
+not migrate between machines, and packaged artifacts never contain developer
+credentials.
 
 Each credential save now carries a request id and shows `Saving`, `Saved`, or a
 specific failure directly inside that provider card. If no sidecar response is

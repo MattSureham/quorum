@@ -3,15 +3,20 @@
 // stays available, allowing the browser to reconnect without losing its UI.
 // Dependency-free: just node + the repo's tsx.
 import { spawn, type ChildProcess } from "node:child_process";
+import { resolve } from "node:path";
 
 const children: { name: string; proc: ChildProcess }[] = [];
 let stopping = false;
+const childEnv = {
+  ...process.env,
+  QUORUM_CREDENTIAL_DB_PATH: process.env.QUORUM_CREDENTIAL_DB_PATH ?? resolve(".quorum/credentials.sqlite"),
+};
 
 function start(name: string, command: string, args: string[], restartOnExit = false): void {
   // detached => each child leads its own process group, so on shutdown we can
   // signal the whole group (kill -pid) and also reach grandchildren (tsx->node,
   // pnpm->vite) instead of leaking them.
-  const proc = spawn(command, args, { stdio: "inherit", env: process.env, detached: true });
+  const proc = spawn(command, args, { stdio: "inherit", env: childEnv, detached: true });
   children.push({ name, proc });
   proc.on("error", (err) => {
     console.error(`[dev] failed to start ${name}: ${err.message}`);
@@ -65,3 +70,4 @@ start("daemon", "tsx", ["packages/cli/src/index.ts"], true);
 start("web", "pnpm", ["--filter", "@quorum/client-web", "dev"]);
 
 console.log("[dev] daemon -> ws://127.0.0.1:8787   web -> http://127.0.0.1:5173   (daemon auto-restarts; Ctrl-C stops both)");
+console.log(`[dev] credentials -> ${childEnv.QUORUM_CREDENTIAL_DB_PATH}`);

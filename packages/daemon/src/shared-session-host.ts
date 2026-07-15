@@ -9,7 +9,7 @@ import { promisify } from "node:util";
 import { createParticipant } from "./adapters/registry.js";
 import { safeWindowsBinary } from "./adapters/cli-safety.js";
 import { Gateway, type GatewayDeps, type GatewaySessionDeps } from "./gateway/ws-server.js";
-import { SqliteStore } from "./persistence/sqlite-store.js";
+import { openCredentialStore, SqliteStore } from "./persistence/sqlite-store.js";
 import { createLocalSandboxToolExecutor } from "./tools/local-sandbox-executor.js";
 import { GitWorkspace } from "./workspace/git-workspace.js";
 
@@ -184,10 +184,11 @@ async function listWorkspaceDirectories(inputPath?: string): Promise<{
  */
 export async function startSharedSessionRoom(
   room: Room,
-  opts: { dbPath?: string; port?: number; authToken?: string } = {},
+  opts: { dbPath?: string; credentialDbPath?: string; port?: number; authToken?: string } = {},
 ): Promise<SharedSessionHost> {
   const store = new SqliteStore(opts.dbPath);
-  store.applyProviderConfigsToEnv();
+  const credentialStore = openCredentialStore(store, opts.dbPath, opts.credentialDbPath);
+  credentialStore.applyProviderConfigsToEnv();
   const managed = new Map<string, ManagedSharedSession>();
   const workspaceCoordinators = new Map<string, SharedWorkspaceCoordinator>();
 
@@ -307,8 +308,8 @@ export async function startSharedSessionRoom(
       interrupt: (hard) => session.interrupt(humans[0]?.id ?? "human", hard),
       approveTool: (callId, allow) => session.approveTool(callId, allow),
       compactMemory: (fromSeq, toSeq) => session.compactWorkingMemory(fromSeq, toSeq),
-      listCredentials: () => store.readProviderConfigViews(),
-      setCredential: (input: Parameters<NonNullable<GatewayDeps["setCredential"]>>[0]) => store.upsertProviderConfig(input),
+      listCredentials: () => credentialStore.readProviderConfigViews(),
+      setCredential: (input: Parameters<NonNullable<GatewayDeps["setCredential"]>>[0]) => credentialStore.upsertProviderConfig(input),
       checkAgents: () => checkRoomAgents(nextRoom),
       listWorkspaceDirectories,
       takeWriteFloor: () => session.takeWriteFloor(),
@@ -391,8 +392,8 @@ export async function startSharedSessionRoom(
     primary.gatewayDeps,
     {
       authToken: opts.authToken,
-      listCredentials: () => store.readProviderConfigViews(),
-      setCredential: (input: Parameters<NonNullable<GatewayDeps["setCredential"]>>[0]) => store.upsertProviderConfig(input),
+      listCredentials: () => credentialStore.readProviderConfigViews(),
+      setCredential: (input: Parameters<NonNullable<GatewayDeps["setCredential"]>>[0]) => credentialStore.upsertProviderConfig(input),
       listSessions: listRooms,
       createSession: (input: CreateSessionInput) => {
         if (managed.has(input.id) || store.readSessionRoom(input.id)) throw new Error(`session already exists: ${input.id}`);
@@ -428,6 +429,7 @@ export async function startSharedSessionRoom(
         await item.session.stop();
       }));
       await gateway.close();
+      if (credentialStore !== store) credentialStore.close();
       store.close();
     },
   };

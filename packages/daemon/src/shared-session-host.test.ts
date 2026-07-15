@@ -7,6 +7,7 @@ import type { Room, RoomEvent } from "@quorum/protocol";
 import { commandExists, startSharedSessionRoom } from "./shared-session-host.js";
 import { registerAdapter } from "./adapters/registry.js";
 import { GitWorkspace } from "./workspace/git-workspace.js";
+import { SqliteStore } from "./persistence/sqlite-store.js";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -79,6 +80,74 @@ describe("SharedSessionHost", () => {
     } finally {
       off();
       await host.stop();
+    }
+  });
+
+  it("keeps provider credentials when the session database changes", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "quorum-shared-credential-store-"));
+    const firstDb = join(dir, "first-session.sqlite");
+    const secondDb = join(dir, "second-session.sqlite");
+    const credentialDb = join(dir, "credentials.sqlite");
+    const envVar = "QUORUM_TEST_DEEPSEEK_API_KEY";
+    const previousEnv = process.env[envVar];
+    const legacyStore = new SqliteStore(firstDb);
+    legacyStore.upsertProviderConfig({
+      providerId: "deepseek",
+      envVar,
+      apiKey: "test-secret-1234",
+      baseUrl: "https://api.deepseek.test/v1",
+      model: "deepseek-test",
+    });
+    legacyStore.close();
+
+    const room: Room = {
+      id: "credential-room",
+      title: "Credential room",
+      branch: "main",
+      policy: { name: "free-for-all", maxTurnsPerTopic: 1, noConsecutive: true, turnDeadlineMs: 1_000 },
+      participants: [
+        { id: "human", kind: "human", display: "Human", status: "idle" },
+        { id: "echo", kind: "agent", display: "Echo", adapter: "echo", adapterConfig: { text: "ok" }, status: "idle" },
+      ],
+      createdAt: Date.now(),
+    };
+
+    let first: Awaited<ReturnType<typeof startSharedSessionRoom>> | undefined;
+    let second: Awaited<ReturnType<typeof startSharedSessionRoom>> | undefined;
+    let firstSocket: WebSocket | undefined;
+    let secondSocket: WebSocket | undefined;
+    try {
+      first = await startSharedSessionRoom(room, { dbPath: firstDb, credentialDbPath: credentialDb, port: 0 });
+      firstSocket = await connect(first.gateway.url());
+      firstSocket.send(JSON.stringify({ t: "get_credentials", roomId: room.id }));
+      const migrated = await nextMessage(firstSocket);
+      expect(migrated.providers).toEqual([
+        expect.objectContaining({ providerId: "deepseek", configured: true, apiKeyPreview: "...1234" }),
+      ]);
+      expect(JSON.stringify(migrated)).not.toContain("test-secret-1234");
+      firstSocket.close();
+      firstSocket = undefined;
+      await first.stop();
+      first = undefined;
+
+      second = await startSharedSessionRoom(room, { dbPath: secondDb, credentialDbPath: credentialDb, port: 0 });
+      secondSocket = await connect(second.gateway.url());
+      secondSocket.send(JSON.stringify({ t: "get_credentials", roomId: room.id }));
+      const restored = await nextMessage(secondSocket);
+      expect(restored.providers).toEqual([
+        expect.objectContaining({ providerId: "deepseek", configured: true, apiKeyPreview: "...1234" }),
+      ]);
+
+      const secondSessionStore = new SqliteStore(secondDb);
+      expect(secondSessionStore.readProviderConfigViews()).toEqual([]);
+      secondSessionStore.close();
+    } finally {
+      firstSocket?.close();
+      secondSocket?.close();
+      await first?.stop();
+      await second?.stop();
+      if (previousEnv === undefined) delete process.env[envVar];
+      else process.env[envVar] = previousEnv;
     }
   });
 
