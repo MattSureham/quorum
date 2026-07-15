@@ -40,8 +40,8 @@ jobs:
       - name: Test
         run: pnpm test
 
-      - name: Build Bun sidecar
-        run: pnpm sidecar:bun:build
+      - name: Build and smoke Bun sidecar
+        run: pnpm sidecar:bun:smoke
 
       - name: Build Web UI
         run: pnpm --filter @quorum/client-web build

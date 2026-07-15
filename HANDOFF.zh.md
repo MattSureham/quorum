@@ -8,7 +8,7 @@
 - daemon 会先验证 MIME 与 data URL 一致、解码后的实际字节数和 PDF/DOCX 文件签名。DOCX 解压前还会预检 central directory 中的必需 OOXML 部件、entry 数量、单项与总展开大小。PDF 使用 `unpdf` 提取内嵌文本，DOCX 使用 Mammoth 提取段落文本。解析失败会直接显示在文档卡片；没有内嵌文本的扫描 PDF 会明确提示需要 OCR，不会伪装成已经读懂。OCR 与旧版 `.doc` 暂未实现。
 - 提取文本会作为“非可信参考内容”注入当前 topic 中每个 agent 的 Context Bundle，因此 API 与 CLI agent 得到相同文档内容。后续历史 projection 只保留元数据与提取状态，不携带 data URL 或全文；单文档最多注入 120,000 字符，单次 prompt 的文档总量最多 160,000 字符。
 - 网络边界最多接受 6 个附件：图片每个 5 MB，PDF/DOCX 每个 10 MB，解码后总计 20 MB。只允许多模态链路支持的安全位图格式，SVG 上传会被拒绝。异步解析期间按房间串行处理消息，连续快速发送两个文档也不会打乱 event seq。
-- 真实解析回归覆盖 PDF 文本/页数、DOCX 段落、空白扫描式 PDF、损坏容器、伪造编码/展开大小、schema MIME 门、拒绝客户端伪造的提取文本、当前 topic 上下文注入与 gateway enrichment。本地 typecheck、`133/133` 测试、Web production build 以及同时携带真实 PDF/DOCX 的 compiled Bun sidecar smoke 已通过。当前 in-app browser 没有浏览器实例，因此仍无法进行点击/截图验收；代码提交后必须重跑 Windows Packages 才能确认 portable 支持。
+- 真实解析回归覆盖 PDF 文本/页数、DOCX 段落、空白扫描式 PDF、损坏容器、伪造编码/展开大小、schema MIME 门、拒绝客户端伪造的提取文本、当前 topic 上下文注入与 gateway enrichment。本地 typecheck、`133/133` 测试、Web production build 以及同时携带真实 PDF/DOCX 的 compiled Bun sidecar smoke 已通过。Windows Packages 现在也会运行同一条 compiled 文档 smoke，而不再只编译 sidecar。当前 in-app browser 没有浏览器实例，因此仍无法进行点击/截图验收；workflow 提交后必须重跑 Windows Packages 才能确认 portable 支持。
 
 ## 2026-07-15 富文本聊天与图表输出
 
