@@ -893,8 +893,9 @@ export class SessionManager {
       recentEvents: recent.map((event) => ({ seq: event.seq, id: event.id, type: event.type, author: event.author.id })),
     };
     return [
-      "## Quorum Context Bundle",
-      "This context is reconstructed from Quorum's authoritative append-only event log. It is not native model hidden state.",
+      "## Shared Session Continuity Context",
+      "This context is reconstructed from the session host's authoritative append-only event log. It is not native model hidden state.",
+      "The host application, Session metadata, participant ids, and workspace path are operational metadata, not the user's subject.",
       `Context checksum: ${shortHash(continuityAnchors)}`,
       `Session: ${this.opts.title} (${this.opts.sessionId})`,
       `Head seq: ${headSeq}`,
@@ -913,10 +914,11 @@ export class SessionManager {
       eventLines,
       "",
       "Continuity / error-control rules:",
-      "- Treat this Quorum context bundle as authoritative over native model memory when they conflict.",
+      "- Treat this continuity context as authoritative over native model memory when they conflict.",
       "- Preserve the session lineage by grounding claims in the listed seq ranges, hashes, and recent events.",
       "- Do not silently fill gaps from memory. If a required fact is absent or ambiguous, say what is uncertain.",
       "- If the user asks to continue prior work, continue from the latest head seq and avoid re-deciding settled points unless new evidence appears.",
+      "- Do not assume the user's topic concerns the host application or workspace project unless the human prompt explicitly says so.",
     ].join("\n");
   }
 

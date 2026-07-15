@@ -21,6 +21,7 @@ async function fakeCli(unixSource: string, windowsSource: string): Promise<strin
 function input(nativeSessionId?: string): TurnInput {
   const self: ParticipantDescriptor = { id: "codex", kind: "agent", display: "Codex", adapter: "codex", status: "idle" };
   return {
+    sessionId: "room",
     turnId: "turn-1",
     roomTitle: "Test",
     self,
@@ -86,6 +87,24 @@ describe("CodexAdapter", () => {
       type: "system",
       body: expect.objectContaining({ level: "error", category: "timeout", text: expect.stringContaining("request timed out") }),
     }));
+  });
+
+  it("keeps recoverable transport errors non-terminal when Codex later replies", async () => {
+    const bin = await fakeCli(
+      `printf '%s\n' '{"type":"thread.started","thread_id":"thread-1"}' '{"type":"error","message":"Reconnecting... 2/5 (request timed out)"}' '{"type":"item.completed","item":{"type":"error","message":"Falling back from WebSockets to HTTPS transport. request timed out"}}' '{"type":"item.completed","item":{"type":"agent_message","text":"recovered"}}' '{"type":"turn.completed"}'`,
+      `echo {"type":"thread.started","thread_id":"thread-1"}\necho {"type":"error","message":"Reconnecting... 2/5 (request timed out)"}\necho {"type":"item.completed","item":{"type":"error","message":"Falling back from WebSockets to HTTPS transport. request timed out"}}\necho {"type":"item.completed","item":{"type":"agent_message","text":"recovered"}}\necho {"type":"turn.completed"}`,
+    );
+    const adapter = new CodexAdapter(input().self, { bin, sandbox: "read-only" });
+    const events = await collect(adapter);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "thinking",
+      body: expect.objectContaining({ text: expect.stringContaining("Reconnecting... 2/5") }),
+    }));
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "message",
+      body: expect.objectContaining({ text: "recovered" }),
+    }));
+    expect(events.some((event) => event.type === "system" && (event.body as any)?.level === "error")).toBe(false);
   });
 
   it("falls back from native resume only once", async () => {

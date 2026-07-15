@@ -6,6 +6,15 @@ Working handoff for an agent picking up **Quorum**. Current as of **2026-07-15**
 
 ## Current State For The Next Agent
 
+### 2026-07-15 Codex transient reconnect and topic-context isolation
+
+- The latest user room is `session-mrlor4em` in `.quorum/webui-smoke.sqlite`. Its configured participants are Codex, Claude Code, and DeepSeek V4 Pro. Codex bid twice and won the floor at seq `#21` and `#101`; both turns ended after about 50 seconds with zero output and `Reconnecting... 2/5 (request timed out)`. It was selected correctly, but the UI had no Codex chat message to show.
+- A direct local `codex exec` probe reproduced the same JSONL `error` event, then continued through retries, emitted a WebSocket-to-HTTPS fallback notice, and ultimately returned `OK`. Quorum incorrectly treated the first recoverable `error` record as terminal. The adapter now persists it as a non-chat transport notice and waits for an assistant message; only `turn.failed`, non-zero exit, deadline, or final empty output fails the turn. A fake-CLI regression covers reconnect followed by successful recovery.
+- The agents' Quorum framing was injected by the host, not recovered from cross-Session memory. The room workspace was `/Users/matthew/Projects/quorum`; every turn received a bundle headed `Quorum Context Bundle`, containing that path and rules that repeated the product name; Claude Code also ran with that repository as `cwd`. DeepSeek then received Claude's Quorum-framed first answer in the same Session transcript. The room had no shared-memory entries or long-term-memory rows, and its only working summary was created later at seq `#96`.
+- The continuity bundle is now branded neutrally as shared Session metadata and explicitly says host/application names, participant ids, Session metadata, and workspace paths are not the user's subject. It forbids inferring that a prompt concerns the host or workspace unless the human says so. When no workspace is selected, Codex and Claude Code now run in a neutral per-Session temporary directory rather than silently inheriting the daemon's Quorum repository cwd.
+- A real end-to-end Quorum probe created a temporary Codex-only Session without a workspace and asked a generic entropy question. Codex survived its transport retries, returned a one-sentence generic answer, emitted `turn_completed`, did not mention Quorum or a codebase, and the temporary Session was deleted.
+- Local verification passes typecheck, `115/115` tests, Web production build, shared/source/Node/Bun sidecar smokes, and Rust `cargo check`. Full Xcode is not installed, so macOS bundle creation was not rerun.
+
 ### 2026-07-15 credentials with zero Sessions
 
 - The repeated DeepSeek “needs key” state was reproduced after deleting the final Session. The key had not been erased: `.quorum/credentials.sqlite` still reported DeepSeek as configured with the expected masked preview. The gateway incorrectly resolved every credential command through a room first, so `get_credentials` and `set_credential` failed with `unknown session` when no room existed.

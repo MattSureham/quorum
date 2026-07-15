@@ -2,6 +2,15 @@
 
 给接手 **Quorum** 的下一个 agent 的工作交接。截至 **2026-07-15**，以 `main` 当前 HEAD 为准。English version: [`HANDOFF.md`](./HANDOFF.md)。
 
+## 2026-07-15 Codex 临时重连与话题上下文隔离
+
+- 最近一次用户会议是 `.quorum/webui-smoke.sqlite` 中的 `session-mrlor4em`，参与者确实包含 Codex、Claude Code 和 DeepSeek V4 Pro。Codex 两次 bid 并在 `#21`、`#101` 赢得发言权，但两个 turn 都在约 50 秒后以零输出和 `Reconnecting... 2/5 (request timed out)` 结束。调度没有漏掉 Codex，只是聊天区没有可显示的 Codex message。
+- 直接运行本机 `codex exec` 复现了同一个 JSONL `error`，但 CLI 随后继续重试、发出 WebSocket 降级 HTTPS 的通知，并最终正常返回 `OK`。Quorum 过去把第一个可恢复 `error` 错当成终局失败；现在它会被记录为非聊天 transport notice，并继续等待 assistant message。只有 `turn.failed`、进程非零退出、deadline 或最终空输出才判失败；fake CLI 回归覆盖“重连后成功”。
+- 模型把问题理解成 Quorum 相关，是 host 主动注入造成的，不是跨 Session 记忆恢复。该房间的 workspace 是 `/Users/matthew/Projects/quorum`；每个 turn 都收到标题为 `Quorum Context Bundle` 的 bundle，里面重复产品名与路径；Claude Code 还以该仓库为 `cwd`。DeepSeek 随后又在同一 Session transcript 中看到了 Claude 已经 Quorum 化的首轮回答。该房间没有 shared memory，也没有 long-term memory；唯一 working summary 到 `#96` 才生成。
+- continuity bundle 现改为中性的 shared Session metadata，并明确 host/application 名称、participant id、Session metadata 和 workspace path 都不是用户话题；除非 human prompt 明说，否则禁止推断问题与 host 或 workspace 项目有关。未选择 workspace 时，Codex/Claude Code 会在 OS 临时目录中的独立 Session 目录运行，不再偷偷继承 daemon 的 Quorum 仓库 cwd。
+- 真实端到端验证创建了一个无 workspace 的临时 Codex-only Session，并询问通用的 agent 熵增问题。Codex 经历 transport 重试后成功返回一句通用回答、写入 `turn_completed`，没有提到 Quorum 或代码库；临时 Session 随后已删除。
+- 本地已通过 typecheck、`115/115`、Web production build、shared/source/Node/Bun sidecar smokes 和 Rust `cargo check`。当前机器没有完整 Xcode，因此未重跑 macOS bundle。
+
 ## 2026-07-15 零 Session 时的 credential 可用性
 
 - 删除最后一个 Session 后，DeepSeek 再次显示“需要 key”的问题已复现。key 实际没有丢失：`.quorum/credentials.sqlite` 中 DeepSeek 仍是已配置状态，掩码尾号也正确。根因是 gateway 先按 room 查找 Session，之后才处理 `get_credentials` / `set_credential`；当房间为零时，两条命令都会错误返回 `unknown session`。

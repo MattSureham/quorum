@@ -58,8 +58,9 @@ export class LegacyAgentAdapter implements ISpeakerAgent {
 
   async *speak(turn: TurnContext, _runtime: AgentRuntime, signal: AbortSignal): AsyncGenerator<AgentDelta> {
     const input: TurnInput = {
+      sessionId: turn.sessionId,
       turnId: turn.turnId,
-      roomTitle: "Quorum",
+      roomTitle: turn.sessionId,
       self: this.legacy.descriptor,
       participants: turn.participants,
       projection: turn.transcript,

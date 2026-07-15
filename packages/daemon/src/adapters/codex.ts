@@ -3,7 +3,7 @@ import { createInterface } from "node:readline";
 import { BaseAgentAdapter } from "./base.js";
 import { isRoomTool, normalizeToolName, runRoomTool, type TurnInput, type PartialRoomEvent } from "@quorum/core";
 import type { ParticipantDescriptor, Capabilities } from "@quorum/protocol";
-import { safeCliValue, safeWindowsBinary } from "./cli-safety.js";
+import { resolveCliWorkingDirectory, safeCliValue, safeWindowsBinary } from "./cli-safety.js";
 
 export interface CodexOptions {
   sandbox?: "read-only" | "workspace-write" | "danger-full-access";
@@ -34,7 +34,7 @@ export class CodexAdapter extends BaseAgentAdapter {
     const prompt = this.prompt(input);
     const bin = safeWindowsBinary(this.opts.bin ?? "codex");
     const sandbox = safeCliValue(this.opts.sandbox ?? "workspace-write", "Codex sandbox");
-    const cwd = input.workspacePath ?? process.cwd();
+    const cwd = resolveCliWorkingDirectory(input);
     const flags = ["--sandbox", sandbox];
     if (this.opts.model) flags.push("-m", safeCliValue(this.opts.model, "model"));
     const threadId = this.threadId ? safeCliValue(this.threadId, "thread id") : undefined;
@@ -59,6 +59,8 @@ export class CodexAdapter extends BaseAgentAdapter {
     let exitCode: number | null = null;
     let spawnError: Error | undefined;
     let emittedMessage = false;
+    let terminalFailure = false;
+    const streamErrors: string[] = [];
     const push = (e: PartialRoomEvent) => { queue.push(e); wake?.(); wake = null; };
 
     const rl = createInterface({ input: child.stdout! });
@@ -104,12 +106,20 @@ export class CodexAdapter extends BaseAgentAdapter {
           }
           {
             const detail = ev.error?.message ?? "codex turn failed";
+            terminalFailure = true;
             push({ type: "system", body: { level: "error", text: detail, category: classifyCliFailure(detail), detail } });
           }
           break;
-        case "error":
-          push({ type: "system", body: { level: "error", text: ev.message ?? "codex error" } });
+        case "error": {
+          const detail = String(ev.message ?? "codex transport error");
+          streamErrors.push(detail);
+          // Current Codex emits `error` records for recoverable transport
+          // retries before falling back from WebSockets to HTTPS. The process
+          // may still produce a valid assistant message, so only turn.failed,
+          // a non-zero exit, or final empty output is terminal.
+          push({ type: "thinking", body: { text: `Codex transport notice: ${detail}` } });
           break;
+        }
         default:
           break; // turn.started / turn.completed / item.started: ignore
       }
@@ -149,7 +159,7 @@ export class CodexAdapter extends BaseAgentAdapter {
           body: { level: "error", text: `Codex CLI failed to start: ${spawnError.message}`, category: "cli_not_found", detail: spawnError.message },
         };
       } else if (exitCode !== 0) {
-        const detail = stderr.trim() || `exit code ${exitCode}`;
+        const detail = stderr.trim() || streamErrors.at(-1) || `exit code ${exitCode}`;
         if (usedResume) {
           input.onNativeSessionResumeFailed?.(`Codex resume failed: ${detail}`);
           this.threadId = undefined;
@@ -161,10 +171,18 @@ export class CodexAdapter extends BaseAgentAdapter {
             body: { level: "error", text: `Codex CLI failed: ${detail}`, category: classifyCliFailure(detail), detail },
           };
         }
-      } else if (!emittedMessage) {
+      } else if (!emittedMessage && !terminalFailure) {
+        const detail = (streamErrors.at(-1) ?? stderr.trim()) || undefined;
         yield {
           type: "system",
-          body: { level: "error", text: "Codex CLI completed without an assistant response", category: "empty_output", detail: stderr.trim() || undefined },
+          body: {
+            level: "error",
+            text: detail
+              ? `Codex CLI completed without an assistant response. Last error: ${detail}`
+              : "Codex CLI completed without an assistant response",
+            category: detail ? classifyCliFailure(detail) : "empty_output",
+            detail,
+          },
         };
       }
     } finally {

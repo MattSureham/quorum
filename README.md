@@ -159,7 +159,8 @@ as a fallback for offline UI state.
 
 Context continuity is visible in shared-session diagnostics. The panel surfaces
 native-resume failure warnings, shows when the room is continuing from the
-Quorum context bundle, and displays the latest memory-summary sequence range.
+authoritative shared-session context bundle, and displays the latest
+memory-summary sequence range.
 Context checksums are still embedded in the agent prompt bundle rather than
 exposed as a standalone UI field.
 
@@ -192,7 +193,10 @@ appear as `timeout` rather than a generic adapter failure. The run banner names
 the failed participant and follows the newest terminal turn, preventing an
 earlier failure from hiding a later successful reply. Open-discussion follow-up
 bids replace the same agent's derived bid row for that epoch while the
-append-only event log retains every bid revision.
+append-only event log retains every bid revision. Codex `error` stream records
+such as `Reconnecting... n/5` are transport notices rather than terminal turn
+failures: Quorum keeps waiting for Codex's HTTPS fallback and only fails on
+`turn.failed`, non-zero process exit, deadline, or final empty output.
 
 Shared-session modes are enforced by the scheduler. Addressed prompts only ask
 the selected agents to bid; `noConsecutive` uses the actual last speaker id;
@@ -240,9 +244,12 @@ agent-private memory and attempt a best-effort resume. If native resume fails,
 Quorum records a diagnostic warning and retries with a deterministic context
 bundle reconstructed from the authoritative event log and working memory. The
 bundle includes a context checksum, seq/hash anchors, and explicit error-control
-rules telling the model to prefer Quorum's authoritative context over native
+rules telling the model to prefer the authoritative Session context over native
 hidden memory, avoid silently filling gaps, and surface uncertainty when restored
-context is incomplete.
+context is incomplete. The bundle is deliberately topic-neutral: host branding,
+Session ids, participant ids, and workspace paths are marked as operational
+metadata and must not be treated as evidence that the user's subject is Quorum
+or the workspace project.
 
 Packaging status: developer one-command launch exists, and a local sidecar entry
 now exists at `packages/daemon/src/sidecar.ts`. It binds a random loopback port,
@@ -493,7 +500,9 @@ the session workspace as their current working directory and retain their native
 tool/function-calling behavior. Claude Code is not launched with `--bare`, so its
 configured Claude Code skills, MCP servers, hooks, and local auth remain
 available. Codex runs through `codex exec --json` and keeps its own native tool
-events/MCP output.
+events/MCP output. If a Session has no workspace, both CLIs run in a neutral
+per-Session directory under the OS temporary directory instead of inheriting the
+daemon's source/installation directory.
 
 ```bash
 QUORUM_SESSION_KERNEL=shared pnpm dev

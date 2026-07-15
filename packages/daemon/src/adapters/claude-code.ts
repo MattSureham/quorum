@@ -3,7 +3,7 @@ import { createInterface } from "node:readline";
 import { BaseAgentAdapter } from "./base.js";
 import { ROOM_TOOLS, runRoomTool, ulid, type RoomToolSpec, type TurnInput, type PartialRoomEvent } from "@quorum/core";
 import type { ParticipantDescriptor, Capabilities } from "@quorum/protocol";
-import { safeCliValue, safeWindowsBinary } from "./cli-safety.js";
+import { resolveCliWorkingDirectory, safeCliValue, safeWindowsBinary } from "./cli-safety.js";
 
 export interface ClaudeOptions {
   model?: string;
@@ -66,7 +66,7 @@ export class ClaudeCodeAdapter extends BaseAgentAdapter {
     const usedResume = !!this.sessionId;
     const prompt = this.prompt(input);
     const bin = safeWindowsBinary(this.opts.bin ?? "claude");
-    const cwd = input.workspacePath ?? process.cwd();
+    const cwd = resolveCliWorkingDirectory(input);
     const args = [
       "-p",
       "--verbose",
@@ -255,7 +255,7 @@ export class ClaudeCodeAdapter extends BaseAgentAdapter {
     const stream = (sdk as any).query({
       prompt: this.prompt(input),
       options: {
-        cwd: input.workspacePath,
+        cwd: resolveCliWorkingDirectory(input),
         model: this.opts.model,
         resume: this.sessionId,
         permissionMode: this.opts.permissionMode ?? "acceptEdits",

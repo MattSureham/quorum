@@ -287,6 +287,7 @@ export class Conductor {
 
     try {
       const input: TurnInput = {
+        sessionId: this.opts.roomId,
         turnId,
         roomTitle: this.opts.roomTitle,
         self: participant.descriptor,

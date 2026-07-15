@@ -849,6 +849,9 @@ describe("SessionManager", () => {
       expect(speaker.capturedContextBundle).toContain("Context checksum:");
       expect(speaker.capturedContextBundle).toContain("Continuity / error-control rules:");
       expect(speaker.capturedContextBundle).toContain("authoritative over native model memory");
+      expect(speaker.capturedContextBundle).toContain("operational metadata, not the user's subject");
+      expect(speaker.capturedContextBundle).toContain("Do not assume the user's topic concerns the host application");
+      expect(speaker.capturedContextBundle).not.toContain("Quorum Context Bundle");
       expect(speaker.capturedContextBundle).toContain("Head seq:");
       expect(speaker.capturedContextBundle).toContain("#1 message human");
     } finally {

@@ -40,13 +40,14 @@ export interface PartialRoomEvent {
 }
 
 export interface TurnInput {
+  sessionId?: string;        // stable id used for isolated CLI working directories
   turnId: string;
   roomTitle: string;
   self: ParticipantDescriptor;
   participants: ParticipantDescriptor[];
   projection: RoomEvent[];   // events since this participant last spoke
   protocol: string;          // room speaking-protocol text
-  contextBundle?: string;    // deterministic Quorum context used after restore/continue
+  contextBundle?: string;    // deterministic shared-session context used after restore/continue
   attachments?: ImageAttachment[]; // images attached to the prompt that triggered this epoch
   workspacePath?: string;
   nativeSessionId?: string;
