@@ -48,6 +48,7 @@ export interface SessionManagerOptions {
     keepRecentEvents?: number;
   };
   schedulerMode?: "bid" | "raise-hand" | "round-robin";
+  targetDiscussionRounds?: number;
   maxTurnsPerTopic?: number;
   noConsecutive?: boolean;
 }
@@ -112,6 +113,7 @@ export class SessionManager {
   private turnsThisTopic = 0;
   private lastTurnOutcome?: "done" | "cancelled" | "failed";
   private wrapUpActive = false;
+  private wrapUpQueue: string[] = [];
   private pendingPrompts: PendingPrompt[] = [];
   private roundRobinQueue: string[] = [];
   private running = false;
@@ -267,14 +269,15 @@ export class SessionManager {
     this.currentAttachments = prompt.attachments;
     this.turnsThisTopic = 0;
     this.wrapUpActive = false;
-    if (!this.isRoundRobin() && Math.max(1, this.opts.maxTurnsPerTopic ?? 6) === 1) {
+    this.wrapUpQueue = [];
+    if (!this.hasSoftRoundTarget() && !this.isRoundRobin() && Math.max(1, this.opts.maxTurnsPerTopic ?? 6) === 1) {
       this.wrapUpActive = true;
       this.lastPrompt = this.wrapUpPrompt(this.lastPrompt);
     }
     this.epoch++;
     this.pendingBids.clear();
     if (this.isRoundRobin()) {
-      this.roundRobinQueue = this.orderedAgentIds();
+      this.roundRobinQueue = this.roundRobinSchedule();
       await this.grantNextRoundRobinSpeaker();
       return;
     }
@@ -655,14 +658,23 @@ export class SessionManager {
           author: { kind: "agent", id: bid.agentId, display: bid.agentId },
         });
       }
+      if (this.wrapUpActive) {
+        await this.grantNextWrapUpSpeaker();
+        return "none";
+      }
       if (this.isRoundRobin()) {
         await this.grantNextRoundRobinSpeaker();
         return "none";
       }
-      const maxTurns = Math.max(1, this.opts.maxTurnsPerTopic ?? 6);
-      if (this.wrapUpActive) {
-        this.pendingBids.clear();
-        await this.transition("idle", { reason: "topic wrapped up", turns: this.turnsThisTopic });
+      const softTargetTurns = this.softTargetTurns();
+      const maxTurns = softTargetTurns === undefined
+        ? Math.max(1, this.opts.maxTurnsPerTopic ?? 6)
+        : Math.max(
+          this.opts.maxTurnsPerTopic ?? 6,
+          softTargetTurns + Math.max(1, this.orderedAgentIds().length),
+        );
+      if (softTargetTurns !== undefined && this.turnsThisTopic >= softTargetTurns) {
+        await this.beginWrapUp("target discussion rounds reached");
         return "none";
       }
       if (this.lastTurnOutcome && this.lastTurnOutcome !== "done" && this.pendingBids.size === 0) {
@@ -698,7 +710,7 @@ export class SessionManager {
   }
 
   private wrapUpPrompt(prompt: string): string {
-    return `${prompt}\n\n[QUORUM WRAP UP] This is the final turn for this topic. State the concrete final answer or plan now. Preserve unresolved disagreements explicitly and leave unfinished work for Continue Session.`;
+    return `${prompt}\n\n[QUORUM WRAP UP] The advisory discussion-round target has been reached. Finish the reasoning already in progress and use this final wrap-up pass to state your concrete answer, recommendation, or plan. Do not open a new subtopic. Preserve unresolved disagreements explicitly and leave unfinished work for Continue Session.`;
   }
 
   private runInBackground(label: string, task: Promise<unknown>): void {
@@ -717,7 +729,103 @@ export class SessionManager {
   }
 
   private orderedAgentIds(): string[] {
-    return [...this.byId.keys()];
+    const ordered = [...this.byId.keys()];
+    if (!this.currentAddressedTo.length) return ordered;
+    return ordered.filter((id) => this.currentAddressedTo.includes(id));
+  }
+
+  private targetDiscussionRounds(): number | undefined {
+    const value = this.opts.targetDiscussionRounds;
+    if (!Number.isInteger(value) || (value ?? 0) < 1) return undefined;
+    return Math.min(12, value as number);
+  }
+
+  private hasSoftRoundTarget(): boolean {
+    return this.targetDiscussionRounds() !== undefined;
+  }
+
+  private softTargetTurns(): number | undefined {
+    const rounds = this.targetDiscussionRounds();
+    if (!rounds) return undefined;
+    return rounds * Math.max(1, this.orderedAgentIds().length);
+  }
+
+  private roundRobinSchedule(): string[] {
+    const ordered = this.orderedAgentIds();
+    const rounds = this.targetDiscussionRounds();
+    if (!rounds) return ordered;
+    return Array.from({ length: rounds }, () => ordered).flat();
+  }
+
+  private async beginWrapUp(reason: string): Promise<void> {
+    if (this.wrapUpActive) {
+      await this.grantNextWrapUpSpeaker();
+      return;
+    }
+    this.wrapUpActive = true;
+    this.pendingBids.clear();
+    this.wrapUpQueue = this.orderedAgentIds();
+    this.lastPrompt = this.wrapUpPrompt(this.lastPrompt);
+    await this.append("system", {
+      level: "info",
+      text: `wrap-up requested: ${reason}`,
+      wrapUp: {
+        reason,
+        targetDiscussionRounds: this.targetDiscussionRounds(),
+        speakers: this.wrapUpQueue,
+      },
+    }, "system");
+    if (!this.wrapUpQueue.length) {
+      await this.transition("idle", { reason: "topic wrapped up", turns: this.turnsThisTopic });
+      return;
+    }
+    await this.transition("collecting_bids", {
+      epoch: this.epoch,
+      wrapUp: true,
+      targetDiscussionRounds: this.targetDiscussionRounds(),
+    });
+    await this.grantNextWrapUpSpeaker();
+  }
+
+  private async grantNextWrapUpSpeaker(): Promise<void> {
+    if (this.active || this.phase === "speaking" || this.phase === "speaker_granted") return;
+    if (this.humanHoldsWriteFloor) return;
+    const nextAgentId = this.wrapUpQueue.shift();
+    if (!nextAgentId) {
+      this.pendingBids.clear();
+      await this.transition("idle", { reason: "topic wrapped up", turns: this.turnsThisTopic });
+      return;
+    }
+    const agent = this.byId.get(nextAgentId);
+    if (!agent) {
+      await this.grantNextWrapUpSpeaker();
+      return;
+    }
+    const bid = this.roundRobinBid(agent, "followup", "final wrap-up pass");
+    if (this.phase === "idle" || this.phase === "settling") {
+      await this.transition("collecting_bids", { epoch: this.epoch, wrapUp: true });
+    }
+    await this.transition("arbitrating", { epoch: this.epoch, scheduler: "wrap-up" });
+    await this.append("speaker_selected", {
+      policyVersion: "wrap-up-v1",
+      winner: {
+        bid,
+        score: 1,
+        components: {
+          base: 1,
+          capability: 0,
+          userMention: 0,
+          waiting: 0,
+          recentSpeakerPenalty: 0,
+          rebuttalBonus: 0,
+          confidenceTieBreaker: 0,
+        },
+      },
+      candidates: [],
+      scheduler: "wrap-up",
+      remainingSpeakers: this.wrapUpQueue,
+    }, "debug");
+    await this.grantAgent(agent, "wrap-up", bid);
   }
 
   private async grantNextRoundRobinSpeaker(): Promise<void> {
@@ -725,6 +833,10 @@ export class SessionManager {
     if (this.humanHoldsWriteFloor) return;
     const nextAgentId = this.roundRobinQueue.shift();
     if (!nextAgentId) {
+      if (this.hasSoftRoundTarget() && !this.wrapUpActive) {
+        await this.beginWrapUp("target discussion rounds reached");
+        return;
+      }
       await this.transition("idle", { reason: "round-robin complete" });
       return;
     }
@@ -734,7 +846,7 @@ export class SessionManager {
       return;
     }
     const bid = this.roundRobinBid(agent);
-    if (this.roundRobinQueue.length === 0) {
+    if (!this.hasSoftRoundTarget() && this.roundRobinQueue.length === 0) {
       this.lastPrompt = `${this.lastPrompt}\n\n[QUORUM WRAP UP] You are the final scheduled speaker. Give your concrete conclusion and explicitly record any unresolved disagreement for Continue Session.`;
     }
     if (this.phase === "idle") await this.transition("collecting_bids", { epoch: this.epoch, scheduler: "round-robin" });
@@ -760,22 +872,30 @@ export class SessionManager {
     await this.grantAgent(agent, "round-robin", bid);
   }
 
-  private roundRobinBid(agent: ISpeakerAgent): Bid {
+  private roundRobinBid(
+    agent: ISpeakerAgent,
+    kind: Bid["kind"] = "answer",
+    rationale = "round-robin scheduler",
+  ): Bid {
     return {
       bidId: ulid(),
       agentId: agent.id,
       epoch: this.epoch,
-      kind: "answer",
+      kind,
       confidence: 1,
       createdAtSeq: this.opts.log.headSeq,
       expiresAfterRound: this.epoch + 1,
       revision: 0,
-      rationale: "round-robin scheduler",
+      rationale,
     };
   }
 
   private async continueAfterWriteFloor(): Promise<void> {
     if (this.active || this.humanHoldsWriteFloor) return;
+    if (this.wrapUpActive && this.wrapUpQueue.length) {
+      await this.grantNextWrapUpSpeaker();
+      return;
+    }
     if (this.isRoundRobin() && this.roundRobinQueue.length) {
       await this.grantNextRoundRobinSpeaker();
       return;

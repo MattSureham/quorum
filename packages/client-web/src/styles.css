@@ -940,6 +940,106 @@ textarea:focus {
   line-height: 1.35;
 }
 
+.round-target-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 72px;
+  align-items: center;
+  gap: 12px;
+  padding: 9px;
+  border: 1px solid #d7e1de;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.round-target-control > span {
+  display: grid;
+  gap: 3px;
+}
+
+.round-target-control strong {
+  color: #202a27;
+  font-size: 13px;
+}
+
+.round-target-control small,
+.participant-order-head span {
+  color: #64736e;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.round-target-control input {
+  width: 72px;
+  text-align: center;
+}
+
+.participant-order-editor {
+  display: grid;
+  gap: 8px;
+  padding: 9px;
+  border: 1px solid #d7e1de;
+  border-radius: 8px;
+  background: #f6faf8;
+}
+
+.participant-order-head > div {
+  display: grid;
+  gap: 3px;
+}
+
+.participant-order-head strong {
+  color: #202a27;
+  font-size: 13px;
+}
+
+.participant-order-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.participant-order-item {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 6px 7px;
+  border: 1px solid #d7e1de;
+  border-radius: 7px;
+  background: #ffffff;
+}
+
+.participant-order-item > span {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 999px;
+  color: #ffffff;
+  background: #3d8068;
+  font-size: 11px;
+  font-weight: 780;
+}
+
+.participant-order-item > strong {
+  overflow: hidden;
+  color: #26322f;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.participant-order-item > div {
+  display: flex;
+  gap: 4px;
+}
+
+.participant-order-item .icon-action {
+  width: 28px;
+  height: 28px;
+}
+
 .participant-picker-row {
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr) auto;
@@ -2554,6 +2654,10 @@ h1 {
 
   .participant-picker-row i {
     grid-column: 2;
+  }
+
+  .participant-order-list {
+    grid-template-columns: 1fr;
   }
 
   .topbar,

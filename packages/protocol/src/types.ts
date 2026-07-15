@@ -91,7 +91,7 @@ export type ConductorPolicyName = "free-for-all" | "directed" | "moderated";
 
 export interface ConductorPolicyConfig {
   name: ConductorPolicyName;
-  maxTurnsPerTopic: number;   // agent turns since last human msg before yielding to human
+  maxTurnsPerTopic: number;   // hard safety ceiling for agent turns after a human message
   noConsecutive: boolean;     // same agent cannot speak twice in a row
   turnDeadlineMs: number;     // per-turn timeout
   moderatorModel?: string;    // moderated only
@@ -104,6 +104,7 @@ export interface Room {
   branch: string;
   policy: ConductorPolicyConfig;
   schedulerMode?: "bid" | "raise-hand" | "round-robin";
+  targetDiscussionRounds?: number; // advisory rounds before a final wrap-up pass
   lifecycle?: "draft" | "active" | "paused" | "completed" | "archived" | "deleted";
   primary?: string;           // who answers an opening message with no @
   participants: ParticipantDescriptor[];
@@ -116,6 +117,7 @@ export interface CreateSessionInput {
   id: string;
   title: string;
   mode: SessionMode;
+  targetDiscussionRounds?: number;
   workspacePath?: string;
   participants: ParticipantDescriptor[];
 }

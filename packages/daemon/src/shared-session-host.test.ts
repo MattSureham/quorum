@@ -319,6 +319,24 @@ describe("SharedSessionHost", () => {
         "charlie",
       ]);
       expect(seen.some((event) => event.type === "bid_submitted")).toBe(false);
+
+      ws.send(JSON.stringify({
+        t: "create_session",
+        roomId: "main-room",
+        session: {
+          id: "budget-room",
+          title: "Budget room",
+          mode: "open-discussion",
+          targetDiscussionRounds: 2,
+          participants: [
+            { id: "human", kind: "human", display: "Human", status: "idle" },
+            { id: "echo", kind: "agent", display: "Echo", adapter: "echo", adapterConfig: { text: "response" }, status: "idle" },
+          ],
+        },
+      }));
+      const budgetCreated = await nextMessage(ws);
+      expect(budgetCreated.room.targetDiscussionRounds).toBe(2);
+      expect(budgetCreated.room.policy.maxTurnsPerTopic).toBeGreaterThanOrEqual(3);
     } finally {
       ws.close();
       await host.stop();

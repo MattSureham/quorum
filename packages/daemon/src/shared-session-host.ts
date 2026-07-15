@@ -47,6 +47,20 @@ function policyForMode(mode: SessionMode, base: Room["policy"]): Room["policy"] 
   return { ...base, name: "free-for-all", turnDeadlineMs };
 }
 
+function policyWithDiscussionBudget(
+  mode: SessionMode,
+  base: Room["policy"],
+  targetDiscussionRounds: number | undefined,
+  participants: ParticipantDescriptor[],
+): Room["policy"] {
+  const policy = policyForMode(mode, base);
+  if (!targetDiscussionRounds) return policy;
+  const agentCount = Math.max(1, participants.filter((participant) => participant.kind === "agent").length);
+  const normalTurns = targetDiscussionRounds * agentCount;
+  const wrapUpTurns = agentCount;
+  return { ...policy, maxTurnsPerTopic: Math.max(policy.maxTurnsPerTopic, normalTurns + wrapUpTurns) };
+}
+
 function ensureHuman(participants: ParticipantDescriptor[]): ParticipantDescriptor[] {
   return participants.some((participant) => participant.kind === "human")
     ? participants
@@ -293,6 +307,7 @@ export async function startSharedSessionRoom(
       workspacePath: nextRoom.workspacePath,
       workspace: workspace && workspaceReady ? readyWorkspace(workspace, workspaceReady) : undefined,
       schedulerMode: nextRoom.schedulerMode,
+      targetDiscussionRounds: nextRoom.targetDiscussionRounds,
       maxTurnsPerTopic: nextRoom.policy.maxTurnsPerTopic,
       noConsecutive: nextRoom.policy.noConsecutive,
       toolExecutor: nextRoom.workspacePath ? createLocalSandboxToolExecutor({ workspacePath: nextRoom.workspacePath }) : undefined,
@@ -403,8 +418,9 @@ export async function startSharedSessionRoom(
           workspacePath: input.workspacePath?.trim() || room.workspacePath,
           branch: room.branch,
           primary: input.participants.find((participant) => participant.kind === "agent")?.id,
-          policy: policyForMode(input.mode, room.policy),
+          policy: policyWithDiscussionBudget(input.mode, room.policy, input.targetDiscussionRounds, input.participants),
           schedulerMode: input.mode === "round-robin" ? "round-robin" : input.mode === "raise-hand" ? "raise-hand" : "bid",
+          targetDiscussionRounds: input.targetDiscussionRounds,
           participants: ensureHuman(input.participants),
           createdAt: Date.now(),
           lifecycle: "active",

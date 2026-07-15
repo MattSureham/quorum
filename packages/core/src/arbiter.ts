@@ -38,10 +38,11 @@ const kindBase: Record<BidKind, number> = {
 };
 
 export class Arbiter {
-  readonly policyVersion = "structured-v1";
+  readonly policyVersion = "structured-v2";
 
   decide(ctx: ArbitrationContext): ArbitrationDecision {
     const participantIds = new Set(ctx.participants.map((p) => p.id));
+    const participantOrder = new Map(ctx.participants.map((participant, index) => [participant.id, index]));
     const eligibleBids = ctx.bids.filter((bid) => participantIds.has(bid.agentId));
     const hasAlternativeSpeaker = eligibleBids.some((bid) => bid.agentId !== ctx.lastSpeakerId);
     const candidates = ctx.bids
@@ -53,6 +54,9 @@ export class Arbiter {
         const waitingA = ctx.waitingRounds?.get(a.bid.agentId) ?? 0;
         const waitingB = ctx.waitingRounds?.get(b.bid.agentId) ?? 0;
         if (waitingB !== waitingA) return waitingB - waitingA;
+        const orderA = participantOrder.get(a.bid.agentId) ?? Number.MAX_SAFE_INTEGER;
+        const orderB = participantOrder.get(b.bid.agentId) ?? Number.MAX_SAFE_INTEGER;
+        if (orderA !== orderB) return orderA - orderB;
         return a.bid.agentId.localeCompare(b.bid.agentId);
       });
 

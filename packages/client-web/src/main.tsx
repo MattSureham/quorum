@@ -10,6 +10,7 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
+  ChevronUp,
   CircleAlert,
   CircleDot,
   Download,
@@ -212,6 +213,14 @@ const zhText: Record<string, string> = {
   "Raise hand": "举手/抢麦",
   "Agents request the floor and must wait for the active speaker to finish.": "智能体申请发言权，并等待当前发言者结束。",
   "Round robin": "按序陈述",
+  "Agents follow the selected participant order in every discussion round.": "智能体在每轮讨论中都按所选参与者顺序发言。",
+  "Target discussion rounds": "目标讨论轮数",
+  "The active turn is never cut off. After this target, every participant receives one final wrap-up turn.": "不会截断正在进行的发言。达到目标后，每位参与者会获得一次最终总结发言。",
+  "Order priority": "顺序优先级",
+  "Round robin follows this order strictly; bidding modes use it to break equal bids and for the final wrap-up pass.": "按序陈述严格遵循此顺序；抢麦模式用它处理同分竞价，并安排最终总结轮。",
+  "Move up": "上移",
+  "Move down": "下移",
+  "No participants selected": "尚未选择参与者",
   "Open discussion mode": "自由讨论模式",
   "Raise hand mode": "举手/抢麦模式",
   "Round robin mode": "按序陈述模式",
@@ -220,6 +229,8 @@ const zhText: Record<string, string> = {
   "Agents request the floor and wait until the current speaker finishes.": "智能体申请发言权，并等待当前发言者结束。",
   "Agents speak in the selected participant order, one turn each.": "智能体按选定参与者顺序各发言一次。",
   "Speaking order": "发言顺序",
+  "Round target": "轮数目标",
+  "Wrapping up": "正在总结",
   "Completed speakers": "已发言",
   "Remaining speakers": "未发言",
   "Continuity": "上下文继承",
@@ -396,6 +407,7 @@ interface SessionDraft {
   roomId: string;
   title: string;
   mode: SessionMode;
+  targetDiscussionRounds: number;
   permissionPolicy: PermissionPolicy;
   workspacePath: string;
   participantIds: string[];
@@ -505,6 +517,7 @@ const defaultSessionDraft: SessionDraft = {
   roomId: "new-session",
   title: "New session",
   mode: "open-discussion",
+  targetDiscussionRounds: 2,
   permissionPolicy: "workspace-write",
   workspacePath: "",
   participantIds: ["codex", "claude-code"],
@@ -598,6 +611,9 @@ interface ModeView {
   orderedAgents: ParticipantDescriptor[];
   completedAgentIds: string[];
   remainingAgentIds: string[];
+  completedTurns: number;
+  completedRounds: number;
+  wrapUpRequested: boolean;
 }
 
 interface TurnTrace {
@@ -772,28 +788,46 @@ function latestAgentOutputAfter(events: RoomEvent[], seq: number): RoomEvent | u
 
 function modeView(room: Room, events: RoomEvent[], t: Translate): ModeView {
   const orderedAgents = room.participants.filter((participant) => participant.kind === "agent");
-  const completedAgentIds = events
-    .filter((item) => item.type === "turn_completed")
+  const latestPrompt = latestHumanMessage(events);
+  const completedEvents = events.filter((item) =>
+    item.type === "turn_completed" && item.seq > (latestPrompt?.seq ?? 0),
+  );
+  const completedAfterPrompt = completedEvents
     .map((item) => String((item.body as any).speakerId ?? ""))
     .filter(Boolean);
-  const latestPrompt = latestHumanMessage(events);
-  const completedAfterPrompt = latestPrompt
+  const wrapUpEvent = events.find((item) =>
+    item.seq > (latestPrompt?.seq ?? 0) &&
+    item.type === "system" &&
+    !!(item.body as any).wrapUp,
+  );
+  const normalCompletedTurns = wrapUpEvent
+    ? completedEvents.filter((item) => item.seq < wrapUpEvent.seq).length
+    : completedEvents.length;
+  const passCompleted = wrapUpEvent
     ? events
-      .filter((item) => item.seq > latestPrompt.seq && item.type === "turn_completed")
+      .filter((item) => item.seq > wrapUpEvent.seq && item.type === "turn_completed")
       .map((item) => String((item.body as any).speakerId ?? ""))
       .filter(Boolean)
-    : completedAgentIds;
-  const uniqueCompleted = [...new Set(completedAfterPrompt)];
+    : room.targetDiscussionRounds
+      ? completedAfterPrompt.slice(Math.floor(completedAfterPrompt.length / Math.max(1, orderedAgents.length)) * Math.max(1, orderedAgents.length))
+      : completedAfterPrompt;
+  const uniqueCompleted = [...new Set(passCompleted)];
   const remainingAgentIds = orderedAgents
     .map((agent) => agent.id)
     .filter((id) => !uniqueCompleted.includes(id));
   if (room.schedulerMode === "round-robin") {
     return {
       label: t("Round robin mode"),
-      detail: t("Agents speak in the selected participant order, one turn each."),
+      detail: t("Agents follow the selected participant order in every discussion round."),
       orderedAgents,
       completedAgentIds: uniqueCompleted,
       remainingAgentIds,
+      completedTurns: completedAfterPrompt.length,
+      completedRounds: Math.min(
+        room.targetDiscussionRounds ?? Number.MAX_SAFE_INTEGER,
+        Math.floor(normalCompletedTurns / Math.max(1, orderedAgents.length)),
+      ),
+      wrapUpRequested: !!wrapUpEvent,
     };
   }
   if (room.schedulerMode === "raise-hand") {
@@ -803,6 +837,9 @@ function modeView(room: Room, events: RoomEvent[], t: Translate): ModeView {
       orderedAgents,
       completedAgentIds: [],
       remainingAgentIds: [],
+      completedTurns: completedAfterPrompt.length,
+      completedRounds: Math.floor(normalCompletedTurns / Math.max(1, orderedAgents.length)),
+      wrapUpRequested: !!wrapUpEvent,
     };
   }
   return {
@@ -811,6 +848,9 @@ function modeView(room: Room, events: RoomEvent[], t: Translate): ModeView {
     orderedAgents,
     completedAgentIds: [],
     remainingAgentIds: [],
+    completedTurns: completedAfterPrompt.length,
+    completedRounds: Math.floor(normalCompletedTurns / Math.max(1, orderedAgents.length)),
+    wrapUpRequested: !!wrapUpEvent,
   };
 }
 
@@ -1632,6 +1672,7 @@ function App() {
         id,
         title: draft.title.trim() || id,
         mode: draft.mode,
+        targetDiscussionRounds: draft.targetDiscussionRounds,
         workspacePath: draft.workspacePath.trim() || undefined,
         participants,
       },
@@ -1872,6 +1913,7 @@ function App() {
       roomId: nextId,
       title: "New session",
       mode: "open-discussion",
+      targetDiscussionRounds: 2,
       permissionPolicy: "workspace-write",
       // Workspace is an explicit context boundary. Do not silently carry the
       // current project's files and cwd into an unrelated new discussion.
@@ -2607,7 +2649,7 @@ function SessionSetupModal({
   const modes: Array<{ id: SessionMode; label: string; detail: string }> = [
     { id: "open-discussion", label: t("Open discussion"), detail: t("Agents can take turns through bids; best for exploration.") },
     { id: "raise-hand", label: t("Raise hand"), detail: t("Agents request the floor and must wait for the active speaker to finish.") },
-    { id: "round-robin", label: t("Round robin"), detail: t("Agents speak once each in the selected participant order.") },
+    { id: "round-robin", label: t("Round robin"), detail: t("Agents follow the selected participant order in every discussion round.") },
   ];
   const permissionPolicies: Array<{ id: PermissionPolicy; label: string; detail: string }> = [
     { id: "read-only", label: t("Read only"), detail: t("Agents can read context but should not edit files.") },
@@ -2624,6 +2666,22 @@ function SessionSetupModal({
         : [...current.participantIds, id],
     }));
   }
+
+  function moveParticipant(id: string, direction: -1 | 1) {
+    setDraft((current) => {
+      const index = current.participantIds.indexOf(id);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= current.participantIds.length) return current;
+      const participantIds = [...current.participantIds];
+      [participantIds[index], participantIds[nextIndex]] = [participantIds[nextIndex], participantIds[index]];
+      return { ...current, participantIds };
+    });
+  }
+
+  const participantById = new Map(participantOptions.map((participant) => [participant.id, participant]));
+  const orderedParticipants = draft.participantIds
+    .map((id) => participantById.get(id))
+    .filter((participant): participant is (typeof participantOptions)[number] => participant !== undefined);
 
   return (
     <div className="credential-modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -2760,6 +2818,26 @@ function SessionSetupModal({
                 </button>
               ))}
             </div>
+            <label className="round-target-control">
+              <span>
+                <strong>{t("Target discussion rounds")}</strong>
+                <small>{t("The active turn is never cut off. After this target, every participant receives one final wrap-up turn.")}</small>
+              </span>
+              <input
+                type="number"
+                min={1}
+                max={12}
+                step={1}
+                value={draft.targetDiscussionRounds}
+                onChange={(input) => {
+                  const value = Number.parseInt(input.currentTarget.value, 10);
+                  setDraft((current) => ({
+                    ...current,
+                    targetDiscussionRounds: Number.isFinite(value) ? Math.max(1, Math.min(12, value)) : 1,
+                  }));
+                }}
+              />
+            </label>
           </section>
 
           <section className="session-setup-section">
@@ -2781,6 +2859,44 @@ function SessionSetupModal({
 
           <section className="session-setup-section wide">
             <div className="mini-heading">{t("Participants")}</div>
+            <div className="participant-order-editor">
+              <div className="participant-order-head">
+                <div>
+                  <strong>{t("Order priority")}</strong>
+                  <span>{t("Round robin follows this order strictly; bidding modes use it to break equal bids and for the final wrap-up pass.")}</span>
+                </div>
+              </div>
+              <div className="participant-order-list">
+                {orderedParticipants.length ? orderedParticipants.map((participant, index) => (
+                  <div className="participant-order-item" key={participant.id}>
+                    <span>{index + 1}</span>
+                    <strong>{participant.display}</strong>
+                    <div>
+                      <button
+                        type="button"
+                        className="icon-action"
+                        disabled={index === 0}
+                        title={`${t("Move up")}: ${participant.display}`}
+                        aria-label={`${t("Move up")}: ${participant.display}`}
+                        onClick={() => moveParticipant(participant.id, -1)}
+                      >
+                        <ChevronUp size={15} />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-action"
+                        disabled={index === orderedParticipants.length - 1}
+                        title={`${t("Move down")}: ${participant.display}`}
+                        aria-label={`${t("Move down")}: ${participant.display}`}
+                        onClick={() => moveParticipant(participant.id, 1)}
+                      >
+                        <ChevronDown size={15} />
+                      </button>
+                    </div>
+                  </div>
+                )) : <span className="field-note">{t("No participants selected")}</span>}
+              </div>
+            </div>
             <div className="participant-picker-list">
               {participantOptions.map((participant) => (
                 <label key={participant.id} className={participant.available === false ? "participant-picker-row unavailable" : "participant-picker-row"}>
@@ -2988,6 +3104,15 @@ function SharedSessionPanel({
         <strong>{mode.label}</strong>
         <span>{mode.detail}</span>
       </div>
+      {room.targetDiscussionRounds ? (
+        <div className="shared-kv">
+          <span>{t("Round target")}</span>
+          <strong>
+            {Math.min(mode.completedRounds, room.targetDiscussionRounds)} / {room.targetDiscussionRounds}
+            {mode.wrapUpRequested ? ` · ${t("Wrapping up")}` : ""}
+          </strong>
+        </div>
+      ) : null}
       {room.schedulerMode === "round-robin" ? (
         <>
           <div className="mini-heading mode-heading">{t("Speaking order")}</div>

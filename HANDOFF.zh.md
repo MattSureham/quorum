@@ -2,6 +2,14 @@
 
 给接手 **Quorum** 的下一个 agent 的工作交接。截至 **2026-07-15**，以 `main` 当前 HEAD 为准。English version: [`HANDOFF.md`](./HANDOFF.md)。
 
+## 2026-07-15 自定义顺序与参考讨论轮数
+
+- New Session 新增可用图标上下移动的参与者顺序，以及 1-12 的“目标讨论轮数”。参与者数组顺序仍是持久化顺序的唯一来源：按序陈述每轮严格遵循，自由讨论和举手模式则用它处理同分 bid。
+- `targetDiscussionRounds` 会写入 `Room`、在 WebSocket 边界校验并传给 `SessionManager`。它与 `maxTurnsPerTopic` 明确分离；后者只保留为防止失控循环的内部硬安全上限。
+- 一轮表示每位被选中或定向的智能体各有一次发言机会。达到目标时不会中断正在进行的 turn；Quorum 会记录 wrap-up 请求，再按设定顺序给所有 eligible 参与者各一次最终总结发言，要求收敛到具体答案、保留分歧，并把未完成工作留给 Continue Session。
+- 按序陈述会先按自定义顺序重复指定轮数，再进入同顺序的总结轮。诊断区显示轮数进度与“正在总结”，设置和状态文案均支持中英双语。
+- 回归覆盖轮数 schema 边界、同分时的自定义顺序、软目标不截断、按序多轮、完整总结轮和 host 持久化。typecheck、`119/119` 测试、Web production build、EventLog/shared/source/Node/Bun sidecar smoke 与 Rust `cargo check` 已通过。首次全量测试中 3 个既有 CLI 子进程测试在并发负载下超过 5 秒，随后单独重跑全部通过；host 集成测试缩回原执行时长后，完整测试套件已干净通过。当前 in-app browser 没有可连接实例，因而无法做点击/截图验收；也未安装完整 Xcode，因此未重跑 macOS bundle。
+
 ## 2026-07-15 Codex 临时重连与话题上下文隔离
 
 - 最近一次用户会议是 `.quorum/webui-smoke.sqlite` 中的 `session-mrlor4em`，参与者确实包含 Codex、Claude Code 和 DeepSeek V4 Pro。Codex 两次 bid 并在 `#21`、`#101` 赢得发言权，但两个 turn 都在约 50 秒后以零输出和 `Reconnecting... 2/5 (request timed out)` 结束。调度没有漏掉 Codex，只是聊天区没有可显示的 Codex message。

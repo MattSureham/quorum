@@ -44,4 +44,23 @@ describe("ClientMessageSchema adapter configuration", () => {
       apiKey: "test-key",
     }).success).toBe(true);
   });
+
+  it("accepts only bounded whole-number discussion-round targets", () => {
+    expect(ClientMessageSchema.safeParse({
+      ...createMessage({ sandbox: "read-only" }),
+      session: {
+        ...createMessage({ sandbox: "read-only" }).session,
+        targetDiscussionRounds: 3,
+      },
+    }).success).toBe(true);
+    for (const targetDiscussionRounds of [0, 1.5, 13]) {
+      expect(ClientMessageSchema.safeParse({
+        ...createMessage({ sandbox: "read-only" }),
+        session: {
+          ...createMessage({ sandbox: "read-only" }).session,
+          targetDiscussionRounds,
+        },
+      }).success).toBe(false);
+    }
+  });
 });

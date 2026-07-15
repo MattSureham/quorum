@@ -201,9 +201,13 @@ failures: Quorum keeps waiting for Codex's HTTPS fallback and only fails on
 Shared-session modes are enforced by the scheduler. Addressed prompts only ask
 the selected agents to bid; `noConsecutive` uses the actual last speaker id;
 Raise hand records each structured bid as a floor request and never preempts the
-active speaker. Open discussion recollects follow-up bids within
-`maxTurnsPerTopic`, reserving the final turn for a forced concrete wrap-up.
-The final round-robin speaker receives the same wrap-up requirement.
+active speaker. Session setup stores the selected participant order and an
+advisory `targetDiscussionRounds` value. Round robin repeats that order for each
+target round; bidding modes use it as the equal-score tie-break. Reaching the
+target never aborts an active turn. Instead, the scheduler starts one ordered
+wrap-up pass in which every selected agent must state a concrete conclusion and
+preserve unresolved disagreement for Continue Session. `maxTurnsPerTopic`
+remains an internal hard safety ceiling rather than the user-facing round target.
 
 Continue Session now restores the last compaction boundary and versioned shared
 memory from the event store; shared memory is included in the deterministic
@@ -547,10 +551,12 @@ modes, and toggling participants do not close the modal or blank the app.
 host keeps an in-memory multi-session registry, creates a new `SessionManager`
 for the selected roster, and the gateway routes `subscribe/post_message` by
 session id. Dynamically-created sessions persist their room metadata and can be
-continued after daemon restart. `Round robin` now uses a strict round-robin
-scheduler: each agent speaks once in the selected participant order, the next
-speaker is granted only after the previous turn releases the floor, and routine
-bid collection is skipped for that mode.
+continued after daemon restart. The setup modal includes up/down controls for
+the selected participant order plus a 1-12 target-round control. `Round robin`
+uses a strict scheduler: each target round follows that order, the next speaker
+is granted only after the previous turn releases the floor, and routine bid
+collection is skipped. After the target rounds, the same order is used for the
+final wrap-up pass rather than cutting the discussion off at the numeric boundary.
 
 After a message is sent, the composer shows a run-status banner derived from the
 event stream. It reports submitted/waiting, bid collection, speaker selection,

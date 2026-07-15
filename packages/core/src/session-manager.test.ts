@@ -449,6 +449,78 @@ describe("SessionManager", () => {
     }
   });
 
+  it("treats target rounds as advisory and gives every agent a final wrap-up pass", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const events: RoomEvent[] = [];
+    log.on((event) => events.push(event));
+    const alpha = new PromptCaptureSpeaker("alpha", { confidence: 1 });
+    const bravo = new PromptCaptureSpeaker("bravo", { confidence: 0.5 });
+    const session = new SessionManager({
+      sessionId: "room",
+      title: "Soft round target",
+      log,
+      agents: [alpha, bravo],
+      targetDiscussionRounds: 1,
+      maxTurnsPerTopic: 1,
+      noConsecutive: true,
+      settlingWindowMs: 10,
+    });
+
+    session.start();
+    try {
+      await session.submitUserPrompt("reach a conclusion");
+      await waitFor(() => session.snapshot().phase === "idle" && events.filter((event) => event.type === "turn_completed").length === 4, 2_000);
+
+      const started = events.filter((event) => event.type === "turn_started");
+      expect(started.map((event) => (event.body as any).speakerId)).toEqual(["alpha", "bravo", "alpha", "bravo"]);
+      const wrapRequest = events.find((event) => event.type === "system" && (event.body as any).wrapUp);
+      expect(wrapRequest).toBeDefined();
+      expect(events.filter((event) => event.type === "turn_completed")[1].seq).toBeLessThan(wrapRequest?.seq ?? 0);
+      expect(wrapRequest?.seq).toBeLessThan(started[2].seq);
+      expect(alpha.prompts[0]).not.toContain("[QUORUM WRAP UP]");
+      expect(bravo.prompts[0]).not.toContain("[QUORUM WRAP UP]");
+      expect(alpha.prompts[1]).toContain("[QUORUM WRAP UP]");
+      expect(bravo.prompts[1]).toContain("[QUORUM WRAP UP]");
+    } finally {
+      await session.stop();
+    }
+  });
+
+  it("repeats the configured round-robin order before the ordered wrap-up pass", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const events: RoomEvent[] = [];
+    log.on((event) => events.push(event));
+    const charlie = new PromptCaptureSpeaker("charlie");
+    const alpha = new PromptCaptureSpeaker("alpha");
+    const bravo = new PromptCaptureSpeaker("bravo");
+    const session = new SessionManager({
+      sessionId: "room",
+      title: "Ordered rounds",
+      log,
+      agents: [charlie, alpha, bravo],
+      schedulerMode: "round-robin",
+      targetDiscussionRounds: 2,
+      settlingWindowMs: 5,
+      turnTimeoutMs: 1_000,
+    });
+
+    session.start();
+    try {
+      await session.submitUserPrompt("discuss in order");
+      await waitFor(() => session.snapshot().phase === "idle" && events.filter((event) => event.type === "turn_completed").length === 9, 2_000);
+      expect(events.filter((event) => event.type === "turn_started").map((event) => (event.body as any).speakerId)).toEqual([
+        "charlie", "alpha", "bravo",
+        "charlie", "alpha", "bravo",
+        "charlie", "alpha", "bravo",
+      ]);
+      expect(charlie.prompts).toHaveLength(3);
+      expect(charlie.prompts[2]).toContain("[QUORUM WRAP UP]");
+      expect(events.filter((event) => event.type === "speaker_selected").slice(-3).every((event) => (event.body as any).scheduler === "wrap-up")).toBe(true);
+    } finally {
+      await session.stop();
+    }
+  });
+
   it("limits addressed prompts to the selected agents", async () => {
     const log = new EventLog("room", new InMemoryStore());
     const events: RoomEvent[] = [];
@@ -653,6 +725,29 @@ describe("SessionManager", () => {
 
     const rebuttal = decision.candidates.find((candidate) => candidate.bid.agentId === "a");
     expect(rebuttal?.components.rebuttalBonus).toBeLessThanOrEqual(rebuttal!.components.base * 0.2);
+  });
+
+  it("uses configured participant order to break otherwise equal bids", () => {
+    const arbiter = new Arbiter();
+    const bid = (agentId: string): Bid => ({
+      bidId: agentId,
+      agentId,
+      epoch: 1,
+      kind: "answer",
+      confidence: 0.5,
+      createdAtSeq: 1,
+      expiresAfterRound: 2,
+      revision: 0,
+    });
+    const decision = arbiter.decide({
+      participants: [
+        { id: "zulu", kind: "agent", display: "Zulu", status: "idle" },
+        { id: "alpha", kind: "agent", display: "Alpha", status: "idle" },
+      ],
+      bids: [bid("alpha"), bid("zulu")],
+    });
+
+    expect(decision.winner?.bid.agentId).toBe("zulu");
   });
 
   it("rebuilds the current projected state from replayed events", async () => {
