@@ -1873,7 +1873,9 @@ function App() {
       title: "New session",
       mode: "open-discussion",
       permissionPolicy: "workspace-write",
-      workspacePath: displayRoom.workspacePath ?? "",
+      // Workspace is an explicit context boundary. Do not silently carry the
+      // current project's files and cwd into an unrelated new discussion.
+      workspacePath: "",
       participantIds: agents.map((agent) => agent.id),
     });
     setSessionSetupOpen(true);

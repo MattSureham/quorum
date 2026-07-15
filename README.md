@@ -479,6 +479,9 @@ folder button opens a read-only directory browser backed by the connected local
 daemon; only directory names and absolute paths are returned, never file
 contents. On a remote connection this intentionally browses the daemon host,
 because that is where CLI agents and workspace tools execute.
+New Session starts with an empty workspace field even when opened from an active
+project room. Selecting a path is an explicit context decision; Quorum does not
+silently carry the previous room's repository into an unrelated discussion.
 
 The agent roster still comes from the room config for now: `quorum.config.json`
 or `QUORUM_CONFIG=<path>`. Each agent is a `ParticipantDescriptor` with an
