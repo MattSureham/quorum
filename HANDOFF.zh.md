@@ -8,7 +8,7 @@
 - `targetDiscussionRounds` 会写入 `Room`、在 WebSocket 边界校验并传给 `SessionManager`。它与 `maxTurnsPerTopic` 明确分离；后者只保留为防止失控循环的内部硬安全上限。
 - 一轮表示每位被选中或定向的智能体各有一次发言机会。达到目标时不会中断正在进行的 turn；Quorum 会记录 wrap-up 请求，再按设定顺序给所有 eligible 参与者各一次最终总结发言，要求收敛到具体答案、保留分歧，并把未完成工作留给 Continue Session。
 - 按序陈述会先按自定义顺序重复指定轮数，再进入同顺序的总结轮。诊断区显示轮数进度与“正在总结”，设置和状态文案均支持中英双语。
-- 回归覆盖轮数 schema 边界、同分时的自定义顺序、软目标不截断、按序多轮、完整总结轮和 host 持久化。typecheck、`119/119` 测试、Web production build、EventLog/shared/source/Node/Bun sidecar smoke 与 Rust `cargo check` 已通过。首次全量测试中 3 个既有 CLI 子进程测试在并发负载下超过 5 秒，随后单独重跑全部通过；host 集成测试缩回原执行时长后，完整测试套件已干净通过。当前 in-app browser 没有可连接实例，因而无法做点击/截图验收；也未安装完整 Xcode，因此未重跑 macOS bundle。
+- 回归覆盖轮数 schema 边界、同分时的自定义顺序、软目标不截断、按序多轮、完整总结轮和 host 持久化。typecheck、`119/119` 测试、Web production build、EventLog/shared/source/Node/Bun sidecar smoke 与 Rust `cargo check` 已通过。Windows Packages run [29402010332](https://github.com/MattSureham/quorum/actions/runs/29402010332) 已在 `b5f97f1` 上全绿：测试、Web/Bun、未签名 NSIS、portable 组装/布局验证与全部 artifact 上传均通过。首次本地全量测试中 3 个既有 CLI 子进程测试在并发负载下超过 5 秒，随后单独重跑全部通过；host 集成测试缩回原执行时长后，完整测试套件已干净通过。当前 in-app browser 没有可连接实例，因而无法做点击/截图验收；也未安装完整 Xcode，因此未重跑 macOS bundle。
 
 ## 2026-07-15 Codex 临时重连与话题上下文隔离
 
