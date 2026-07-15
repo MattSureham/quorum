@@ -1,10 +1,11 @@
 import { WebSocketServer, type WebSocket } from "ws";
 import type { AddressInfo } from "node:net";
 import { ClientMessageSchema } from "@quorum/protocol/schema";
-import type { Room, ConductorPolicyConfig, CreateSessionInput, ImageAttachment, AgentHealth } from "@quorum/protocol";
+import type { Room, ConductorPolicyConfig, CreateSessionInput, MessageAttachment, AgentHealth } from "@quorum/protocol";
 import { projectSessionState, type EventLog } from "@quorum/core";
 import type { MemorySummary } from "@quorum/protocol";
 import type { ProviderConfigView } from "../persistence/sqlite-store.js";
+import { prepareMessageAttachments } from "../attachments/document-extractor.js";
 
 export interface GatewayDeps {
   log: EventLog;
@@ -13,7 +14,7 @@ export interface GatewayDeps {
   humanId?: string;
   authToken?: string;
   /** Override human prompt handling, e.g. to route through SessionManager. */
-  postMessage?: (text: string, addressedTo?: string[], attachments?: ImageAttachment[]) => Promise<void> | void;
+  postMessage?: (text: string, addressedTo?: string[], attachments?: MessageAttachment[]) => Promise<void> | void;
   /** Resolve a pending tool-approval request (approve_tool). */
   approveTool?: (callId: string, allow: boolean) => void;
   compactMemory?: (fromSeq?: number, toSeq?: number) => Promise<MemorySummary | undefined> | MemorySummary | undefined;
@@ -48,11 +49,12 @@ export class Gateway {
   private readonly clients = new Set<WebSocket>();
   private readonly subscriptions = new Map<WebSocket, string>();
   private readonly sessions = new Map<string, GatewaySessionDeps>();
+  private readonly postMessageQueues = new Map<string, Promise<void>>();
   private readonly unsubscribeLogs: Array<() => void> = [];
   readonly ready: Promise<void>;
 
   constructor(private readonly deps: GatewayDeps, port = 8787) {
-    this.wss = new WebSocketServer({ host: "127.0.0.1", port });
+    this.wss = new WebSocketServer({ host: "127.0.0.1", port, maxPayload: 32_000_000 });
     this.ready = new Promise((resolve, reject) => {
       this.wss.once("listening", resolve);
       this.wss.once("error", reject);
@@ -102,7 +104,7 @@ export class Gateway {
         ws.send(JSON.stringify({
           t: "error",
           text: attachmentError
-            ? "invalid image attachments: use at most 6 images, 5 MB each and 12 MB total"
+            ? "invalid attachments: use images up to 5 MB or PDF/DOCX files up to 10 MB each"
             : "bad message",
         }));
         return;
@@ -238,23 +240,7 @@ export class Gateway {
         }));
         break;
       case "post_message":
-        if (m.attachments?.length) {
-          const declaredBytes = m.attachments.reduce((sum: number, item: ImageAttachment) => sum + (item.sizeBytes ?? 0), 0);
-          const encodedBytes = m.attachments.reduce((sum: number, item: ImageAttachment) => sum + item.dataUrl.length, 0);
-          if (declaredBytes > 12_000_000 || encodedBytes > 16_000_000) {
-            ws.send(JSON.stringify({ t: "error", text: "image attachments exceed the 12 MB total limit" }));
-            break;
-          }
-        }
-        if (session.postMessage) void Promise.resolve(session.postMessage(m.text, m.addressedTo, m.attachments)).catch((err) =>
-          ws.send(JSON.stringify({ t: "error", text: `post_message failed: ${err instanceof Error ? err.message : String(err)}` })),
-        );
-        else void session.log.append({
-          author: this.human(session),
-          type: "message",
-          body: { text: m.text, ...(m.attachments?.length ? { attachments: m.attachments } : {}) },
-          addressedTo: m.addressedTo,
-        });
+        this.queuePostMessage(ws, session, m);
         break;
       case "interrupt":
         if (session.interrupt) void Promise.resolve(session.interrupt(!!m.hard)).catch((err) =>
@@ -339,6 +325,40 @@ export class Gateway {
       default:
         break;
     }
+  }
+
+  private queuePostMessage(ws: WebSocket, session: GatewaySessionDeps, message: {
+    text: string;
+    addressedTo?: string[];
+    attachments?: MessageAttachment[];
+  }): void {
+    const roomId = session.room.id;
+    const previous = this.postMessageQueues.get(roomId) ?? Promise.resolve();
+    const next = previous
+      .catch(() => undefined)
+      .then(async () => {
+        const attachments = message.attachments?.length
+          ? await prepareMessageAttachments(message.attachments)
+          : undefined;
+        if (session.postMessage) {
+          await session.postMessage(message.text, message.addressedTo, attachments);
+        } else {
+          await session.log.append({
+            author: this.human(session),
+            type: "message",
+            body: { text: message.text, ...(attachments?.length ? { attachments } : {}) },
+            addressedTo: message.addressedTo,
+          });
+        }
+      });
+    this.postMessageQueues.set(roomId, next);
+    void next.catch((err) => {
+      try {
+        ws.send(JSON.stringify({ t: "error", text: `post_message failed: ${err instanceof Error ? err.message : String(err)}` }));
+      } catch { /* connection closed */ }
+    }).finally(() => {
+      if (this.postMessageQueues.get(roomId) === next) this.postMessageQueues.delete(roomId);
+    });
   }
 
   private human(session = this.deps) {

@@ -15,6 +15,7 @@ import {
   CircleAlert,
   CircleDot,
   Download,
+  FileText,
   FolderOpen,
   GitCommitHorizontal,
   Hand,
@@ -47,7 +48,7 @@ import type {
   FloorGrantBody,
   FloorReleaseBody,
   FloorRequestBody,
-  ImageAttachment,
+  MessageAttachment,
   MessageBody,
   MemorySummary,
   ParticipantDescriptor,
@@ -119,7 +120,21 @@ const zhText: Record<string, string> = {
   "unavailable": "不可用",
   "Check agents": "检查智能体",
   "Message the session": "发送消息到会话",
-  "Image": "图片",
+  "File": "文件",
+  "Images, PDF, and DOCX": "图片、PDF 和 DOCX",
+  "Only PNG, JPEG, GIF, WebP, PDF, and DOCX files are supported.": "仅支持 PNG、JPEG、GIF、WebP、PDF 和 DOCX 文件。",
+  "Images may be up to 5 MB; PDF and DOCX files may be up to 10 MB.": "图片最大 5 MB；PDF 和 DOCX 文件最大 10 MB。",
+  "Attachments exceed the 20 MB total limit.": "附件超过 20 MB 总大小限制。",
+  "Use at most 6 attachments.": "最多添加 6 个附件。",
+  "Failed to read attachment": "无法读取附件",
+  "Document text": "文档文本",
+  "Shared with all agents": "已共享给所有智能体",
+  "Document ready": "已读取",
+  "Document truncated": "已截断",
+  "Document empty": "无内嵌文本",
+  "Document failed": "读取失败",
+  "Document pending": "正在读取",
+  "pages": "页",
   "Image blocked": "图片已拦截",
   "Diagram unavailable": "图表无法渲染",
   "Rendering diagram": "正在渲染图表",
@@ -722,17 +737,39 @@ function withPermissionPolicy(participant: ParticipantDescriptor, policy: Permis
   return { ...participant, adapterConfig };
 }
 
-function readImageAttachment(file: File): Promise<ImageAttachment> {
+const PDF_MIME_TYPE = "application/pdf";
+const DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const MAX_IMAGE_BYTES = 5_000_000;
+const MAX_DOCUMENT_BYTES = 10_000_000;
+const MAX_TOTAL_ATTACHMENT_BYTES = 20_000_000;
+const SAFE_IMAGE_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+
+function supportedAttachmentMimeType(file: File): string | undefined {
+  if (SAFE_IMAGE_MIME_TYPES.has(file.type)) return file.type;
+  if (file.type === PDF_MIME_TYPE || file.name.toLowerCase().endsWith(".pdf")) return PDF_MIME_TYPE;
+  if (file.type === DOCX_MIME_TYPE || file.name.toLowerCase().endsWith(".docx")) return DOCX_MIME_TYPE;
+  return undefined;
+}
+
+function readMessageAttachment(file: File, mimeType: string): Promise<MessageAttachment> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(reader.error ?? new Error(`Failed to read ${file.name}`));
-    reader.onload = () => resolve({
-      id: `img-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-      name: file.name,
-      mimeType: file.type || "application/octet-stream",
-      dataUrl: String(reader.result ?? ""),
-      sizeBytes: file.size,
-    });
+    reader.onload = () => {
+      const result = String(reader.result ?? "");
+      const comma = result.indexOf(",");
+      if (comma < 0) {
+        reject(new Error(`Failed to encode ${file.name}`));
+        return;
+      }
+      resolve({
+        id: `${mimeType.startsWith("image/") ? "img" : "doc"}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+        name: file.name,
+        mimeType,
+        dataUrl: `data:${mimeType};base64,${result.slice(comma + 1)}`,
+        sizeBytes: file.size,
+      });
+    };
     reader.readAsDataURL(file);
   });
 }
@@ -1190,7 +1227,7 @@ function App() {
   const [events, setEvents] = useState<RoomEvent[]>([]);
   const [selectedTargets, setSelectedTargets] = useState<string[]>([]);
   const [composer, setComposer] = useState("");
-  const [composerAttachments, setComposerAttachments] = useState<ImageAttachment[]>([]);
+  const [composerAttachments, setComposerAttachments] = useState<MessageAttachment[]>([]);
   const [lastSubmittedAt, setLastSubmittedAt] = useState<number | undefined>();
   const [now, setNow] = useState(Date.now());
   const [replayAfterSeq, setReplayAfterSeq] = useState("0");
@@ -1718,15 +1755,26 @@ function App() {
     }
   }
 
-  async function attachImages(files: Iterable<File> | null) {
+  async function attachFiles(files: Iterable<File> | null) {
     if (!files) return;
-    const images = [...files].filter((file) => file.type.startsWith("image/"));
-    if (!images.length) return;
+    const selected = [...files];
+    if (!selected.length) return;
     try {
-      const loaded = await Promise.all(images.map(readImageAttachment));
-      setComposerAttachments((current) => [...current, ...loaded].slice(0, 6));
+      if (composerAttachments.length + selected.length > 6) throw new Error(t("Use at most 6 attachments."));
+      const supported = selected.map((file) => {
+        const mimeType = supportedAttachmentMimeType(file);
+        if (!mimeType) throw new Error(t("Only PNG, JPEG, GIF, WebP, PDF, and DOCX files are supported."));
+        const limit = mimeType.startsWith("image/") ? MAX_IMAGE_BYTES : MAX_DOCUMENT_BYTES;
+        if (file.size > limit) throw new Error(t("Images may be up to 5 MB; PDF and DOCX files may be up to 10 MB."));
+        return { file, mimeType };
+      });
+      const totalBytes = composerAttachments.reduce((sum, item) => sum + (item.sizeBytes ?? 0), 0)
+        + supported.reduce((sum, item) => sum + item.file.size, 0);
+      if (totalBytes > MAX_TOTAL_ATTACHMENT_BYTES) throw new Error(t("Attachments exceed the 20 MB total limit."));
+      const loaded = await Promise.all(supported.map(({ file, mimeType }) => readMessageAttachment(file, mimeType)));
+      setComposerAttachments((current) => [...current, ...loaded]);
     } catch (attachmentError) {
-      setError(attachmentError instanceof Error ? attachmentError.message : t("Failed to read pasted image"));
+      setError(attachmentError instanceof Error ? attachmentError.message : t("Failed to read attachment"));
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
@@ -1739,7 +1787,7 @@ function App() {
       .filter((file): file is File => file !== null);
     if (!images.length) return;
     event.preventDefault();
-    void attachImages(images);
+    void attachFiles(images);
   }
 
   function removeAttachment(id: string) {
@@ -2123,30 +2171,32 @@ function App() {
           />
           {composerAttachments.length ? (
             <div className="composer-attachments">
-              {composerAttachments.map((image) => (
-                <div key={image.id} className="composer-attachment">
-                  <img src={image.dataUrl} alt={image.name} />
-                  <span>{image.name}</span>
-                  <button type="button" aria-label={`Remove ${image.name}`} onClick={() => removeAttachment(image.id)}>
+              {composerAttachments.map((attachment) => (
+                <div key={attachment.id} className="composer-attachment">
+                  {attachment.mimeType.startsWith("image/")
+                    ? <img src={attachment.dataUrl} alt={attachment.name} />
+                    : <div className="attachment-file-icon"><FileText size={21} /></div>}
+                  <span title={attachment.name}>{attachment.name}</span>
+                  <button type="button" aria-label={`Remove ${attachment.name}`} onClick={() => removeAttachment(attachment.id)}>
                     <XCircle size={14} />
                   </button>
                 </div>
               ))}
             </div>
           ) : null}
-          {composerAttachments.length ? <ImageVisibility agents={agents} t={t} /> : null}
+          {composerAttachments.length ? <AttachmentVisibility attachments={composerAttachments} agents={agents} t={t} /> : null}
           <div className="composer-actions">
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
               multiple
               className="hidden-file-input"
-              onChange={(input) => void attachImages(input.currentTarget.files)}
+              onChange={(input) => void attachFiles(input.currentTarget.files)}
             />
             <button className="secondary-action attach-action" type="button" disabled={!connected} onClick={() => fileInputRef.current?.click()}>
               <Plus size={16} />
-              <span>{t("Image")}</span>
+              <span>{t("File")}</span>
             </button>
             <button className="send-action" type="button" disabled={!connected || (!composer.trim() && !composerAttachments.length)} onClick={sendMessage}>
               <Send size={16} />
@@ -2987,14 +3037,19 @@ function AgentHealthBadge({ health, active = false, fallback, t }: { health?: Ag
   );
 }
 
-function ImageVisibility({ agents, t }: { agents: ParticipantDescriptor[]; t: Translate }) {
+function AttachmentVisibility({ attachments, agents, t }: { attachments: MessageAttachment[]; agents: ParticipantDescriptor[]; t: Translate }) {
+  const hasImages = attachments.some((attachment) => attachment.mimeType.startsWith("image/"));
+  const hasDocuments = attachments.some((attachment) => !attachment.mimeType.startsWith("image/"));
   const vision = agents.filter(agentSupportsVision);
   const metadataOnly = agents.filter((agent) => !agentSupportsVision(agent));
   return (
     <div className="image-visibility">
-      <strong>{t("Image visibility")}</strong>
-      <span>{t("Can inspect images")}: {vision.length ? vision.map((agent) => agent.display).join(", ") : t("none")}</span>
-      <span>{t("Metadata only")}: {metadataOnly.length ? metadataOnly.map((agent) => agent.display).join(", ") : t("none")}</span>
+      <strong>{t("Images, PDF, and DOCX")}</strong>
+      {hasImages ? <>
+        <span>{t("Can inspect images")}: {vision.length ? vision.map((agent) => agent.display).join(", ") : t("none")}</span>
+        <span>{t("Metadata only")}: {metadataOnly.length ? metadataOnly.map((agent) => agent.display).join(", ") : t("none")}</span>
+      </> : null}
+      {hasDocuments ? <span>{t("Document text")}: {t("Shared with all agents")}</span> : null}
     </div>
   );
 }
@@ -3332,6 +3387,8 @@ function MemoryPanel({
 
 function ChatMessageRow({ event, t }: { event: RoomEvent; t: Translate }) {
   const body = event.body as MessageBody;
+  const images = body.attachments?.filter((attachment) => attachment.mimeType.startsWith("image/")) ?? [];
+  const documents = body.attachments?.filter((attachment) => !attachment.mimeType.startsWith("image/")) ?? [];
   return (
     <article className={`chat-message-row ${event.author.kind}`}>
       <div className="chat-message-meta">
@@ -3339,14 +3396,34 @@ function ChatMessageRow({ event, t }: { event: RoomEvent; t: Translate }) {
         <time>{new Date(event.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
       </div>
       {body.text ? <div className="chat-message-body"><RichMessage text={body.text} t={t} /></div> : null}
-      {body.attachments?.length ? (
+      {images.length ? (
         <div className="chat-message-attachments">
-          {body.attachments.map((image) => (
+          {images.map((image) => (
             <figure key={image.id}>
               <a href={image.dataUrl} target="_blank" rel="noreferrer noopener">
                 <img src={image.dataUrl} alt={image.name} loading="lazy" />
               </a>
               <figcaption>{image.name}</figcaption>
+            </figure>
+          ))}
+        </div>
+      ) : null}
+      {documents.length ? (
+        <div className="chat-document-attachments">
+          {documents.map((document) => (
+            <figure key={document.id} className={`chat-document ${document.extraction?.status ?? "pending"}`}>
+              <a href={document.dataUrl} download={document.name}>
+                <FileText size={22} />
+                <span>
+                  <strong>{document.name}</strong>
+                  <small>
+                    {t(`Document ${document.extraction?.status ?? "pending"}`)}
+                    {document.extraction?.pageCount ? ` · ${document.extraction.pageCount} ${t("pages")}` : ""}
+                  </small>
+                </span>
+                <Download size={16} />
+              </a>
+              {document.extraction?.warning ? <figcaption>{document.extraction.warning}</figcaption> : null}
             </figure>
           ))}
         </div>

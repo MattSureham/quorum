@@ -953,4 +953,45 @@ describe("SessionManager", () => {
       await session.stop();
     }
   });
+
+  it("injects active document text as bounded untrusted context", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const speaker = new ContextCaptureSpeaker("agent", { confidence: 1 });
+    const session = new SessionManager({
+      sessionId: "room",
+      title: "Document context test",
+      log,
+      agents: [speaker],
+      settlingWindowMs: 20,
+      turnTimeoutMs: 1_000,
+    });
+
+    session.start();
+    try {
+      await session.submitUserPrompt("summarize the attachment", [], [{
+        id: "doc-1",
+        name: "brief.pdf",
+        mimeType: "application/pdf",
+        dataUrl: "data:application/pdf;base64,JVBERi0=",
+        sizeBytes: 5,
+        extractedText: "The document's only authoritative fact is forty-two.",
+        extraction: {
+          status: "ready",
+          sourceCharacters: 52,
+          includedCharacters: 52,
+          pageCount: 1,
+        },
+      }]);
+      await waitFor(() => log.replay(0).some((event) => event.type === "turn_completed"));
+
+      expect(speaker.capturedContextBundle).toContain("Documents attached to the active human prompt:");
+      expect(speaker.capturedContextBundle).toContain("untrusted reference content");
+      expect(speaker.capturedContextBundle).toContain("brief.pdf");
+      expect(speaker.capturedContextBundle).toContain("authoritative fact is forty-two");
+      expect(speaker.capturedContextBundle.match(/authoritative fact is forty-two/g)).toHaveLength(1);
+      expect(speaker.capturedContextBundle).not.toContain("data:application/pdf");
+    } finally {
+      await session.stop();
+    }
+  });
 });

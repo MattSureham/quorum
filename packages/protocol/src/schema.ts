@@ -70,10 +70,33 @@ const SessionLifecycleSchema = z.enum(["draft", "active", "paused", "completed",
 const ImageAttachmentSchema = z.object({
   id: z.string().min(1).max(128),
   name: z.string().min(1).max(255),
-  mimeType: z.string().regex(/^image\/[a-zA-Z0-9.+-]+$/),
-  dataUrl: z.string().max(7_000_000).regex(/^data:image\/[a-zA-Z0-9.+-]+;base64,/),
+  mimeType: z.enum(["image/png", "image/jpeg", "image/gif", "image/webp"]),
+  dataUrl: z.string().max(7_000_000).regex(/^data:image\/(?:png|jpeg|gif|webp);base64,/),
   sizeBytes: z.number().int().min(0).max(5_000_000).optional(),
+}).superRefine((attachment, ctx) => {
+  if (!attachment.dataUrl.startsWith(`data:${attachment.mimeType};base64,`)) {
+    ctx.addIssue({ code: "custom", path: ["dataUrl"], message: "data URL MIME type does not match attachment MIME type" });
+  }
 });
+
+const DocumentMimeTypeSchema = z.enum([
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+]);
+
+const DocumentAttachmentSchema = z.object({
+  id: z.string().min(1).max(128),
+  name: z.string().min(1).max(255),
+  mimeType: DocumentMimeTypeSchema,
+  dataUrl: z.string().max(14_000_000).regex(/^data:application\/[a-zA-Z0-9.+-]+;base64,/),
+  sizeBytes: z.number().int().min(0).max(10_000_000).optional(),
+}).superRefine((attachment, ctx) => {
+  if (!attachment.dataUrl.startsWith(`data:${attachment.mimeType};base64,`)) {
+    ctx.addIssue({ code: "custom", path: ["dataUrl"], message: "data URL MIME type does not match attachment MIME type" });
+  }
+});
+
+const MessageAttachmentSchema = z.union([ImageAttachmentSchema, DocumentAttachmentSchema]);
 
 export const SessionPhaseSchema = z.enum([
   "idle",
@@ -146,7 +169,7 @@ export const ClientMessageSchema = z.discriminatedUnion("t", [
     t: z.literal("post_message"),
     roomId: z.string(),
     text: z.string(),
-    attachments: z.array(ImageAttachmentSchema).max(6).optional(),
+    attachments: z.array(MessageAttachmentSchema).max(6).optional(),
     addressedTo: z.array(z.string()).optional(),
   }),
   z.object({ t: z.literal("interrupt"), roomId: z.string(), hard: z.boolean().optional() }),

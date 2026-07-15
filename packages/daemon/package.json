@@ -14,7 +14,10 @@
     "@quorum/core": "workspace:*",
     "@quorum/protocol": "workspace:*",
     "better-sqlite3": "^11.3.0",
-    "ws": "^8.18.0"
+    "mammoth": "^1.12.0",
+    "unpdf": "^1.6.2",
+    "ws": "^8.18.0",
+    "yauzl": "^3.4.0"
   },
   "optionalDependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.1.0",
@@ -22,6 +25,7 @@
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.0",
-    "@types/ws": "^8.5.0"
+    "@types/ws": "^8.5.0",
+    "@types/yauzl": "^3.4.0"
   }
 }

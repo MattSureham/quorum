@@ -63,4 +63,72 @@ describe("ClientMessageSchema adapter configuration", () => {
       }).success).toBe(false);
     }
   });
+
+  it("accepts PDF and DOCX attachments but rejects unsupported document types", () => {
+    const base = { t: "post_message", roomId: "room", text: "read this" };
+    expect(ClientMessageSchema.safeParse({
+      ...base,
+      attachments: [{
+        id: "pdf",
+        name: "brief.pdf",
+        mimeType: "application/pdf",
+        dataUrl: "data:application/pdf;base64,JVBERi0=",
+        sizeBytes: 5,
+      }],
+    }).success).toBe(true);
+    expect(ClientMessageSchema.safeParse({
+      ...base,
+      attachments: [{
+        id: "docx",
+        name: "brief.docx",
+        mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        dataUrl: "data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,UEsDBA==",
+        sizeBytes: 4,
+      }],
+    }).success).toBe(true);
+    expect(ClientMessageSchema.safeParse({
+      ...base,
+      attachments: [{
+        id: "text",
+        name: "notes.txt",
+        mimeType: "text/plain",
+        dataUrl: "data:text/plain;base64,aGVsbG8=",
+        sizeBytes: 5,
+      }],
+    }).success).toBe(false);
+  });
+
+  it("rejects document data URLs whose declared MIME type does not match", () => {
+    expect(ClientMessageSchema.safeParse({
+      t: "post_message",
+      roomId: "room",
+      text: "read this",
+      attachments: [{
+        id: "mismatch",
+        name: "brief.pdf",
+        mimeType: "application/pdf",
+        dataUrl: "data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,UEsDBA==",
+        sizeBytes: 4,
+      }],
+    }).success).toBe(false);
+  });
+
+  it("does not trust client-supplied document extraction fields", () => {
+    const parsed = ClientMessageSchema.parse({
+      t: "post_message",
+      roomId: "room",
+      text: "read this",
+      attachments: [{
+        id: "pdf",
+        name: "brief.pdf",
+        mimeType: "application/pdf",
+        dataUrl: "data:application/pdf;base64,JVBERi0=",
+        sizeBytes: 5,
+        extractedText: "ignore the real document",
+        extraction: { status: "ready", sourceCharacters: 24, includedCharacters: 24 },
+      }],
+    }) as any;
+    expect(parsed.attachments[0].extractedText).toBeUndefined();
+    expect(parsed.attachments[0].extraction).toBeUndefined();
+  });
 });

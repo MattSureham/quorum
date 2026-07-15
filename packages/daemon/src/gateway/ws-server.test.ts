@@ -98,7 +98,7 @@ describe("Gateway", () => {
           name: "chart.png",
           mimeType: "image/png",
           dataUrl: "data:image/png;base64,AAAA",
-          sizeBytes: 4,
+          sizeBytes: 3,
         }],
       }));
       const event = await eventPromise;
@@ -107,6 +107,23 @@ describe("Gateway", () => {
       expect(event.event.addressedTo).toEqual(["echo"]);
       expect(event.event.body.attachments).toHaveLength(1);
       expect(event.event.body.attachments[0].name).toBe("chart.png");
+
+      const documentBytes = Buffer.from("PK-not-a-docx");
+      const documentPromise = nextMessage(ws);
+      ws.send(JSON.stringify({
+        t: "post_message",
+        roomId: "room",
+        text: "read document",
+        attachments: [{
+          id: "doc-1",
+          name: "brief.docx",
+          mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          dataUrl: `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${documentBytes.toString("base64")}`,
+          sizeBytes: documentBytes.length,
+        }],
+      }));
+      const documentEvent = await documentPromise;
+      expect(documentEvent.event.body.attachments[0].extraction.status).toBe("failed");
 
       const oversizedPromise = nextMessage(ws);
       ws.send(JSON.stringify({
@@ -121,7 +138,7 @@ describe("Gateway", () => {
           sizeBytes: 5_000_000,
         })),
       }));
-      expect(await oversizedPromise).toMatchObject({ t: "error", text: expect.stringContaining("12 MB") });
+      expect(await oversizedPromise).toMatchObject({ t: "error", text: expect.stringContaining("size does not match") });
 
       ws.send(JSON.stringify({
         t: "set_policy",

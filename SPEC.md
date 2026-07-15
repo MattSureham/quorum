@@ -606,9 +606,19 @@ daemon 内置一个小型 **stdio MCP server**（`@modelcontextprotocol/sdk`）�
 
 **Client → Server（`ClientMessage`）**
 ```ts
+type MessageAttachment = {
+  id: string;
+  name: string;
+  mimeType: "image/png" | "image/jpeg" | "image/gif" | "image/webp"
+    | "application/pdf"
+    | "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  dataUrl: string;
+  sizeBytes?: number;
+};
+
 type ClientMessage =
   | { t: "subscribe"; roomId: string; sinceSeq?: number }   // 订阅 + 可选回放
-  | { t: "post_message"; roomId: string; text: string; addressedTo?: string[] }
+  | { t: "post_message"; roomId: string; text: string; addressedTo?: string[]; attachments?: MessageAttachment[] }
   | { t: "interrupt"; roomId: string; hard?: boolean }       // 人类打断
   | { t: "set_policy"; roomId: string; policy: ConductorPolicyConfig } // 切换 抢麦/定向/主持
   | { t: "approve_tool"; roomId: string; callId: string; allow: boolean } // 工具批准
@@ -617,6 +627,12 @@ type ClientMessage =
   | { t: "add_participant"; roomId: string; descriptor: ParticipantDescriptor }
   | { t: "remove_participant"; roomId: string; participantId: string };
 ```
+
+附件只在 localhost gateway 内处理：位图可传给具有视觉能力的 API model；PDF/DOCX
+由 sidecar 在本机提取有界纯文本并作为非可信参考内容注入当前 topic。event log 保留
+原文件与提取结果，但后续历史 Context Bundle 只携带附件元数据，不重复 data URL 或全文。
+扫描 PDF 暂不做 OCR。网络边界最多 6 个附件，图片每个 5 MB、文档每个 10 MB、
+解码后总计 20 MB；单文档最多注入 120,000 字符，单 prompt 文档总计 160,000 字符。
 
 **Server → Client**
 ```ts

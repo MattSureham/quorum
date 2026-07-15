@@ -211,10 +211,17 @@ remains an internal hard safety ceiling rather than the user-facing round target
 
 Continue Session now restores the last compaction boundary and versioned shared
 memory from the event store; shared memory is included in the deterministic
-Context Bundle. Image data URLs are excluded from text projections and context
-summaries. Vision API requests receive only the images attached to the prompt
-that opened the current epoch, with six-image, 5 MB per-image, and 12 MB total
-gateway limits.
+Context Bundle. Attachment data URLs and extracted document bodies are excluded
+from historical text projections and context summaries. Vision API requests
+receive only the images attached to the prompt that opened the current epoch.
+PDF and DOCX attachments are parsed locally by the sidecar and their bounded
+plain-text extracts are shared with every agent only for the active topic. The
+gateway accepts at most six attachments: raster images up to 5 MB, PDF/DOCX up
+to 10 MB each, and 20 MB total. Extracts are capped at 120,000 characters per
+document and 160,000 characters per prompt. DOCX ZIP metadata is preflighted for
+entry-count and expanded-size limits before Mammoth opens the document. Scanned
+PDFs without embedded text are reported as requiring OCR; OCR is not implemented
+yet.
 
 Session setup exposes a first-pass permission policy: read-only, workspace-write,
 approval-required, or full-auto. The selected policy is written into participant
@@ -224,10 +231,11 @@ Because native CLI tool calls are not yet all bridged through Quorum approval,
 Codex, default permissions for Claude Code) instead of pretending every native
 tool call can already be intercepted.
 
-When images are attached in chat, the composer now shows which session agents
-can inspect image content and which agents will only receive metadata/projection
-text. API-model vision support is currently identified for MiniMax-style vision
-profiles; local CLI image file bridging is still future work.
+When files are attached in chat, the composer shows which session agents can
+inspect image content and which receive image metadata only. Extracted PDF/DOCX
+text is available to every participant. API-model vision support is currently
+identified for MiniMax-style vision profiles; local CLI image file bridging is
+still future work.
 
 The built-in Claude-family local agent is named **Claude Code** because it uses
 the `claude-code` adapter and local Claude Code auth/session. Anthropic API
@@ -341,10 +349,12 @@ requiring Quorum to be launched from a configured terminal.
 
 Runnable shared-session application with persisted sessions, Web UI, and desktop packaging:
 
-Chat images can be added with the Image button or pasted directly into the
-message composer with `Ctrl/Cmd+V`. Pasted images use the same preview, removal,
-visibility, payload limits, and send path as uploaded files; ordinary text paste
-continues to work normally.
+Images, PDFs, and DOCX files can be added with the **File** button. Images can
+also be pasted directly into the message composer with `Ctrl/Cmd+V`. Pasted
+images use the same preview, removal, visibility, payload limits, and send path
+as uploaded files; ordinary text paste continues to work normally. Document
+cards show extraction status, page count when available, truncation/parser
+warnings, and retain a download link to the locally persisted original.
 
 Security/reliability hardening in the current shared-session path:
 
@@ -578,12 +588,15 @@ is inserted into the page. Invalid diagrams retain a readable source fallback.
 Every agent receives these presentation capabilities in its turn context and is
 asked to keep a textual conclusion alongside any visual.
 
-Chat messages can include image attachments. The Web UI sends image data as
-message attachments, renders thumbnails in the transcript, and keeps those
-attachments in the event log. Direct `api-model` agents receive attached images
-through OpenAI-compatible `image_url` multimodal content, so vision-capable
-models can inspect them. CLI agents receive attachment metadata in their
-projected transcript; a dedicated local-file bridge for CLI vision input is a
+Chat messages can include safe raster images, PDF files, and DOCX files. The Web
+UI renders image thumbnails and document status cards, while the local sidecar
+extracts PDF text with `unpdf` and DOCX text with Mammoth before starting the
+agent turn. Direct `api-model` agents receive current-topic images through
+OpenAI-compatible `image_url` multimodal content; every API and CLI agent
+receives the bounded PDF/DOCX text through the Context Bundle. The authoritative
+event retains the local original and extraction result, while later historical
+prompts carry attachment metadata rather than repeating data URLs or full
+document text. A dedicated local-file bridge for CLI image input remains a
 future enhancement.
 
 Direct API model agents also report configuration failures in the chat stream.

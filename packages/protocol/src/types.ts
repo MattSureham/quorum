@@ -45,14 +45,28 @@ export interface RoomEvent {
 }
 
 // ---- body shapes (discriminated by RoomEvent.type) ----
-export interface ImageAttachment {
+export type AttachmentExtractionStatus = "ready" | "truncated" | "empty" | "failed";
+
+export interface AttachmentExtraction {
+  status: AttachmentExtractionStatus;
+  sourceCharacters: number;
+  includedCharacters: number;
+  pageCount?: number;
+  warning?: string;
+}
+
+export interface MessageAttachment {
   id: string;
   name: string;
   mimeType: string;
   dataUrl: string;
   sizeBytes?: number;
+  extractedText?: string;
+  extraction?: AttachmentExtraction;
 }
-export interface MessageBody { text: string; attachments?: ImageAttachment[] }
+/** @deprecated Use MessageAttachment. Kept as a source-compatible alias. */
+export type ImageAttachment = MessageAttachment;
+export interface MessageBody { text: string; attachments?: MessageAttachment[] }
 export interface ThinkingBody { text: string; partial?: boolean }
 export interface ToolCallBody { tool: string; name?: string; args: unknown; callId: string }
 export interface ToolResultBody { callId: string; ok: boolean; stdout?: string; exitCode?: number; diffRef?: string }
@@ -210,7 +224,7 @@ export interface TurnContext {
   participants: ParticipantDescriptor[];
   transcript: RoomEvent[];
   contextBundle?: string;
-  attachments?: ImageAttachment[];
+  attachments?: MessageAttachment[];
 }
 
 export type AgentDelta =
