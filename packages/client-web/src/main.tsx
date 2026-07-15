@@ -178,6 +178,10 @@ const zhText: Record<string, string> = {
   "Default model": "默认模型",
   "Save": "保存",
   "Saving": "正在保存",
+  "Saved": "已保存",
+  "Save failed": "保存失败",
+  "Not connected to the Quorum sidecar.": "未连接到 Quorum sidecar。",
+  "No save response from the sidecar. Fully extract one portable ZIP and do not mix files from different builds.": "sidecar 未返回保存结果。请完整解压同一个 portable ZIP，不要混用不同构建中的文件。",
   "Done": "完成",
   "Session setup": "会话设置",
   "Choose participants and a discussion mode, then start a new shared session.": "选择参与者和讨论模式，然后启动新的共享会话。",
@@ -335,7 +339,8 @@ type ServerMessage =
   | { t: "replay_projection"; afterSeq: number; headSeq: number; eventCount: number; projection: SharedSessionProjectionResult }
   | { t: "memory_compacted"; summary?: MemorySummary; summaries: MemorySummary[] }
   | { t: "credentials"; providers: ProviderConfigView[] }
-  | { t: "credential_saved"; provider: ProviderConfigView; providers: ProviderConfigView[] }
+  | { t: "credential_saved"; requestId?: string; provider: ProviderConfigView; providers: ProviderConfigView[] }
+  | { t: "credential_error"; requestId?: string; providerId: string; text: string }
   | { t: "agent_health"; roomId: string; health: Record<string, AgentHealth> }
   | { t: "workspace_directories"; requestId: string; path: string; parent?: string; directories: Array<{ name: string; path: string }> }
   | { t: "workspace_directories_error"; requestId: string; text: string }
@@ -379,6 +384,11 @@ interface CredentialDraft {
   baseUrl: string;
   model: string;
   locked?: boolean;
+}
+
+interface CredentialSaveFeedback {
+  state: "saving" | "saved" | "error";
+  text: string;
 }
 
 interface SessionDraft {
@@ -1141,6 +1151,7 @@ function App() {
   const [credentialViews, setCredentialViews] = useState<ProviderConfigView[]>([]);
   const [credentialDrafts, setCredentialDrafts] = useState<CredentialDraft[]>(credentialPresets);
   const [credentialStatus, setCredentialStatus] = useState("");
+  const [credentialFeedback, setCredentialFeedback] = useState<Record<string, CredentialSaveFeedback>>({});
   const [agentHealth, setAgentHealth] = useState<Record<string, AgentHealth>>({});
   const [customProfiles, setCustomProfiles] = useState<AgentModelPreset[]>(() => loadCustomProfiles());
   const [profileDraft, setProfileDraft] = useState<AgentProfileDraft>(defaultAgentProfileDraft);
@@ -1160,6 +1171,10 @@ function App() {
   const directoryRequestsRef = useRef(new Map<string, {
     resolve: (listing: WorkspaceDirectoryListing) => void;
     reject: (error: Error) => void;
+    timer: ReturnType<typeof setTimeout>;
+  }>());
+  const credentialRequestsRef = useRef(new Map<string, {
+    providerId: string;
     timer: ReturnType<typeof setTimeout>;
   }>());
   const stickRef = useRef(true); // keep pinned to newest unless the user scrolls up
@@ -1353,10 +1368,34 @@ function App() {
           setCredentialViews(message.providers);
           mergeCredentialViews(message.providers);
         } else if (message.t === "credential_saved") {
-          setCredentialStatus(`${message.provider.providerId} saved`);
+          const pendingEntry = message.requestId
+            ? credentialRequestsRef.current.get(message.requestId)
+            : [...credentialRequestsRef.current.entries()].find(([, entry]) => entry.providerId === message.provider.providerId)?.[1];
+          if (message.requestId) credentialRequestsRef.current.delete(message.requestId);
+          else {
+            const fallback = [...credentialRequestsRef.current.entries()].find(([, entry]) => entry.providerId === message.provider.providerId);
+            if (fallback) credentialRequestsRef.current.delete(fallback[0]);
+          }
+          if (pendingEntry) clearTimeout(pendingEntry.timer);
+          const savedText = `${message.provider.providerId} ${t("Saved")}`;
+          setCredentialStatus(savedText);
+          setCredentialFeedback((current) => ({
+            ...current,
+            [message.provider.providerId]: { state: "saved", text: savedText },
+          }));
           setCredentialViews(message.providers);
           mergeCredentialViews(message.providers);
           socket.send(JSON.stringify({ t: "check_agents", roomId: settingsRef.current.roomId }));
+        } else if (message.t === "credential_error") {
+          const pending = message.requestId ? credentialRequestsRef.current.get(message.requestId) : undefined;
+          if (pending) clearTimeout(pending.timer);
+          if (message.requestId) credentialRequestsRef.current.delete(message.requestId);
+          const failedText = `${t("Save failed")}: ${message.text}`;
+          setCredentialStatus(failedText);
+          setCredentialFeedback((current) => ({
+            ...current,
+            [message.providerId]: { state: "error", text: failedText },
+          }));
         } else if (message.t === "agent_health") {
           if (message.roomId === activeRoomIdRef.current) setAgentHealth(message.health);
         } else if (message.t === "workspace_directories" || message.t === "workspace_directories_error") {
@@ -1371,7 +1410,17 @@ function App() {
           setDeletedSessionIds(new Set());
           setDeletingSessionIds(new Set());
           setError(message.text);
-          if (message.text.startsWith("set_credential failed:")) setCredentialStatus(message.text);
+          if (message.text.startsWith("set_credential failed:")) {
+            setCredentialStatus(message.text);
+            for (const [requestId, pending] of credentialRequestsRef.current) {
+              clearTimeout(pending.timer);
+              credentialRequestsRef.current.delete(requestId);
+              setCredentialFeedback((current) => ({
+                ...current,
+                [pending.providerId]: { state: "error", text: message.text },
+              }));
+            }
+          }
         }
       });
       socket.addEventListener("close", () => {
@@ -1413,6 +1462,8 @@ function App() {
       cancelled = true;
       teardownRef.current = true;
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      for (const pending of credentialRequestsRef.current.values()) clearTimeout(pending.timer);
+      credentialRequestsRef.current.clear();
       wsRef.current?.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1689,15 +1740,33 @@ function App() {
       setCredentialStatus(t("Provider id is required"));
       return;
     }
+    const requestId = `credential-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     const payload: Record<string, unknown> = {
       t: "set_credential",
+      requestId,
       providerId,
       envVar: draft.envVar.trim() || undefined,
       baseUrl: draft.baseUrl.trim() || undefined,
       model: draft.model.trim() || undefined,
     };
     if (draft.apiKey.trim()) payload.apiKey = draft.apiKey.trim();
-    if (send(payload)) setCredentialStatus(`${t("Saving")} ${providerId}...`);
+    if (!send(payload)) {
+      const failedText = t("Not connected to the Quorum sidecar.");
+      setCredentialStatus(failedText);
+      setCredentialFeedback((current) => ({ ...current, [providerId]: { state: "error", text: failedText } }));
+      return;
+    }
+    const savingText = `${t("Saving")} ${providerId}...`;
+    setCredentialStatus(savingText);
+    setCredentialFeedback((current) => ({ ...current, [providerId]: { state: "saving", text: savingText } }));
+    const timer = setTimeout(() => {
+      credentialRequestsRef.current.delete(requestId);
+      const timeoutText = t("No save response from the sidecar. Fully extract one portable ZIP and do not mix files from different builds.");
+      setCredentialStatus(timeoutText);
+      setCredentialFeedback((current) => ({ ...current, [providerId]: { state: "error", text: timeoutText } }));
+      send({ t: "get_credentials" });
+    }, 8_000);
+    credentialRequestsRef.current.set(requestId, { providerId, timer });
   }
 
   function addCustomProfile() {
@@ -2086,6 +2155,7 @@ function App() {
           drafts={credentialDrafts}
           views={credentialViews}
           status={credentialStatus}
+          feedback={credentialFeedback}
           onChange={updateCredentialDraft}
           onSave={saveCredential}
           onAddProvider={addCredentialDraft}
@@ -2303,6 +2373,7 @@ function CredentialsModal({
   drafts,
   views,
   status,
+  feedback,
   onChange,
   onSave,
   onAddProvider,
@@ -2313,6 +2384,7 @@ function CredentialsModal({
   drafts: CredentialDraft[];
   views: ProviderConfigView[];
   status: string;
+  feedback: Record<string, CredentialSaveFeedback>;
   onChange: (draftId: string, patch: Partial<CredentialDraft>) => void;
   onSave: (draft: CredentialDraft) => void;
   onAddProvider: () => void;
@@ -2350,6 +2422,7 @@ function CredentialsModal({
         <div className="credentials-panel">
           {drafts.map((draft) => {
             const view = views.find((provider) => provider.providerId === draft.providerId);
+            const saveFeedback = feedback[draft.providerId];
             return (
               <div key={draft.draftId} className="credential-card">
                 <div className="credential-card-head">
@@ -2402,10 +2475,15 @@ function CredentialsModal({
                     onChange={(input) => onChange(draft.draftId, { model: input.currentTarget.value })}
                   />
                 </label>
-                <button type="button" className="secondary-action" disabled={!connected} onClick={() => onSave(draft)}>
+                <button type="button" className="secondary-action" disabled={!connected || saveFeedback?.state === "saving"} onClick={() => onSave(draft)}>
                   <Check size={14} />
-                  <span>{t("Save")}</span>
+                  <span>{saveFeedback?.state === "saving" ? t("Saving") : t("Save")}</span>
                 </button>
+                {saveFeedback ? (
+                  <div className={`credential-card-feedback ${saveFeedback.state}`} role="status">
+                    {saveFeedback.text}
+                  </div>
+                ) : null}
               </div>
             );
           })}

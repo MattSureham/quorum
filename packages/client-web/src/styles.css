@@ -843,6 +843,21 @@ textarea:focus {
   height: 32px;
 }
 
+.credential-card-feedback {
+  padding: 7px 8px;
+  border-radius: 6px;
+  color: #14533f;
+  background: #e5f4ee;
+  font-size: 12px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.credential-card-feedback.error {
+  color: #7d2424;
+  background: #fbe9e7;
+}
+
 .credential-status {
   min-height: 28px;
   margin-top: 10px;

@@ -33,6 +33,7 @@ function loadConfig(): RoomConfig {
 }
 
 const cfg = loadConfig();
+const protocolVersion = 2;
 const token = randomBytes(32).toString("hex");
 const bootId = randomUUID();
 const room: Room = {
@@ -52,7 +53,7 @@ const host = await startSharedSessionRoom(room, {
   authToken: token,
 });
 const { port } = host.gateway.address();
-process.stdout.write(`${JSON.stringify({ port, token, bootId })}\n`);
+process.stdout.write(`${JSON.stringify({ port, token, bootId, protocolVersion })}\n`);
 
 async function shutdown(): Promise<void> {
   await host.stop();

@@ -36,8 +36,9 @@ Quorum Portable for Windows x64
 ================================
 
 1. Extract the entire ZIP to a writable folder.
-2. Double-click Quorum.exe. Keep the sidecars folder beside it.
-3. Windows may show an Unknown publisher or SmartScreen warning because this test build is unsigned.
+2. Do not copy a new Quorum.exe over an older portable folder. Quorum.exe and sidecars\quorum-sidecar.exe must come from the same ZIP.
+3. Double-click Quorum.exe. Keep the sidecars folder beside it.
+4. Windows may show an Unknown publisher or SmartScreen warning because this test build is unsigned.
 
 Requirements:
 - Windows 10 or Windows 11, x64

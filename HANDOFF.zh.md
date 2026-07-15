@@ -1,6 +1,15 @@
 # 交接文档（HANDOFF）
 
-给接手 **Quorum** 的下一个 agent 的工作交接。截至 **2026-07-14**，以 `main` 当前 HEAD 为准。English version: [`HANDOFF.md`](./HANDOFF.md)。
+给接手 **Quorum** 的下一个 agent 的工作交接。截至 **2026-07-15**，以 `main` 当前 HEAD 为准。English version: [`HANDOFF.md`](./HANDOFF.md)。
+
+## 2026-07-15 Windows credential 保存跟进
+
+- 用户反馈最新 Windows portable 中 DeepSeek 保存仍表现为无响应。此前本地浏览器与绿色 Windows build 没有在真实 Windows 上交互验证打包后的 desktop/sidecar 组合，因此不能视为充分验收。
+- 使用 compiled Bun sidecar 的完整链路已复现成功：认证 WebSocket、`set_credential`、掩码 `credential_saved`、SQLite 落盘和真实 Web UI 点击均通过，DeepSeek 更新为 `set ...2468`。另用故意不返回消息的 sidecar 验证，8 秒后 provider 卡片会直接显示超时错误。
+- 每次凭据保存现在必须带 request id，成功与 `credential_error` 会按请求关联；每张 provider 卡片直接显示保存中、成功或错误。Bun compiled smoke 也会实际保存临时凭据、验证掩码并禁止原 key 泄露。
+- desktop/sidecar 握手升级到协议版本 2。混用不同 portable 构建中的 `Quorum.exe` 与 `sidecars\\quorum-sidecar.exe` 会被明确拒绝；portable README 要求完整替换解压目录，不能只覆盖主 exe。
+- 截图最可能的解释是新版 `Quorum.exe` 搭配旧 sidecar，但在拿到 Windows `%LOCALAPPDATA%\\dev.quorum.desktop\\sidecar.log` 和两个二进制 hash 前仍不能当作已证实根因。
+- 本地 typecheck、`102/102`、Web build、source/Bun/Node sidecar smoke、Rust check、compiled-sidecar SQLite 保存、UI 成功回执和 UI 超时错误路径均通过。本轮仍需新的 Windows Packages run 与真实机器复测。
 
 ## 2026-07-14 独立验收状态
 

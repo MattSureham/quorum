@@ -32,8 +32,13 @@ struct SidecarConnection {
     port: u16,
     token: String,
     boot_id: String,
+    #[serde(default)]
+    protocol_version: u16,
+    #[serde(default)]
     url: String,
 }
+
+const SIDECAR_PROTOCOL_VERSION: u16 = 2;
 
 #[derive(Debug, thiserror::Error)]
 enum DesktopError {
@@ -186,6 +191,14 @@ fn start_sidecar(app: &tauri::AppHandle, binary: &Path) -> Result<(Child, Sideca
             return Err(DesktopError::Handshake(err.to_string()));
         }
     };
+    if connection.protocol_version != SIDECAR_PROTOCOL_VERSION {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(DesktopError::Handshake(format!(
+            "sidecar protocol mismatch: app expects {}, sidecar reported {}; fully extract one portable ZIP and do not mix files from different builds",
+            SIDECAR_PROTOCOL_VERSION, connection.protocol_version
+        )));
+    }
     connection.url = format!("ws://127.0.0.1:{}?token={}", connection.port, connection.token);
 
     Ok((child, connection))

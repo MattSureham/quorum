@@ -279,6 +279,7 @@ describe("Gateway", () => {
     try {
       ws.send(JSON.stringify({
         t: "set_credential",
+        requestId: "save-deepseek",
         roomId: "room",
         providerId: "deepseek",
         envVar: "DEEPSEEK_API_KEY",
@@ -288,6 +289,7 @@ describe("Gateway", () => {
       }));
       const saved = await nextMessage(ws);
       expect(saved.t).toBe("credential_saved");
+      expect(saved.requestId).toBe("save-deepseek");
       expect(JSON.stringify(saved)).not.toContain("sk-secret-1234");
       expect(saved.provider).toMatchObject({
         providerId: "deepseek",

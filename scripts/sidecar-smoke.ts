@@ -11,6 +11,7 @@ interface Handshake {
   port: number;
   token: string;
   bootId: string;
+  protocolVersion: number;
 }
 
 function readHandshake(proc: ReturnType<typeof spawn>): Promise<Handshake> {
@@ -72,7 +73,7 @@ const proc = spawn("tsx", ["packages/daemon/src/sidecar.ts"], {
 
 try {
   const handshake = await readHandshake(proc);
-  if (!handshake.port || handshake.token.length < 32 || !handshake.bootId) {
+  if (!handshake.port || handshake.token.length < 32 || !handshake.bootId || handshake.protocolVersion !== 2) {
     throw new Error(`bad sidecar handshake: ${JSON.stringify(handshake)}`);
   }
   const events = await wsRoundTrip(handshake);

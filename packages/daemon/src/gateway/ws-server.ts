@@ -296,7 +296,7 @@ export class Gateway {
         break;
       case "set_credential":
         if (!this.deps.setCredential) {
-          ws.send(JSON.stringify({ t: "error", text: "set_credential failed: credential storage is not available" }));
+          ws.send(JSON.stringify({ t: "credential_error", requestId: m.requestId, providerId: m.providerId, text: "credential storage is not available" }));
           break;
         }
         try {
@@ -307,9 +307,14 @@ export class Gateway {
             baseUrl: m.baseUrl,
             model: m.model,
           });
-          ws.send(JSON.stringify({ t: "credential_saved", provider, providers: this.deps.listCredentials?.() ?? [provider] }));
+          ws.send(JSON.stringify({ t: "credential_saved", requestId: m.requestId, provider, providers: this.deps.listCredentials?.() ?? [provider] }));
         } catch (err) {
-          ws.send(JSON.stringify({ t: "error", text: `set_credential failed: ${err instanceof Error ? err.message : String(err)}` }));
+          ws.send(JSON.stringify({
+            t: "credential_error",
+            requestId: m.requestId,
+            providerId: m.providerId,
+            text: err instanceof Error ? err.message : String(err),
+          }));
         }
         break;
       case "take_write_floor":

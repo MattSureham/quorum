@@ -404,6 +404,15 @@ database selected for that instance. Credentials do not automatically migrate
 between different databases or machines, and packaged artifacts never include
 the developer's local keys.
 
+Each credential save now carries a request id and shows `Saving`, `Saved`, or a
+specific failure directly inside that provider card. If no sidecar response is
+received within eight seconds, the card reports a portable-file mismatch
+instead of appearing inert. Desktop sidecar protocol version 2 prevents a
+`Quorum.exe` from silently running with an incompatible sidecar. Always replace
+the entire extracted portable directory; never copy only `Quorum.exe` over an
+older folder. For Windows diagnostics, inspect
+`%LOCALAPPDATA%\\dev.quorum.desktop\\sidecar.log`.
+
 Built-in API profiles show the exact model id sent to the provider. Role labels
 such as analysis or fast do not claim a different underlying model; create a
 custom profile when a provider exposes a newer model id.

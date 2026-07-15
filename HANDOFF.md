@@ -1,10 +1,19 @@
 # HANDOFF
 
-Working handoff for an agent picking up **Quorum**. Current as of **2026-07-14** on `main`. 中文版见 [`HANDOFF.zh.md`](./HANDOFF.zh.md)。
+Working handoff for an agent picking up **Quorum**. Current as of **2026-07-15** on `main`. 中文版见 [`HANDOFF.zh.md`](./HANDOFF.zh.md)。
 
 > 2026-07-07 architecture update: Quorum is being migrated to the shared-session architecture from the agent-framework meeting. New implementation handoff: [`AGENT_FRAMEWORK_HANDOFF.md`](./AGENT_FRAMEWORK_HANDOFF.md). Full copied docs live in [`docs/architecture/`](./docs/architecture/).
 
 ## Current State For The Next Agent
+
+### 2026-07-15 Windows credential-save follow-up
+
+- The user reported that DeepSeek Save still appeared inert in the downloaded Windows portable even though the previous local browser test and Windows build were green. Treat the earlier acceptance as insufficient because it did not exercise the packaged desktop/sidecar pair interactively on Windows.
+- Direct reproduction against the compiled Bun sidecar succeeded end to end: authenticated WebSocket `set_credential`, masked `credential_saved`, SQLite persistence, and the real Web UI click path all changed DeepSeek to `set ...2468`. A second browser test connected to a deliberately non-responsive sidecar and confirmed the provider card displays an explicit timeout after eight seconds.
+- Credential saves now use a required request id. Success and `credential_error` responses are correlated, and each provider card visibly shows saving/saved/error. The compiled Bun smoke now writes a temporary credential, validates the masked response, and rejects any raw-key leak.
+- Desktop/sidecar handshake protocol version 2 prevents mixed portable files. The desktop rejects a missing/wrong version with instructions to fully extract one ZIP. The generated portable README explicitly says never to copy only `Quorum.exe` into an older portable folder.
+- A likely explanation for the user's screenshots is a new embedded Web UI (`Quorum.exe`) paired with an older `sidecars/quorum-sidecar.exe`; this is strongly suggested by the matching-pair success but is not proven without the Windows `%LOCALAPPDATA%\\dev.quorum.desktop\\sidecar.log` and hashes of both binaries.
+- Local verification: typecheck, `102/102`, Web build, source/Bun/Node sidecar smokes, Rust `cargo check`, compiled-sidecar credential persistence, successful UI save, and UI no-response timeout all passed. A fresh Windows Packages run and real-machine retest are still required for this follow-up.
 
 ### 2026-07-14 independent validation handoff
 

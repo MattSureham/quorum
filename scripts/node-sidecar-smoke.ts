@@ -11,6 +11,7 @@ interface Handshake {
   port: number;
   token: string;
   bootId: string;
+  protocolVersion: number;
 }
 
 function readHandshake(proc: ReturnType<typeof spawn>): Promise<Handshake> {
@@ -70,6 +71,7 @@ const proc = spawn(resolve("dist-sidecar/node/quorum-sidecar"), [], {
 
 try {
   const handshake = await readHandshake(proc);
+  if (handshake.protocolVersion !== 2) throw new Error(`unexpected sidecar protocol ${handshake.protocolVersion}`);
   const events = await roundTrip(handshake);
   console.log(`node sidecar fallback smoke pass (${events.length} events, port ${handshake.port})`);
 } finally {

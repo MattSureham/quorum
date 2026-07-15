@@ -165,6 +165,7 @@ export const ClientMessageSchema = z.discriminatedUnion("t", [
   z.object({
     t: z.literal("set_credential"),
     roomId: z.string(),
+    requestId: z.string(),
     providerId: z.string(),
     envVar: z.string().optional(),
     apiKey: z.string().optional(),
