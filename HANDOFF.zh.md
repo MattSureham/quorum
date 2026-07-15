@@ -8,7 +8,7 @@
 - `pnpm dev` 现在固定把绝对路径 `.quorum/credentials.sqlite` 设为 `QUORUM_CREDENTIAL_DB_PATH`，与 `QUORUM_DB_PATH` 的 Session/event 数据分离。shared 与 legacy host 均通过固定库读写 provider credentials；sidecar/直接启动也可显式使用同一环境变量。Tauri 原本就固定使用 OS app-data 中的一份数据库，所以 desktop/portable 行为不变。
 - 第一次启用独立 credential store 时，会从当前 Session DB 复制固定库中尚不存在的 provider；固定库已有配置优先，旧测试库不能覆盖。用户现有 DeepSeek/OpenAI/智谱配置已在本机完成迁移，过程中没有输出原始值；credential DB 被 Git 忽略，也不会进入 artifact。
 - 新增 shared-host 回归测试：从第一份 Session DB 迁移 credential 后切到全新第二份 Session DB，DeepSeek 掩码配置仍存在，而第二份 Session DB 本身没有 provider row。启动日志现在同时显示 Session DB 与 credential DB 路径。
-- 本地已通过 typecheck、`105/105`、Web production build、shared/source/Node/Bun sidecar smokes 和 Rust `cargo check`。这次 credential-store 改动仍待新的 Windows Packages workflow。
+- 本地已通过 typecheck、`105/105`、Web production build、shared/source/Node/Bun sidecar smokes 和 Rust `cargo check`。Windows Packages run [29387544014](https://github.com/MattSureham/quorum/actions/runs/29387544014) 已在 `f6407b6` 上全绿：105 项测试、Bun/Web、未签名 NSIS、portable 组装/布局验证和所有 artifact 上传均通过。
 
 ## 2026-07-15 无回复与断线可靠性跟进
 
