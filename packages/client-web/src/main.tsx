@@ -1166,6 +1166,7 @@ function App() {
   const wsRef = useRef<WebSocket | null>(null);
   const settingsRef = useRef(settings);
   const activeRoomIdRef = useRef(settings.roomId);
+  const loadedRoomIdRef = useRef<string>();
   const lastSeqRef = useRef(0);
   const deletedSessionIdsRef = useRef<Set<string>>(new Set());
   const attemptRef = useRef(0);
@@ -1298,6 +1299,8 @@ function App() {
     }
     setStatus("connecting");
     setError("");
+    loadedRoomIdRef.current = undefined;
+    let sessionBootstrapPending = true;
 
     try {
       const socket = new WebSocket(next.url);
@@ -1307,13 +1310,14 @@ function App() {
         setStatus("connected");
         setError(""); // clear any stale failure from a prior attempt
         socket.send(JSON.stringify({ t: "list_sessions", roomId: next.roomId }));
-        socket.send(JSON.stringify({ t: "subscribe", roomId: next.roomId, sinceSeq: lastSeqRef.current }));
-        socket.send(JSON.stringify({ t: "get_credentials", roomId: next.roomId }));
+        socket.send(JSON.stringify({ t: "get_credentials" }));
       });
       socket.addEventListener("message", (raw) => {
         const message = JSON.parse(String(raw.data)) as ServerMessage;
         if (message.t === "snapshot") {
           if (deletedSessionIdsRef.current.has(message.room.id)) return;
+          sessionBootstrapPending = false;
+          loadedRoomIdRef.current = message.room.id;
           setRoom(message.room);
           setRooms((current) => upsertRoom(current, message.room).filter((item) => !deletedSessionIdsRef.current.has(item.id)));
           setEvents((current) => ingest(mergeEvents(current, message.events)));
@@ -1323,9 +1327,26 @@ function App() {
         } else if (message.t === "event") {
           setEvents((current) => ingest(mergeEvents(current, [message.event])));
         } else if (message.t === "sessions") {
-          setRooms(message.rooms.filter((item) => !deletedSessionIdsRef.current.has(item.id)));
+          const availableRooms = message.rooms.filter((item) => !deletedSessionIdsRef.current.has(item.id));
+          setRooms(availableRooms);
           setSessionsLoaded(true);
+          if (sessionBootstrapPending) {
+            sessionBootstrapPending = false;
+            const preferredId = activeRoomIdRef.current || next.roomId;
+            const target = availableRooms.find((item) => item.id === preferredId) ?? availableRooms[0];
+            if (target) {
+              socket.send(JSON.stringify({ t: "continue_session", sessionId: target.id }));
+            } else {
+              activeRoomIdRef.current = "";
+              loadedRoomIdRef.current = undefined;
+              setRoom(undefined);
+              setEvents([]);
+              setMemorySummaries([]);
+              setAgentHealth({});
+            }
+          }
         } else if (message.t === "session_created") {
+          sessionBootstrapPending = false;
           deletedSessionIdsRef.current.delete(message.room.id);
           setDeletedSessionIds((current) => {
             const nextDeleted = new Set(current);
@@ -1341,10 +1362,12 @@ function App() {
           const nextSettings = { ...next, roomId: message.room.id };
           settingsRef.current = nextSettings;
           activeRoomIdRef.current = message.room.id;
+          loadedRoomIdRef.current = message.room.id;
           setSettings(nextSettings);
           setDraftSettings(nextSettings);
           socket.send(JSON.stringify({ t: "subscribe", roomId: message.room.id, sinceSeq: 0 }));
         } else if (message.t === "session_continued") {
+          sessionBootstrapPending = false;
           deletedSessionIdsRef.current.delete(message.room.id);
           setDeletedSessionIds((current) => {
             const nextDeleted = new Set(current);
@@ -1360,6 +1383,7 @@ function App() {
           const nextSettings = { ...next, roomId: message.room.id };
           settingsRef.current = nextSettings;
           activeRoomIdRef.current = message.room.id;
+          loadedRoomIdRef.current = message.room.id;
           setSettings(nextSettings);
           setDraftSettings(nextSettings);
           socket.send(JSON.stringify({ t: "subscribe", roomId: message.room.id, sinceSeq: 0 }));
@@ -1378,6 +1402,8 @@ function App() {
             if (fallback) {
               switchSession(fallback.id);
             } else {
+              activeRoomIdRef.current = "";
+              loadedRoomIdRef.current = undefined;
               setRoom(undefined);
               setEvents([]);
               setMemorySummaries([]);
@@ -1409,7 +1435,9 @@ function App() {
           }));
           setCredentialViews(message.providers);
           mergeCredentialViews(message.providers);
-          socket.send(JSON.stringify({ t: "check_agents", roomId: settingsRef.current.roomId }));
+          if (loadedRoomIdRef.current) {
+            socket.send(JSON.stringify({ t: "check_agents", roomId: loadedRoomIdRef.current }));
+          }
         } else if (message.t === "credential_error") {
           const pending = message.requestId ? credentialRequestsRef.current.get(message.requestId) : undefined;
           if (pending) clearTimeout(pending.timer);
@@ -1523,6 +1551,7 @@ function App() {
     setSelectedTargets([]);
     setLastSubmittedAt(undefined);
     lastSeqRef.current = 0;
+    loadedRoomIdRef.current = undefined;
     send({ t: "continue_session", sessionId: roomId });
   }
 

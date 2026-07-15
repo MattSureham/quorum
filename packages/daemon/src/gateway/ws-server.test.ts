@@ -307,6 +307,69 @@ describe("Gateway", () => {
     }
   });
 
+  it("keeps credential reads and writes available after the final session is deleted", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const providers: any[] = [{
+      providerId: "deepseek",
+      configured: true,
+      apiKeyPreview: "...1234",
+      updatedAt: 1,
+    }];
+    const gateway = new Gateway({
+      log,
+      room,
+      humanId: "human",
+      setPolicy: () => {},
+      listSessions: () => [],
+      deleteSession: () => [],
+      listCredentials: () => providers,
+      setCredential: (input) => {
+        const provider = {
+          providerId: input.providerId,
+          configured: !!input.apiKey,
+          apiKeyPreview: input.apiKey ? `...${input.apiKey.slice(-4)}` : undefined,
+          updatedAt: 2,
+        };
+        providers.splice(0, providers.length, provider);
+        return provider;
+      },
+    }, 0);
+    await gateway.ready;
+    const ws = await connect(gateway.url());
+
+    try {
+      ws.send(JSON.stringify({ t: "delete_session", sessionId: "room" }));
+      expect(await nextMessage(ws)).toMatchObject({ t: "session_deleted", rooms: [] });
+
+      ws.send(JSON.stringify({ t: "get_credentials" }));
+      expect(await nextMessage(ws)).toMatchObject({
+        t: "credentials",
+        providers: [{ providerId: "deepseek", configured: true }],
+      });
+
+      ws.send(JSON.stringify({
+        t: "set_credential",
+        requestId: "replace-deepseek",
+        providerId: "deepseek",
+        apiKey: "replacement-5678",
+      }));
+      const saved = await nextMessage(ws);
+      expect(saved).toMatchObject({
+        t: "credential_saved",
+        requestId: "replace-deepseek",
+        provider: {
+          providerId: "deepseek",
+          configured: true,
+          apiKeyPreview: "...5678",
+        },
+      });
+      expect(JSON.stringify(saved)).not.toContain("replacement-5678");
+    } finally {
+      ws.close();
+      await gateway.close();
+    }
+  });
+
   it("returns agent health checks", async () => {
     const log = new EventLog("room", new InMemoryStore());
     const gateway = new Gateway({

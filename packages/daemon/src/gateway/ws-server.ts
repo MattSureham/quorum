@@ -192,6 +192,36 @@ export class Gateway {
         );
       return;
     }
+    // Provider credentials belong to the daemon installation, not a room.
+    // Keep them available when the user has deleted every session.
+    if (m.t === "get_credentials") {
+      ws.send(JSON.stringify({ t: "credentials", providers: this.deps.listCredentials?.() ?? [] }));
+      return;
+    }
+    if (m.t === "set_credential") {
+      if (!this.deps.setCredential) {
+        ws.send(JSON.stringify({ t: "credential_error", requestId: m.requestId, providerId: m.providerId, text: "credential storage is not available" }));
+        return;
+      }
+      try {
+        const provider = this.deps.setCredential({
+          providerId: m.providerId,
+          envVar: m.envVar,
+          apiKey: m.apiKey,
+          baseUrl: m.baseUrl,
+          model: m.model,
+        });
+        ws.send(JSON.stringify({ t: "credential_saved", requestId: m.requestId, provider, providers: this.deps.listCredentials?.() ?? [provider] }));
+      } catch (err) {
+        ws.send(JSON.stringify({
+          t: "credential_error",
+          requestId: m.requestId,
+          providerId: m.providerId,
+          text: err instanceof Error ? err.message : String(err),
+        }));
+      }
+      return;
+    }
     const session = this.session(m.roomId ?? this.deps.room.id);
     if (!session) {
       ws.send(JSON.stringify({ t: "error", text: `unknown session: ${m.roomId}` }));
@@ -265,9 +295,6 @@ export class Gateway {
           ws.send(JSON.stringify({ t: "memory_compacted", summaries: session.log.readWorkingMemorySummaries() }));
         }
         break;
-      case "get_credentials":
-        ws.send(JSON.stringify({ t: "credentials", providers: this.deps.listCredentials?.() ?? [] }));
-        break;
       case "check_agents":
         if (!session.checkAgents) {
           ws.send(JSON.stringify({ t: "agent_health", roomId: session.room.id, health: {} }));
@@ -293,29 +320,6 @@ export class Gateway {
             text: err instanceof Error ? err.message : String(err),
           }));
         });
-        break;
-      case "set_credential":
-        if (!this.deps.setCredential) {
-          ws.send(JSON.stringify({ t: "credential_error", requestId: m.requestId, providerId: m.providerId, text: "credential storage is not available" }));
-          break;
-        }
-        try {
-          const provider = this.deps.setCredential({
-            providerId: m.providerId,
-            envVar: m.envVar,
-            apiKey: m.apiKey,
-            baseUrl: m.baseUrl,
-            model: m.model,
-          });
-          ws.send(JSON.stringify({ t: "credential_saved", requestId: m.requestId, provider, providers: this.deps.listCredentials?.() ?? [provider] }));
-        } catch (err) {
-          ws.send(JSON.stringify({
-            t: "credential_error",
-            requestId: m.requestId,
-            providerId: m.providerId,
-            text: err instanceof Error ? err.message : String(err),
-          }));
-        }
         break;
       case "take_write_floor":
         void Promise.resolve(session.takeWriteFloor?.()).catch(() => {});

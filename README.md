@@ -62,6 +62,9 @@ exits unexpectedly. The Web client reconnects to the current runtime; the Tauri
 client also asks the desktop host to restart a dead sidecar before reconnecting.
 Development credentials use the stable `.quorum/credentials.sqlite` store even
 when `QUORUM_DB_PATH` selects a different session/event database.
+Provider credentials are daemon-level state rather than Session state. They
+remain readable and editable when the Session list is empty, so deleting the
+last completed Session does not make configured API models appear unconfigured.
 
 To test the Web UI without Claude/Codex credentials, run the shared kernel with
 the deterministic echo config:
@@ -427,6 +430,11 @@ launches may set `QUORUM_CREDENTIAL_DB_PATH` explicitly. Desktop and portable
 builds keep their single stable database in the OS app-data directory. Keys do
 not migrate between machines, and packaged artifacts never contain developer
 credentials.
+
+Credential commands do not require an active Session. The Web client requests
+the daemon-level credential catalog independently, then waits for the persisted
+Session list before continuing a room. With zero rooms, API-key configuration
+and New Session remain available without a synthetic or stale room id.
 
 Each credential save now carries a request id and shows `Saving`, `Saved`, or a
 specific failure directly inside that provider card. If no sidecar response is

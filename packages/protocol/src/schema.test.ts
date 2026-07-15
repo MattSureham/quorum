@@ -34,4 +34,14 @@ describe("ClientMessageSchema adapter configuration", () => {
   it("rejects arbitrary fields for built-in adapters", () => {
     expect(ClientMessageSchema.safeParse(createMessage({ sandbox: "read-only", arbitrary: "value" })).success).toBe(false);
   });
+
+  it("allows global credential commands without a session id", () => {
+    expect(ClientMessageSchema.safeParse({ t: "get_credentials" }).success).toBe(true);
+    expect(ClientMessageSchema.safeParse({
+      t: "set_credential",
+      requestId: "save-1",
+      providerId: "deepseek",
+      apiKey: "test-key",
+    }).success).toBe(true);
+  });
 });

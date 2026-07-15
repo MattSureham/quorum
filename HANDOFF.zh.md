@@ -2,6 +2,13 @@
 
 给接手 **Quorum** 的下一个 agent 的工作交接。截至 **2026-07-15**，以 `main` 当前 HEAD 为准。English version: [`HANDOFF.md`](./HANDOFF.md)。
 
+## 2026-07-15 零 Session 时的 credential 可用性
+
+- 删除最后一个 Session 后，DeepSeek 再次显示“需要 key”的问题已复现。key 实际没有丢失：`.quorum/credentials.sqlite` 中 DeepSeek 仍是已配置状态，掩码尾号也正确。根因是 gateway 先按 room 查找 Session，之后才处理 `get_credentials` / `set_credential`；当房间为零时，两条命令都会错误返回 `unknown session`。
+- provider credential 现在是 daemon 全局命令，在 Session 查找之前处理；协议中的 `roomId` 改为可选。新增 gateway 回归会先删除最后一个房间，再验证 credential 的掩码读取与保存，响应不会包含原始 key。
+- Web 启动时会独立请求 credential，等待 `list_sessions` 后才决定 continue/subscribe。Session 列表为空时会清除过期 room 状态，但 API key 配置与 New Session 仍可使用；只有实际加载了房间才会刷新 agent health。
+- 使用固定 credential store 做了真实验证：删除唯一 smoke Session 后，gateway 返回零个房间，同时 DeepSeek 仍为已配置并返回原有掩码。本地已通过 typecheck、`112/112`、Web production build、shared/source/Node/Bun sidecar smokes 和 Rust `cargo check`。当前 in-app browser 没有可连接实例，因此本环境无法补做点击式验收。
+
 ## 2026-07-15 Codex 超时与 follow-up bid 恢复
 
 - 用户判断正确：`session-mrlkcmvc` 中失败的是 Codex，不是 Claude Code。Claude Code 用时约 43.1 秒并输出一条消息；Codex 随后运行约 50.7 秒，以 `Reconnecting... 2/5 (request timed out)` 失败且零输出；DeepSeek 之后约 29.9 秒成功输出一条消息。
