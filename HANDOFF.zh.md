@@ -9,6 +9,12 @@
 - 文档支持的主要实现位于 `packages/protocol/src/schema.ts`、`packages/daemon/src/attachments/document-extractor.ts`、WebSocket gateway、`packages/core/src/session-manager.ts` 与 `packages/client-web/src/main.tsx`。`scripts/bun-sidecar-smoke.ts` 是打包回归路径，Windows workflow 中必须继续用真实 PDF/DOCX 执行它。
 - 剩余发布边界已明确：扫描 PDF 仍需 OCR，旧 `.doc` 不支持，本环境无法做浏览器点击/截图验收，真实 Windows 机器的 portable 交互仍属于人工验收。请勿将这些描述为已实现或已验证。本机也没有完整 Xcode，因此本功能未触发新的 macOS bundle 构建。
 
+## 2026-07-16 评审整改本地验收
+
+- 2026-07-16 独立评审列出的 P1/P2/P3 项已通过 `e335e1f..7f548c9` 实现：显式中性 workspace、round-robin 恢复幂等、DOCX 实际展开量、Codex 进程树终止顺序、附件 payload 拆分、旧 socket 过滤、被动 Markdown/CSP、composer 并发上限、最新 turn 状态以及 Node fallback runtime 打包。
+- 当前本地矩阵全绿：`pnpm typecheck`；24 个文件 **150/150** 项测试；Web production build；EventLog、shared-session、源码 sidecar、Node fallback 与 Bun compiled sidecar smoke；以及包含 Rust `cargo check` 的 `pnpm desktop:check`。Tauri 已识别配置后的 CSP，`git diff --check` 通过。
+- 此精确检查点仍待新的 Windows Packages run。最近的打包基线仍是 `29407135897`；在更新 run 全绿前，不要声称新的 `taskkill`、CSP、附件 payload migration 或 Node dependency 变更已完成 Windows 打包验收。真实 Windows portable 交互与对抗性 `.cmd` 测试仍是人工发布边界。
+
 ## 2026-07-16 显式 workspace 边界整改
 
 - `create_session` 在省略 `workspacePath` 时不再回退到启动房间的 workspace。New Session 留空 workspace 现在在服务端和 UI 两端都保持中性；文件夹选择器也不再把当前房间路径当作隐式起点。
@@ -38,7 +44,7 @@
 - SQLite 消息事件现在只保留附件元数据与提取状态。原始 data URL 和文档提取正文会在同一事务中写入 Session 范围的 `attachment_payloads` 表；`replay(0)`、WebSocket subscribe snapshot、memory compaction 与 Context Bundle 扫描不再反复解析或发送全部历史 base64 payload。
 - 旧数据库会执行一次迁移：事件 JSON 中已有的附件 `dataUrl` 会拆入 payload 表，event id 与 seq 不变；删除 Session 时也会删除这些 payload。新增 `EventLog.readAttachment()` 与有界的 `get_attachment` WebSocket 命令，可按 room/event/attachment id 精确读取一个原件。Chat 对历史图片/文档显示加载按钮，新发送的实时附件仍会立即显示。
 - Composer 的文件读取现在按 ref 中的当前附件集合串行处理。两个同时发生的粘贴/上传批次不能再各自用过期数量通过校验，从而绕过最多 6 个文件/20 MB 总量限制；拒绝新批次时，已有 composer 内容保持不变。
-- 回归覆盖新事件拆分、旧库迁移、按需还原、Session 删除、gateway 成功/失败响应与协议长度限制。定向 persistence/gateway/schema 共 33 项、typecheck 与 Web production build 已通过；本检查点尚待全量测试与打包平台验证。
+- 回归覆盖新事件拆分、旧库迁移、按需还原、Session 删除、gateway 成功/失败响应与协议长度限制。定向 persistence/gateway/schema 共 33 项，并已包含在上方 150 项全量测试中；此检查点仍待打包平台验证。
 
 ## 2026-07-16 被动聊天渲染与旧 socket 隔离
 
@@ -51,7 +57,7 @@
 
 - 运行状态现在只投影当前人工 prompt 之后最新一条 `turn_started` 的生命周期，并且只接受与其 `turnId` 匹配的终态。前一参与者失败后，后续 agent 的联系、思考、发言或收集 bid 状态不会再被旧失败遮住。
 - 与活动 turn 关联的 interrupt 在 adapter/进程仍停止时显示“正在中断发言”；匹配的 `turn_cancelled` 到达后显示“已中断”。它不会再落入 shared Session 的通用最后终态标记而误显示“已完成”。
-- 生命周期 helper 也能处理缺少 phase event 的旧式/异常事件流，并有“旧失败 + 新运行”以及“interrupt 收敛为 cancelled”的定向回归。Run-status 5 项测试与 typecheck 通过；尚待全量验证。
+- 生命周期 helper 也能处理缺少 phase event 的旧式/异常事件流，并有“旧失败 + 新运行”以及“interrupt 收敛为 cancelled”的定向回归。Run-status 5 项已包含在上方 150 项全量测试中。
 
 ## 2026-07-16 Node fallback 文档依赖
 

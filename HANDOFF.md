@@ -13,6 +13,12 @@ Working handoff for an agent picking up **Quorum**. Current as of **2026-07-16**
 - Document support is implemented across `packages/protocol/src/schema.ts`, `packages/daemon/src/attachments/document-extractor.ts`, the WebSocket gateway, `packages/core/src/session-manager.ts`, and `packages/client-web/src/main.tsx`. `scripts/bun-sidecar-smoke.ts` is the packaging regression path and must continue exercising real PDF and DOCX files on Windows.
 - Remaining release boundaries are explicit: scanned PDFs need OCR, legacy `.doc` is unsupported, browser click/screenshot QA was unavailable in this environment, and real-machine portable interaction is still manual acceptance. Do not describe these as implemented or verified. Full Xcode is also unavailable locally, so this feature did not trigger a fresh macOS bundle build.
 
+### 2026-07-16 review-remediation local acceptance
+
+- The independent P1/P2/P3 findings reported on 2026-07-16 are implemented through `e335e1f..7f548c9`: explicit neutral workspaces, round-robin recovery idempotency, actual DOCX expansion limits, Codex process-tree termination ordering, detached attachment payloads, stale-socket filtering, passive Markdown/CSP rendering, concurrent composer limits, newest-turn run status, and Node fallback runtime packaging.
+- Current local validation is green: `pnpm typecheck`; `pnpm test` with **150/150** tests across 24 files; Web production build; EventLog, shared-session, source-sidecar, Node fallback, and Bun compiled sidecar smokes; and `pnpm desktop:check` including Rust `cargo check`. Tauri reports the configured CSP. `git diff --check` passes.
+- A fresh Windows Packages run for this remediation baseline is still pending at this exact checkpoint. The last packaged baseline remains run `29407135897`; do not claim the new `taskkill`, CSP, detached-payload migration, or Node dependency changes are Windows-package accepted until a newer run is green. Real Windows portable interaction and adversarial `.cmd` testing remain manual release boundaries.
+
 ### 2026-07-16 explicit workspace boundary remediation
 
 - `create_session` no longer falls back to the bootstrap room's workspace when `workspacePath` is omitted. A blank New Session workspace is now neutral on the server as well as in the UI; the folder picker also stops using the active room path as an implicit starting selection.
@@ -42,7 +48,7 @@ Working handoff for an agent picking up **Quorum**. Current as of **2026-07-16**
 - SQLite message events now retain attachment metadata and extraction status only. Original data URLs and extracted document bodies are transactionally stored in the Session-scoped `attachment_payloads` table, so `replay(0)`, WebSocket subscribe snapshots, memory compaction, and Context Bundle scans no longer parse or resend every historical base64 payload.
 - Legacy databases are migrated once: event rows containing attachment `dataUrl` fields are detached into the payload table without changing event ids or sequence numbers. Session deletion removes the detached payload rows. An `EventLog.readAttachment()` lookup and bounded `get_attachment` WebSocket command retrieve one payload by room/event/attachment id; the Chat UI renders a load button for historical image/document cards and keeps newly posted live attachments immediate.
 - Composer file reads are serialized against a ref-backed current attachment set. Two simultaneous paste/upload batches can no longer both validate against stale counts and exceed the six-file/20 MB request limits; a rejected batch leaves prior composer state intact.
-- Regression coverage verifies new-event detachment, legacy migration, on-demand hydration, deletion, gateway success/error replies, and protocol bounds. The targeted persistence/gateway/schema suites pass 33 tests; typecheck and the Web production build pass. Full-suite and packaged-platform validation remain pending for this checkpoint.
+- Regression coverage verifies new-event detachment, legacy migration, on-demand hydration, deletion, gateway success/error replies, and protocol bounds. The targeted persistence/gateway/schema suites pass 33 tests; this work is also included in the 150-test full-suite pass above. Packaged-platform validation remains pending for this checkpoint.
 
 ### 2026-07-16 passive chat rendering and stale-socket isolation
 
@@ -55,7 +61,7 @@ Working handoff for an agent picking up **Quorum**. Current as of **2026-07-16**
 
 - Run status now projects the lifecycle of the newest `turn_started` after the current human prompt and accepts only a matching terminal event. A failed earlier participant cannot mask a later agent that is contacting, thinking, speaking, or collecting bids.
 - An interrupt associated with the active turn is shown as `Cancelling turn` while the adapter/process is still stopping. Its matching `turn_cancelled` terminal becomes `Interrupted`; it can no longer fall through the shared Session's generic last-terminal marker and appear as `Completed`.
-- The lifecycle helper also supports legacy/malformed streams without phase events and has focused regressions for old-failure/new-running precedence and interrupt-to-cancel convergence. Five run-status tests and typecheck pass; full-suite validation remains pending.
+- The lifecycle helper also supports legacy/malformed streams without phase events and has focused regressions for old-failure/new-running precedence and interrupt-to-cancel convergence. Five run-status tests pass and are included in the 150-test full-suite result above.
 
 ### 2026-07-16 Node fallback document dependencies
 
