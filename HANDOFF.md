@@ -31,6 +31,12 @@ Working handoff for an agent picking up **Quorum**. Current as of **2026-07-16**
 - The composer exposes a bilingual live `Reading files` status and disables Send plus the file picker until every queued read settles. Existing attachments and text remain intact if a later batch fails validation.
 - A pure composer-state regression covers connected/disconnected, text-only, attachment-only, and pending-read cases; its two tests and typecheck pass. The delayed-FileReader browser scenario remains part of final Playwright acceptance.
 
+### 2026-07-16 Playwright UX remediation: Session setup confirmation and keyboard flow
+
+- New Session no longer closes optimistically. The draft remains mounted until the matching `session_created` response arrives; validation failures, gateway rejection, disconnect, and a 12-second confirmation timeout are rendered as bilingual inline errors while preserving every field and selection.
+- A successful create clears stale Connection errors. While creation is pending, Start shows progress and duplicate submit, backdrop close, Escape, and close controls are disabled; timeout returns the dialog to an editable retry state.
+- Session setup and API credential dialogs now trap Tab/Shift+Tab, focus inside on open, support Escape, restore the opener on close, and make the application shell inert/`aria-hidden` behind the modal. Mode and permission buttons expose `aria-pressed` and named group semantics. Typecheck and the Web production build pass; responsive geometry and browser keyboard assertions remain in the final UX pass.
+
 ### 2026-07-16 explicit workspace boundary remediation
 
 - `create_session` no longer falls back to the bootstrap room's workspace when `workspacePath` is omitted. A blank New Session workspace is now neutral on the server as well as in the UI; the folder picker also stops using the active room path as an implicit starting selection.

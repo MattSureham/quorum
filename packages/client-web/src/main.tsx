@@ -274,6 +274,9 @@ const zhText: Record<string, string> = {
   "available": "可用",
   "Close": "关闭",
   "Start session": "启动会话",
+  "Creating session": "正在创建会话",
+  "Session could not be created. Check the id, participants, and adapter configuration.": "无法创建会话。请检查会话 id、参与者和 adapter 配置。",
+  "The sidecar did not confirm the new session in time. Your setup has been preserved; reconnect and try again.": "sidecar 未及时确认新会话。你的设置已保留；请重连后再试。",
   "Close session setup": "关闭会话设置",
   "Shared Session": "共享会话",
   "active": "活跃",
@@ -370,6 +373,67 @@ const zhText: Record<string, string> = {
 
 function translate(language: Language, text: string): string {
   return language === "zh" ? zhText[text] ?? text : text;
+}
+
+const dialogFocusableSelector = [
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "textarea:not([disabled])",
+  "select:not([disabled])",
+  "a[href]",
+  "[tabindex]:not([tabindex='-1'])",
+].join(",");
+
+function useDialogFocusTrap(
+  dialogRef: React.RefObject<HTMLElement>,
+  onClose: () => void,
+  closeDisabled = false,
+) {
+  const closeRef = useRef(onClose);
+  const closeDisabledRef = useRef(closeDisabled);
+  closeRef.current = onClose;
+  closeDisabledRef.current = closeDisabled;
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return undefined;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
+    const focusFirst = () => {
+      const preferred = dialog.querySelector<HTMLElement>("[data-dialog-autofocus]");
+      const fallback = dialog.querySelector<HTMLElement>(dialogFocusableSelector);
+      (preferred ?? fallback ?? dialog).focus();
+    };
+    const focusFrame = requestAnimationFrame(focusFirst);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !closeDisabledRef.current) {
+        event.preventDefault();
+        closeRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = [...dialog.querySelectorAll<HTMLElement>(dialogFocusableSelector)];
+      if (!focusable.length) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      cancelAnimationFrame(focusFrame);
+      document.removeEventListener("keydown", onKeyDown);
+      requestAnimationFrame(() => previousFocus?.focus());
+    };
+  }, [dialogRef]);
 }
 
 type ServerMessage =
@@ -1261,9 +1325,12 @@ function App() {
   const [profileDraft, setProfileDraft] = useState<AgentProfileDraft>(defaultAgentProfileDraft);
   const [credentialsOpen, setCredentialsOpen] = useState(false);
   const [sessionSetupOpen, setSessionSetupOpen] = useState(false);
+  const [sessionStarting, setSessionStarting] = useState(false);
+  const [sessionSetupError, setSessionSetupError] = useState("");
   const [sessionDraftSeed, setSessionDraftSeed] = useState<SessionDraft>(defaultSessionDraft);
   const wsRef = useRef<WebSocket | null>(null);
   const settingsRef = useRef(settings);
+  const languageRef = useRef(language);
   const activeRoomIdRef = useRef(settings.roomId);
   const loadedRoomIdRef = useRef<string>();
   const lastSeqRef = useRef(0);
@@ -1276,6 +1343,9 @@ function App() {
   const composerAttachmentsRef = useRef<MessageAttachment[]>([]);
   const attachmentReadCountRef = useRef(0);
   const attachmentReadQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const pendingSessionCreateRef = useRef<string>();
+  const sessionCreateTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const appShellRef = useRef<HTMLElement>(null);
   const attachmentRequestsRef = useRef(new Map<string, string>());
   const directoryRequestsRef = useRef(new Map<string, {
     resolve: (listing: WorkspaceDirectoryListing) => void;
@@ -1290,6 +1360,7 @@ function App() {
 
   const displayRoom = room ?? (sessionsLoaded ? emptyRoom : previewRoom);
   settingsRef.current = settings;
+  languageRef.current = language;
   const visibleRooms = (sessionsLoaded ? rooms : rooms.length ? rooms : [displayRoom])
     .filter((item) =>
       !deletingSessionIds.has(item.id) &&
@@ -1343,6 +1414,14 @@ function App() {
   useEffect(() => {
     saveLanguage(language);
   }, [language]);
+
+  useEffect(() => {
+    const shell = appShellRef.current;
+    if (!shell) return undefined;
+    if (credentialsOpen || sessionSetupOpen) shell.setAttribute("inert", "");
+    else shell.removeAttribute("inert");
+    return () => shell.removeAttribute("inert");
+  }, [credentialsOpen, sessionSetupOpen]);
 
   useEffect(() => {
     if (!lastSubmittedAt) return undefined;
@@ -1455,6 +1534,12 @@ function App() {
             }
           }
         } else if (message.t === "session_created") {
+          if (pendingSessionCreateRef.current === message.room.id) {
+            clearPendingSessionCreate();
+            setSessionSetupError("");
+            setSessionSetupOpen(false);
+          }
+          setError("");
           sessionBootstrapPending = false;
           deletedSessionIdsRef.current.delete(message.room.id);
           setDeletedSessionIds((current) => {
@@ -1588,6 +1673,15 @@ function App() {
             setError(`${t("Attachment unavailable")}: ${message.text}`);
           }
         } else if (message.t === "error") {
+          if (pendingSessionCreateRef.current) {
+            clearPendingSessionCreate();
+            setSessionSetupError(translate(
+              languageRef.current,
+              "Session could not be created. Check the id, participants, and adapter configuration.",
+            ));
+            setError("");
+            return;
+          }
           deletedSessionIdsRef.current.clear();
           setDeletedSessionIds(new Set());
           setDeletingSessionIds(new Set());
@@ -1607,6 +1701,13 @@ function App() {
       });
       socket.addEventListener("close", (event) => {
         if (wsRef.current !== socket || teardownRef.current) return; // replaced or intentional
+        if (pendingSessionCreateRef.current) {
+          clearPendingSessionCreate();
+          setSessionSetupError(translate(
+            languageRef.current,
+            "The sidecar did not confirm the new session in time. Your setup has been preserved; reconnect and try again.",
+          ));
+        }
         setStatus("offline");
         setError(`Connection closed (${event.code})${event.reason ? `: ${event.reason}` : ""}; reconnecting`);
         scheduleReconnect();
@@ -1647,6 +1748,7 @@ function App() {
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       for (const pending of credentialRequestsRef.current.values()) clearTimeout(pending.timer);
       credentialRequestsRef.current.clear();
+      if (sessionCreateTimerRef.current) clearTimeout(sessionCreateTimerRef.current);
       wsRef.current?.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1748,17 +1850,33 @@ function App() {
     return true;
   }
 
+  function clearPendingSessionCreate() {
+    if (sessionCreateTimerRef.current) clearTimeout(sessionCreateTimerRef.current);
+    sessionCreateTimerRef.current = undefined;
+    pendingSessionCreateRef.current = undefined;
+    setSessionStarting(false);
+  }
+
+  function closeSessionSetup() {
+    if (sessionStarting) return;
+    clearPendingSessionCreate();
+    setSessionSetupError("");
+    setSessionSetupOpen(false);
+  }
+
   function createSessionFromDraft(draft: SessionDraft) {
     const id = draft.roomId.trim();
     if (!id) {
-      setError(t("Session id is required"));
+      setSessionSetupError(t("Session id is required"));
       return;
     }
     const participants = buildSessionParticipants(draft, displayRoom, agentProfiles);
     if (!participants.some((participant) => participant.kind === "agent")) {
-      setError(t("Select at least one agent/model"));
+      setSessionSetupError(t("Select at least one agent/model"));
       return;
     }
+    setSessionSetupError("");
+    setError("");
     if (send({
       t: "create_session",
       session: {
@@ -1770,7 +1888,18 @@ function App() {
         participants,
       },
     })) {
-      setSessionSetupOpen(false);
+      pendingSessionCreateRef.current = id;
+      setSessionStarting(true);
+      sessionCreateTimerRef.current = setTimeout(() => {
+        if (pendingSessionCreateRef.current !== id) return;
+        clearPendingSessionCreate();
+        setSessionSetupError(translate(
+          languageRef.current,
+          "The sidecar did not confirm the new session in time. Your setup has been preserved; reconnect and try again.",
+        ));
+      }, 12_000);
+    } else {
+      setSessionSetupError(t("Not connected to the Quorum sidecar."));
     }
   }
 
@@ -2046,6 +2175,9 @@ function App() {
   }
 
   function openSessionSetup() {
+    clearPendingSessionCreate();
+    setSessionSetupError("");
+    setError("");
     const nextId = `session-${Date.now().toString(36)}`;
     setSessionDraftSeed({
       roomId: nextId,
@@ -2062,7 +2194,12 @@ function App() {
   }
 
   return (
-    <main className="app-shell">
+    <>
+    <main
+      ref={appShellRef}
+      className="app-shell"
+      aria-hidden={credentialsOpen || sessionSetupOpen ? true : undefined}
+    >
       <aside className="sidebar session-sidebar">
         <div className="brand-block">
           <div className="brand-mark"><CircleDot size={18} /></div>
@@ -2405,6 +2542,8 @@ function App() {
         </details>
       </aside>
 
+    </main>
+
       {credentialsOpen ? (
         <CredentialsModal
           connected={connected}
@@ -2425,14 +2564,16 @@ function App() {
           initialDraft={sessionDraftSeed}
           currentRoom={displayRoom}
           profiles={agentProfiles}
+          starting={sessionStarting}
+          error={sessionSetupError}
           onStart={createSessionFromDraft}
           onListDirectories={listWorkspaceDirectories}
           connected={connected}
-          onClose={() => setSessionSetupOpen(false)}
+          onClose={closeSessionSetup}
           t={t}
         />
       ) : null}
-    </main>
+    </>
   );
 }
 
@@ -2647,9 +2788,12 @@ function CredentialsModal({
   onClose: () => void;
   t: Translate;
 }) {
+  const dialogRef = useRef<HTMLElement>(null);
+  useDialogFocusTrap(dialogRef, onClose);
   return (
     <div className="credential-modal-backdrop" role="presentation" onMouseDown={onClose}>
       <section
+        ref={dialogRef}
         className="credential-modal"
         role="dialog"
         aria-modal="true"
@@ -2758,6 +2902,8 @@ function SessionSetupModal({
   currentRoom,
   profiles,
   connected,
+  starting,
+  error,
   onStart,
   onListDirectories,
   onClose,
@@ -2767,15 +2913,19 @@ function SessionSetupModal({
   currentRoom: Room;
   profiles: AgentModelPreset[];
   connected: boolean;
+  starting: boolean;
+  error: string;
   onStart: (draft: SessionDraft) => void;
   onListDirectories: (path?: string) => Promise<WorkspaceDirectoryListing>;
   onClose: () => void;
   t: Translate;
 }) {
+  const dialogRef = useRef<HTMLElement>(null);
   const [draft, setDraft] = useState<SessionDraft>(initialDraft);
   const [pickingWorkspace, setPickingWorkspace] = useState(false);
   const [workspacePickerStatus, setWorkspacePickerStatus] = useState("");
   const [directoryListing, setDirectoryListing] = useState<WorkspaceDirectoryListing>();
+  useDialogFocusTrap(dialogRef, onClose, starting);
   async function loadDirectory(path?: string) {
     setPickingWorkspace(true);
     setWorkspacePickerStatus("");
@@ -2842,12 +2992,15 @@ function SessionSetupModal({
     .filter((participant): participant is (typeof participantOptions)[number] => participant !== undefined);
 
   return (
-    <div className="credential-modal-backdrop" role="presentation" onMouseDown={onClose}>
+    <div className="credential-modal-backdrop" role="presentation" onMouseDown={starting ? undefined : onClose}>
       <section
+        ref={dialogRef}
         className="credential-modal session-setup-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="session-setup-title"
+        aria-describedby="session-setup-description"
+        tabIndex={-1}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="credential-modal-head">
@@ -2856,9 +3009,9 @@ function SessionSetupModal({
               <MessageSquare size={16} />
               <span>{t("Session setup")}</span>
             </div>
-            <p>{t("Choose participants and a discussion mode, then start a new shared session.")}</p>
+            <p id="session-setup-description">{t("Choose participants and a discussion mode, then start a new shared session.")}</p>
           </div>
-          <button type="button" className="icon-action" onClick={onClose} aria-label={t("Close session setup")}>
+          <button type="button" className="icon-action" disabled={starting} onClick={onClose} aria-label={t("Close session setup")}>
             <XCircle size={18} />
           </button>
         </div>
@@ -2869,6 +3022,7 @@ function SessionSetupModal({
             <label>
               <span>{t("Session id")}</span>
               <input
+                data-dialog-autofocus
                 value={draft.roomId}
                 onChange={(input) => {
                   const value = input.currentTarget.value;
@@ -2963,12 +3117,13 @@ function SessionSetupModal({
 
           <section className="session-setup-section">
             <div className="mini-heading">{t("Mode")}</div>
-            <div className="mode-list">
+            <div className="mode-list" role="group" aria-label={t("Mode")}>
               {modes.map((mode) => (
                 <button
                   key={mode.id}
                   className={draft.mode === mode.id ? "mode-option selected" : "mode-option"}
                   type="button"
+                  aria-pressed={draft.mode === mode.id}
                   onClick={() => setDraft((current) => ({ ...current, mode: mode.id }))}
                 >
                   <strong>{mode.label}</strong>
@@ -3000,12 +3155,13 @@ function SessionSetupModal({
 
           <section className="session-setup-section">
             <div className="mini-heading">{t("Permission policy")}</div>
-            <div className="mode-list">
+            <div className="mode-list" role="group" aria-label={t("Permission policy")}>
               {permissionPolicies.map((policy) => (
                 <button
                   key={policy.id}
                   className={draft.permissionPolicy === policy.id ? "mode-option selected" : "mode-option"}
                   type="button"
+                  aria-pressed={draft.permissionPolicy === policy.id}
                   onClick={() => setDraft((current) => ({ ...current, permissionPolicy: policy.id }))}
                 >
                   <strong>{policy.label}</strong>
@@ -3075,9 +3231,13 @@ function SessionSetupModal({
           </section>
         </div>
 
-        <div className="credential-modal-actions">
-          <button type="button" className="secondary-action" onClick={onClose}>{t("Close")}</button>
-          <button type="button" className="primary-action" disabled={!connected} onClick={() => onStart(draft)}>{t("Start session")}</button>
+        {error ? <div className="inline-alert session-setup-alert" role="alert"><AlertTriangle size={14} />{error}</div> : null}
+        <div className="credential-modal-actions session-setup-actions">
+          <button type="button" className="secondary-action" disabled={starting} onClick={onClose}>{t("Close")}</button>
+          <button type="button" className="primary-action" disabled={!connected || starting} onClick={() => onStart(draft)}>
+            {starting ? <RefreshCcw size={15} className="spin" /> : null}
+            {starting ? t("Creating session") : t("Start session")}
+          </button>
         </div>
       </section>
     </div>

@@ -228,6 +228,14 @@ Quorum does not spend the six-turn safety budget asking the same model to repeat
 itself. Explicit round-robin scheduling remains available for deliberate repeated
 passes.
 
+New Session creation is confirmation-driven: the setup dialog remains open and
+keeps its draft until the daemon returns `session_created`. Validation, gateway
+rejection, disconnect, and timeout errors are shown inside the dialog instead of
+discarding the form or leaving a stale raw gateway error in the Connection panel.
+The dialog traps keyboard focus, closes with Escape when no request is pending,
+marks the background inert, restores the opener focus, and exposes mode and
+permission choices as pressed-state controls for assistive technology.
+
 Continue Session now restores the last compaction boundary and versioned shared
 memory from the event store; shared memory is included in the deterministic
 Context Bundle. Attachment data URLs and extracted document bodies are stored in

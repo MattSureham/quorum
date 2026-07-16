@@ -27,6 +27,12 @@
 - Composer 会显示中英双语“正在读取文件”状态，并在全部排队读取结束前禁用 Send 与文件选择器。后续批次若校验失败，已有文字与附件保持不变。
 - 纯 composer-state 回归覆盖连接/断开、纯文字、纯附件和 pending-read，共 2 项测试与 typecheck 通过。延迟 FileReader 场景留到最终 Playwright 验收复测。
 
+## 2026-07-16 Playwright UX 整改：Session 设置确认与键盘流程
+
+- New Session 不再乐观关闭。只有收到匹配的 `session_created` 后才关闭；表单校验、gateway 拒绝、断线和 12 秒确认超时都会在弹窗内显示双语错误，并保留所有字段与选择。
+- 创建期间 Start 会显示进度，并禁用重复提交、背景点击、Escape 与关闭按钮；超时后恢复为可编辑、可重试状态。创建成功会清理 Connection 区遗留的旧错误。
+- Session 设置与 API credential 弹窗现在会锁定 Tab/Shift+Tab 焦点，打开时把焦点移入弹窗，支持 Escape，关闭后恢复触发按钮，并让背景应用处于 inert/`aria-hidden` 状态。Mode 与权限按钮提供 `aria-pressed` 和具名 group 语义。Typecheck 与 Web production build 通过；响应式几何和浏览器键盘断言留到最终 UX 阶段。
+
 ## 2026-07-16 显式 workspace 边界整改
 
 - `create_session` 在省略 `workspacePath` 时不再回退到启动房间的 workspace。New Session 留空 workspace 现在在服务端和 UI 两端都保持中性；文件夹选择器也不再把当前房间路径当作隐式起点。
