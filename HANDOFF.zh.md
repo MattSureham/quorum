@@ -27,6 +27,12 @@
 - DOCX 超时现在会中止 `AbortController`、销毁活动解压 stream 并关闭 ZIP。原来的 `Promise.race` 可能已报失败但 Mammoth 仍在解析；Mammoth 已从 daemon 依赖中移除。校验后的主文档 OOXML 改由 `@xmldom/xmldom` 解析，拒绝 DTD/entity 声明，并提取段落、tab 和换行，不会再次打开压缩包。
 - 构造回归将 810 万个文本字符压缩到 100 KB 以下，同时伪报 entry 仅 1 KB；它会被实际字节上限拒绝，不会进入 XML 解析。文档/gateway 定向测试 19 项、typecheck 及 compiled Bun sidecar 真实 PDF/DOCX smoke 均通过。
 
+## 2026-07-16 Codex 终态进程顺序
+
+- Codex `turn.failed` 现在会先记住结构化失败并立即开始终止进程树，但只有观测到子进程 `close` 事件后才向调度器 yield 终态 adapter 事件。在失败 CLI 仍可能运行时，SessionManager 无法完成 turn、checkpoint 或释放共享 workspace lease。
+- Unix 类系统中 Codex 子进程使用独立进程组：终止先向整组发送 `SIGINT`，必要时升级为 `SIGKILL`，然后等待真实关闭。Windows 使用 `taskkill /PID ... /T`，必要时增加 `/F`，并同样等待。Abort、显式 interrupt、原生 resume 失败与 generator 提前返回共用同一个幂等终止 Promise。
+- 跨平台 fake CLI 会输出 `turn.failed`、等待，再尝试写入 survival marker。Adapter 会在有界时间内 yield 失败，且到预定写入时点后 marker 仍不存在，证明控制权返回前进程树已消失。本地 Codex adapter 9 项测试与 typecheck 已通过；`.cmd`/`taskkill` 分支仍需 Windows workflow 验证。
+
 ## 2026-07-15 PDF 与 DOCX 聊天附件
 
 - Chat 的“文件”选择器现在支持 PNG/JPEG/GIF/WebP 图片以及 PDF、DOCX 文档。图片保留缩略图与粘贴能力；文档卡片会显示提取状态、可用时的页数、警告，并保留本机原文件下载入口。

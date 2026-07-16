@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, writeFile } from "node:fs/promises";
+import { access, chmod, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -88,6 +88,38 @@ describe("CodexAdapter", () => {
       body: expect.objectContaining({ level: "error", category: "timeout", text: expect.stringContaining("request timed out") }),
     }));
   });
+
+  it("terminates and waits for the CLI process tree before yielding a terminal failure", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "quorum-codex-terminal-"));
+    const survivedPath = join(dir, "survived.txt");
+    const bin = await fakeCli(
+      [
+        `printf '%s\\n' '{"type":"turn.failed","error":{"message":"terminal failure"}}'`,
+        "sleep 2",
+        `printf survived > '${survivedPath}'`,
+        "sleep 5",
+      ].join("\n"),
+      [
+        `echo {"type":"turn.failed","error":{"message":"terminal failure"}}`,
+        "ping -n 3 127.0.0.1 >nul",
+        `echo survived > "${survivedPath}"`,
+        "ping -n 6 127.0.0.1 >nul",
+      ].join("\r\n"),
+    );
+    const adapter = new CodexAdapter(input().self, { bin, sandbox: "read-only" });
+    const iterator = adapter.takeTurn(input())[Symbol.asyncIterator]();
+    const startedAt = Date.now();
+    const failure = await iterator.next();
+
+    expect(failure.value).toMatchObject({
+      type: "system",
+      body: expect.objectContaining({ level: "error", category: "cli_exit", text: "terminal failure" }),
+    });
+    expect(Date.now() - startedAt).toBeLessThan(1_800);
+    await new Promise((resolve) => setTimeout(resolve, 2_200));
+    await expect(access(survivedPath)).rejects.toThrow();
+    await iterator.return?.();
+  }, 10_000);
 
   it("keeps recoverable transport errors non-terminal when Codex later replies", async () => {
     const bin = await fakeCli(

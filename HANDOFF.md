@@ -31,6 +31,12 @@ Working handoff for an agent picking up **Quorum**. Current as of **2026-07-16**
 - DOCX timeout now aborts an `AbortController`, destroys the active decompression stream, and closes the ZIP. The prior `Promise.race` path could report failure while Mammoth continued parsing; Mammoth has been removed from the daemon dependency graph. Validated main-document OOXML is parsed with `@xmldom/xmldom`, rejects DTD/entity declarations, and extracts paragraphs, tabs, and line breaks without opening the archive a second time.
 - A crafted regression compresses 8.1 million text characters below 100 KB while declaring the entry as 1 KB; it is rejected by the actual-byte limit without reaching XML parsing. The document/gateway suites pass 19 tests, typecheck passes, and the compiled Bun sidecar smoke still extracts a real PDF and DOCX.
 
+### 2026-07-16 Codex terminal-process ordering
+
+- A Codex `turn.failed` record now captures the structured failure and immediately starts process-tree termination, but does not yield the terminal adapter event until the child `close` event has been observed. SessionManager cannot finalize the turn, checkpoint, or release the shared workspace lease while the failed CLI may still run.
+- Codex subprocesses use a dedicated process group on Unix-like systems; termination sends group `SIGINT`, escalates to `SIGKILL`, and then waits for actual closure. Windows uses `taskkill /PID ... /T`, escalates with `/F`, and likewise waits. Abort, explicit interrupt, native-resume failure, and early generator return share the same idempotent termination promise.
+- A cross-platform fake CLI emits `turn.failed`, waits, and attempts to write a survival marker. The adapter yields failure in bounded time and the marker remains absent after its scheduled write point, proving the process tree was gone before control returned. All 9 Codex adapter tests and typecheck pass locally; Windows workflow validation remains required for the `.cmd`/`taskkill` branch.
+
 ### 2026-07-15 PDF and DOCX chat attachments
 
 - The chat File picker now accepts PNG/JPEG/GIF/WebP images plus PDF and DOCX documents. Images retain thumbnail/paste behavior; document cards expose extraction state, page count when available, warnings, and a download link to the locally persisted original.

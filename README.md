@@ -196,7 +196,11 @@ bids replace the same agent's derived bid row for that epoch while the
 append-only event log retains every bid revision. Codex `error` stream records
 such as `Reconnecting... n/5` are transport notices rather than terminal turn
 failures: Quorum keeps waiting for Codex's HTTPS fallback and only fails on
-`turn.failed`, non-zero process exit, deadline, or final empty output.
+`turn.failed`, non-zero process exit, deadline, or final empty output. A terminal
+`turn.failed` is not yielded to the scheduler until the Codex CLI process tree
+has been terminated and its close event observed. Unix runs use a dedicated
+process group; Windows runs use `taskkill /T`. The workspace lease therefore
+cannot pass to another agent while the failed Codex process may still edit.
 
 Shared-session modes are enforced by the scheduler. Addressed prompts only ask
 the selected agents to bid; `noConsecutive` uses the actual last speaker id;

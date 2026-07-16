@@ -19,6 +19,7 @@ export interface CodexOptions {
 export class CodexAdapter extends BaseAgentAdapter {
   private threadId?: string;
   private child?: ChildProcess;
+  private terminateActiveChild?: () => Promise<void>;
 
   constructor(descriptor: ParticipantDescriptor, private readonly opts: CodexOptions = {}) {
     super(descriptor);
@@ -45,12 +46,11 @@ export class CodexAdapter extends BaseAgentAdapter {
     const child = spawn(bin, args, {
       cwd,
       shell: process.platform === "win32",
+      detached: process.platform !== "win32",
       stdio: ["pipe", "pipe", "pipe"],
     });
     child.stdin?.end(prompt);
     this.child = child;
-    const onAbort = () => child.kill("SIGINT");
-    input.signal.addEventListener("abort", onAbort, { once: true });
 
     const queue: PartialRoomEvent[] = [];
     let wake: (() => void) | null = null;
@@ -59,9 +59,33 @@ export class CodexAdapter extends BaseAgentAdapter {
     let exitCode: number | null = null;
     let spawnError: Error | undefined;
     let emittedMessage = false;
-    let terminalFailure = false;
+    let terminalFailure: { detail: string; category: string } | undefined;
     const streamErrors: string[] = [];
     const push = (e: PartialRoomEvent) => { queue.push(e); wake?.(); wake = null; };
+
+    let closed = false;
+    const done = new Promise<void>((resolve) => {
+      child.on("close", (code) => {
+        exitCode = code;
+        closed = true;
+        resolve();
+        wake?.();
+        wake = null;
+      });
+      child.on("error", (error) => {
+        spawnError = error;
+        exitCode = 1;
+        closed = true;
+        resolve();
+        wake?.();
+        wake = null;
+      });
+    });
+    let termination: Promise<void> | undefined;
+    const terminate = () => termination ??= terminateChildProcess(child, done);
+    this.terminateActiveChild = terminate;
+    const onAbort = () => { void terminate(); };
+    input.signal.addEventListener("abort", onAbort, { once: true });
 
     const rl = createInterface({ input: child.stdout! });
     rl.on("line", (line) => {
@@ -102,12 +126,16 @@ export class CodexAdapter extends BaseAgentAdapter {
             input.onNativeSessionResumeFailed?.(ev.error?.message ?? "Codex native resume failed");
             this.threadId = undefined;
             push({ type: "thinking", body: { text: "Native Codex thread resume failed; retrying with Quorum context bundle." } });
+            void terminate();
             break;
           }
           {
             const detail = ev.error?.message ?? "codex turn failed";
-            terminalFailure = true;
-            push({ type: "system", body: { level: "error", text: detail, category: classifyCliFailure(detail), detail } });
+            terminalFailure = { detail, category: classifyCliFailure(detail) };
+            // Do not expose the terminal error to SessionManager until the CLI
+            // and its process tree are gone. Otherwise the workspace lease can
+            // be released while the failed process is still editing files.
+            void terminate();
           }
           break;
         case "error": {
@@ -126,25 +154,6 @@ export class CodexAdapter extends BaseAgentAdapter {
     });
     child.stderr?.on("data", (chunk) => { stderr += chunk.toString(); });
 
-    let closed = false;
-    const done = new Promise<void>((resolve) => {
-      child.on("close", (code) => {
-        exitCode = code;
-        closed = true;
-        resolve();
-        wake?.();
-        wake = null;
-      });
-      child.on("error", (error) => {
-        spawnError = error;
-        exitCode = 1;
-        closed = true;
-        resolve();
-        wake?.();
-        wake = null;
-      });
-    });
-
     try {
       while (true) {
         if (queue.length) { yield queue.shift()!; continue; }
@@ -153,6 +162,11 @@ export class CodexAdapter extends BaseAgentAdapter {
       }
       if (resumeFailed) {
         yield* this.takeTurn({ ...input, nativeSessionId: undefined });
+      } else if (terminalFailure) {
+        yield {
+          type: "system",
+          body: { level: "error", text: terminalFailure.detail, category: terminalFailure.category, detail: terminalFailure.detail },
+        };
       } else if (spawnError) {
         yield {
           type: "system",
@@ -171,7 +185,7 @@ export class CodexAdapter extends BaseAgentAdapter {
             body: { level: "error", text: `Codex CLI failed: ${detail}`, category: classifyCliFailure(detail), detail },
           };
         }
-      } else if (!emittedMessage && !terminalFailure) {
+      } else if (!emittedMessage) {
         const detail = (streamErrors.at(-1) ?? stderr.trim()) || undefined;
         yield {
           type: "system",
@@ -187,12 +201,80 @@ export class CodexAdapter extends BaseAgentAdapter {
       }
     } finally {
       input.signal.removeEventListener("abort", onAbort);
+      if (closed) await done;
+      else await terminate();
       rl.close();
+      if (this.child === child) this.child = undefined;
+      if (this.terminateActiveChild === terminate) this.terminateActiveChild = undefined;
     }
   }
 
   async interrupt(): Promise<void> {
-    this.child?.kill("SIGINT");
+    await this.terminateActiveChild?.();
+  }
+}
+
+async function terminateChildProcess(child: ChildProcess, done: Promise<void>): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) {
+    await done;
+    return;
+  }
+  const pid = child.pid;
+  if (pid) {
+    if (process.platform === "win32") {
+      await runTaskkill(pid, false);
+    } else {
+      signalProcessGroup(child, "SIGINT");
+    }
+  } else {
+    child.kill("SIGINT");
+  }
+  if (await closesWithin(done, 500)) return;
+
+  if (pid && process.platform === "win32") {
+    await runTaskkill(pid, true);
+  } else if (pid) {
+    signalProcessGroup(child, "SIGKILL");
+  } else {
+    child.kill("SIGKILL");
+  }
+  // Holding the caller here is intentional: releasing the SessionManager's
+  // workspace lease while an unconfirmed process tree may still write is less
+  // safe than surfacing a stuck termination. SIGKILL/taskkill should normally
+  // close immediately; if it does not, wait for the actual close event.
+  if (!await closesWithin(done, 2_000)) await done;
+}
+
+function signalProcessGroup(child: ChildProcess, signal: NodeJS.Signals): void {
+  try {
+    if (child.pid) process.kill(-child.pid, signal);
+    else child.kill(signal);
+  } catch {
+    try { child.kill(signal); } catch { /* process already exited */ }
+  }
+}
+
+function runTaskkill(pid: number, force: boolean): Promise<void> {
+  return new Promise((resolve) => {
+    const killer = spawn("taskkill", ["/PID", String(pid), "/T", ...(force ? ["/F"] : [])], {
+      shell: false,
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    killer.once("error", () => resolve());
+    killer.once("close", () => resolve());
+  });
+}
+
+async function closesWithin(done: Promise<void>, timeoutMs: number): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      done.then(() => true),
+      new Promise<boolean>((resolve) => { timer = setTimeout(() => resolve(false), timeoutMs); }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 
