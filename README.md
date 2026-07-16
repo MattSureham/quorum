@@ -476,6 +476,13 @@ pnpm test           # vitest
 pnpm typecheck      # tsc -b (needs deps installed)
 ```
 
+The 2026-07-16 UX reliability follow-up passes `163/163` tests across 27 files,
+typecheck, the Web production build, EventLog/shared/source/Node/Bun sidecar
+smokes, and the desktop Rust check. Isolated Playwright acceptance also covers
+the exact 1121x768 and 901x768 responsive boundaries, a prompt submitted during
+`settling`, attachment deletion during a delayed read, and correlated/frozen
+Session creation.
+
 > Note: the dependency-free path (`demo`, `smoke`) runs straight from TypeScript
 > source via `tsx`. The real adapters/gateway/store need their deps installed,
 > and the Claude Code / Codex adapters need those CLIs installed locally.
