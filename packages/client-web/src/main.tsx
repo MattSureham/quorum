@@ -3173,24 +3173,6 @@ function SessionSetupModal({
             </label>
           </section>
 
-          <section className="session-setup-section">
-            <div className="mini-heading">{t("Permission policy")}</div>
-            <div className="mode-list" role="group" aria-label={t("Permission policy")}>
-              {permissionPolicies.map((policy) => (
-                <button
-                  key={policy.id}
-                  className={draft.permissionPolicy === policy.id ? "mode-option selected" : "mode-option"}
-                  type="button"
-                  aria-pressed={draft.permissionPolicy === policy.id}
-                  onClick={() => setDraft((current) => ({ ...current, permissionPolicy: policy.id }))}
-                >
-                  <strong>{policy.label}</strong>
-                  <span>{policy.detail}</span>
-                </button>
-              ))}
-            </div>
-          </section>
-
           <section className="session-setup-section wide">
             <div className="mini-heading">{t("Participants")}</div>
             <div className="participant-order-editor">
@@ -3246,6 +3228,24 @@ function SessionSetupModal({
                   </div>
                   <i>{participant.active ? t("current room") : participant.available === false ? t("needs key") : t("available")}</i>
                 </label>
+              ))}
+            </div>
+          </section>
+
+          <section className="session-setup-section wide session-permission-section">
+            <div className="mini-heading">{t("Permission policy")}</div>
+            <div className="mode-list permission-policy-list" role="group" aria-label={t("Permission policy")}>
+              {permissionPolicies.map((policy) => (
+                <button
+                  key={policy.id}
+                  className={draft.permissionPolicy === policy.id ? "mode-option selected" : "mode-option"}
+                  type="button"
+                  aria-pressed={draft.permissionPolicy === policy.id}
+                  onClick={() => setDraft((current) => ({ ...current, permissionPolicy: policy.id }))}
+                >
+                  <strong>{policy.label}</strong>
+                  <span>{policy.detail}</span>
+                </button>
               ))}
             </div>
           </section>

@@ -926,6 +926,11 @@ textarea:focus {
   grid-column: 1 / -1;
 }
 
+.permission-policy-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .mode-list,
 .participant-picker-list {
   display: flex;
