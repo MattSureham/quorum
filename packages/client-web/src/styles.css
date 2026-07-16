@@ -3125,6 +3125,10 @@ h1 {
     grid-template-columns: 1fr;
   }
 
+  .permission-policy-list {
+    grid-template-columns: 1fr;
+  }
+
   .participant-picker-row {
     grid-template-columns: 18px minmax(0, 1fr);
   }
