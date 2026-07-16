@@ -1549,18 +1549,21 @@ h1 {
 }
 
 .run-status-banner.tool,
-.run-status-banner.approval {
+.run-status-banner.approval,
+.run-status-banner.cancelling {
   border-color: #e3cf9e;
   background: #fff9ea;
 }
 
 .run-status-banner.tool .run-status-dot,
-.run-status-banner.approval .run-status-dot {
+.run-status-banner.approval .run-status-dot,
+.run-status-banner.cancelling .run-status-dot {
   background: #b8842f;
   animation: pulse 1.1s ease-in-out infinite;
 }
 
 .run-status-banner.settling,
+.run-status-banner.cancelled,
 .run-status-banner.completed {
   border-color: #d8e2de;
   background: #f7faf8;

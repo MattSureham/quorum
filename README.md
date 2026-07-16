@@ -125,7 +125,10 @@ The run-status banner explains the current execution stage rather than only
 showing a final phase. It distinguishes local queueing, daemon acknowledgement,
 bid collection, speaker selection, agent contact, agent thinking/output, running
 tools, waiting for tool approval, normal completion, failure, and the important
-"completed without visible reply" case.
+"completed without visible reply" case. Status is projected from the newest turn
+lifecycle: an older failure cannot cover a newer running agent, and a hard
+interrupt remains `Cancelling` until that turn emits `turn_cancelled`, then shows
+`Interrupted` rather than `Completed`.
 
 Shared-session mode semantics are visible in the diagnostics panel. Open
 discussion is shown as free bidding, Raise hand as floor requests that wait for
@@ -589,7 +592,9 @@ final wrap-up pass rather than cutting the discussion off at the numeric boundar
 After a message is sent, the composer shows a run-status banner derived from the
 event stream. It reports submitted/waiting, bid collection, speaker selection,
 speaking, settling, completion, and stalled waits, so a silent session is visible
-as a specific phase rather than looking like the Send button did nothing.
+as a specific phase rather than looking like the Send button did nothing. The
+projection associates terminal and interrupt events with the latest `turnId`, so
+prior failed turns do not override later active work.
 
 The central **Chat** transcript is intentionally message-only: it shows human
 prompts and agent/model replies. Floor grants, bids, thinking updates, tool

@@ -47,6 +47,12 @@
 - 长连接 WebSocket listener 现在使用有测试覆盖的来源 socket/当前 room 过滤器。被替换 socket 的消息、其他 room 的迟到 event、过期 Continue/snapshot 响应都不能混入当前聊天；附件响应仍单独按 request 与 room 双重校验。
 - Rich message、socket filter 与 desktop config 共 9 项定向测试通过；typecheck、Web production build 与 `desktop:check` 通过。本机缺完整 Xcode，因此此检查点未生成 macOS bundle。
 
+## 2026-07-16 最新 turn 运行状态
+
+- 运行状态现在只投影当前人工 prompt 之后最新一条 `turn_started` 的生命周期，并且只接受与其 `turnId` 匹配的终态。前一参与者失败后，后续 agent 的联系、思考、发言或收集 bid 状态不会再被旧失败遮住。
+- 与活动 turn 关联的 interrupt 在 adapter/进程仍停止时显示“正在中断发言”；匹配的 `turn_cancelled` 到达后显示“已中断”。它不会再落入 shared Session 的通用最后终态标记而误显示“已完成”。
+- 生命周期 helper 也能处理缺少 phase event 的旧式/异常事件流，并有“旧失败 + 新运行”以及“interrupt 收敛为 cancelled”的定向回归。Run-status 5 项测试与 typecheck 通过；尚待全量验证。
+
 ## 2026-07-15 PDF 与 DOCX 聊天附件
 
 - Chat 的“文件”选择器现在支持 PNG/JPEG/GIF/WebP 图片以及 PDF、DOCX 文档。图片保留缩略图与粘贴能力；文档卡片会显示提取状态、可用时的页数、警告，并保留本机原文件下载入口。

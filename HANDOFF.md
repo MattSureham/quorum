@@ -51,6 +51,12 @@ Working handoff for an agent picking up **Quorum**. Current as of **2026-07-16**
 - The long-lived WebSocket listener now uses a tested source-socket/active-room filter. Messages from replaced sockets, late events for another room, and stale Continue/snapshot replies cannot enter the active transcript. Attachment responses remain request-correlated and room-checked separately.
 - Nine targeted rich-message, socket-filter, and desktop-config tests pass; typecheck, Web production build, and `desktop:check` pass. Full Xcode is not installed, so no macOS bundle was produced at this checkpoint.
 
+### 2026-07-16 latest-turn run status
+
+- Run status now projects the lifecycle of the newest `turn_started` after the current human prompt and accepts only a matching terminal event. A failed earlier participant cannot mask a later agent that is contacting, thinking, speaking, or collecting bids.
+- An interrupt associated with the active turn is shown as `Cancelling turn` while the adapter/process is still stopping. Its matching `turn_cancelled` terminal becomes `Interrupted`; it can no longer fall through the shared Session's generic last-terminal marker and appear as `Completed`.
+- The lifecycle helper also supports legacy/malformed streams without phase events and has focused regressions for old-failure/new-running precedence and interrupt-to-cancel convergence. Five run-status tests and typecheck pass; full-suite validation remains pending.
+
 ### 2026-07-15 PDF and DOCX chat attachments
 
 - The chat File picker now accepts PNG/JPEG/GIF/WebP images plus PDF and DOCX documents. Images retain thumbnail/paste behavior; document cards expose extraction state, page count when available, warnings, and a download link to the locally persisted original.

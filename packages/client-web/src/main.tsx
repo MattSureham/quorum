@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { canCreateCustomApiProfile, normalizeStoredCustomProfile } from "./profile-config.js";
 import { RichMessage } from "./rich-message.js";
-import { latestTerminalTurnAfter } from "./run-status.js";
+import { latestTurnLifecycleAfter } from "./run-status.js";
 import { shouldHandleSocketMessage } from "./socket-message-filter.js";
 import {
   Activity,
@@ -317,6 +317,10 @@ const zhText: Record<string, string> = {
   "Message sent locally; waiting for daemon acknowledgement.": "消息已在本地提交，等待 daemon 确认。",
   "Turn failed": "发言失败",
   "The latest agent turn failed. Check diagnostics for details.": "最近一次智能体发言失败。请查看诊断信息。",
+  "Cancelling turn": "正在中断发言",
+  "Interrupt requested; waiting for the agent process to stop.": "已请求中断，正在等待智能体进程停止。",
+  "Interrupted": "已中断",
+  "The latest agent turn was interrupted.": "最近一次智能体发言已被中断。",
   "Collecting bids": "收集抢麦",
   "Selecting speaker": "选择发言者",
   "Choosing who speaks next.": "正在选择下一位发言者。",
@@ -623,6 +627,8 @@ interface RunStatus {
     | "approval"
     | "speaking"
     | "settling"
+    | "cancelling"
+    | "cancelled"
     | "completed"
     | "idle"
     | "error";
@@ -1074,19 +1080,14 @@ function describeRunStatus({
   const afterPromptSeq = humanMessage?.seq ?? 0;
   const pendingApproval = pendingApprovals(events).at(-1);
   const toolCall = unresolvedToolCall(events, afterPromptSeq);
-  const terminalTurn = latestTerminalTurnAfter(events, afterPromptSeq);
+  const turnLifecycle = latestTurnLifecycleAfter(events, afterPromptSeq);
+  const terminalTurn = turnLifecycle.terminal;
   const failed = terminalTurn?.type === "turn_failed" ? terminalTurn : undefined;
+  const cancelled = terminalTurn?.type === "turn_cancelled" ? terminalTurn : undefined;
   const completed = terminalTurn?.type === "turn_completed" ? terminalTurn : undefined;
   const agentOutput = latestAgentOutputAfter(events, afterPromptSeq);
-  if (failed) {
-    const failure = (failed.body as any)?.failure;
-    const speakerId = String((failed.body as any)?.speakerId ?? "");
-    const speaker = participants.find((participant) => participant.id === speakerId)?.display ?? speakerId;
-    const failureDetail = typeof failure?.message === "string"
-      ? failure.message
-      : t("The latest agent turn failed. Check diagnostics for details.");
-    const detail = speaker ? `${speaker}: ${failureDetail}` : failureDetail;
-    return { state: "error", label: t("Turn failed"), detail, lastEvent };
+  if (turnLifecycle.stopping) {
+    return { state: "cancelling", label: t("Cancelling turn"), detail: t("Interrupt requested; waiting for the agent process to stop."), lastEvent };
   }
   if (pendingApproval) {
     return { state: "approval", label: t("Waiting approval"), detail: `${waitingPrefix}${t("Approve or deny the requested tool call:")} ${pendingApproval.tool}`, lastEvent };
@@ -1111,14 +1112,34 @@ function describeRunStatus({
       return { state: "speaking", label: t("Speaking"), detail: `${waitingPrefix}${shared.activeSpeaker ? `${shared.activeSpeaker} ${t("is responding.")}` : t("An agent is responding.")}`, lastEvent };
     }
     if (shared.phase === "settling") {
-      return { state: "settling", label: t("Settling"), detail: t("Finalizing the turn and checking for follow-up bids."), lastEvent };
+      if (!failed && !cancelled) return { state: "settling", label: t("Settling"), detail: t("Finalizing the turn and checking for follow-up bids."), lastEvent };
     }
-    if (shared.phase === "idle" && shared.lastCompleted) {
-      if (humanMessage && completed && !hasAgentMessageAfter(events, humanMessage.seq)) {
-        return { state: "error", label: t("Completed without reply"), detail: t("The last turn completed, but no agent message was added after your prompt."), lastEvent };
-      }
-      return { state: "completed", label: t("Completed"), detail: `${t("Last turn completed:")} ${shared.lastCompleted}.`, lastEvent };
+  }
+  if (turnLifecycle.active) {
+    if (!agentOutput) return { state: "contacting", label: t("Contacting agent"), detail: `${waitingPrefix}${t("Agent turn granted; waiting for the first output.")}`, lastEvent };
+    if (agentOutput.type === "thinking" || agentOutput.type === "turn_output_chunk") {
+      return { state: "thinking", label: t("Agent thinking"), detail: `${waitingPrefix}${t("Agent is producing intermediate output.")}`, lastEvent };
     }
+    return { state: "speaking", label: t("Speaking"), detail: `${waitingPrefix}${t("An agent is responding.")}`, lastEvent };
+  }
+  if (failed) {
+    const failure = (failed.body as any)?.failure;
+    const speakerId = String((failed.body as any)?.speakerId ?? "");
+    const speaker = participants.find((participant) => participant.id === speakerId)?.display ?? speakerId;
+    const failureDetail = typeof failure?.message === "string"
+      ? failure.message
+      : t("The latest agent turn failed. Check diagnostics for details.");
+    const detail = speaker ? `${speaker}: ${failureDetail}` : failureDetail;
+    return { state: "error", label: t("Turn failed"), detail, lastEvent };
+  }
+  if (cancelled) {
+    return { state: "cancelled", label: t("Interrupted"), detail: t("The latest agent turn was interrupted."), lastEvent };
+  }
+  if (completed) {
+    if (humanMessage && !hasAgentMessageAfter(events, humanMessage.seq)) {
+      return { state: "error", label: t("Completed without reply"), detail: t("The last turn completed, but no agent message was added after your prompt."), lastEvent };
+    }
+    return { state: "completed", label: t("Completed"), detail: `${t("Last turn completed:")} ${(completed.body as any)?.turnId ?? completed.turnId ?? ""}.`, lastEvent };
   }
   if (latest?.type === "message" && latest.author.kind === "human") {
     return { state: "submitted", label: t("Waiting for agents"), detail: `${waitingPrefix}${t("Message accepted by the daemon; waiting for the scheduler.")}`, lastEvent };
