@@ -2938,6 +2938,39 @@ h1 {
     padding: 10px;
   }
 
+  .connection-panel .panel-title {
+    flex-wrap: wrap;
+  }
+
+  .connection-panel .status-pill {
+    flex: 0 0 auto;
+  }
+
+  .room-list-row {
+    grid-template-columns: minmax(0, 1fr) repeat(3, 34px);
+    gap: 5px;
+  }
+
+  .room-list-row .room-list-item {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .room-export-action {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .room-archive-action {
+    grid-column: 3;
+    grid-row: 2;
+  }
+
+  .room-delete-action {
+    grid-column: 4;
+    grid-row: 2;
+  }
+
   .config-sidebar {
     display: flex;
     grid-column: auto;
@@ -2990,8 +3023,6 @@ h1 {
 
   .sidebar {
     order: 1;
-    max-height: 42dvh;
-    overflow: auto;
     padding: 12px;
     border-bottom: 1px solid #ccd6d2;
     border-right: 0;
@@ -3012,6 +3043,18 @@ h1 {
     height: auto;
     min-height: auto;
     overflow: visible;
+  }
+
+  .room-list-panel {
+    max-height: 42dvh;
+    overflow-y: auto;
+  }
+
+  .room-list-panel .full-width-action {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    box-shadow: 0 -6px 12px #ffffff;
   }
 
   .chat-shell {

@@ -36,8 +36,16 @@
 ## 2026-07-16 Playwright UX 整改：响应式外壳与可达操作区
 
 - 1120 px 布局不再把右侧配置栏移到覆盖固定高度 Chat 的全宽第二行。平板宽度保留压缩后的左/中/右三栏，两个侧栏独立滚动，顶部操作区紧凑换行。
-- 900 px 及以下会解除 app shell、workspace 和侧栏的固定 `100vh` 裁切，页面可自然滚动。Session 侧栏限制为 42dvh，Chat transcript 保持 360-520 px 稳定视口，composer 与后续配置均可到达。
-- Session 设置改为 flex dialog，只有内容 grid 滚动，标题、错误和底部操作固定；手机上使用可用 `100dvh` 高度，因此 Start 始终留在首屏。Typecheck、Web production build 与 `git diff --check` 通过；下一步用 1440/1024/390 的真实浏览器截图验收。
+- 900 px 及以下会解除 app shell、workspace 和侧栏的固定 `100vh` 裁切，页面可自然滚动。只有 Session 列表面板限制为 42dvh，Chat transcript 保持 360-520 px 稳定视口，composer 与后续配置均可到达。New session 固定在这个独立滚动列表底部，不会再渲染到 Chat 下方而失去点击输入。
+- Session 设置改为 flex dialog，只有内容 grid 滚动，标题、错误和底部操作固定；手机上使用可用 `100dvh` 高度，因此 Start 始终留在首屏。Typecheck、Web production build 与 `git diff --check` 通过；1440/1024/390 的真实浏览器验收记录在下一节。
+
+## 2026-07-16 Playwright UX 整改：最终浏览器验收
+
+- 内置浏览器在按要求完成连接诊断后仍没有可用实例，因此最终点击与截图验收使用隔离的临时 sidecar/database/workspace，并由独立 Playwright 驱动本机 headless Chrome。未使用私人 credential 数据库或仓库 workspace，临时服务已关闭。
+- 1440x1000、1024x768 与 390x844 的自动化断言全部通过：无水平溢出；配置栏不覆盖 Chat；composer/Send 可达；多 Session 名称与连接状态不会跑出平板侧栏；移动端 New session 可实际接收点击；Session 底部操作始终位于首个弹窗视口。
+- 键盘与状态断言通过：Session 设置打开后焦点位于内部，Tab/Shift+Tab 不会逃逸，Escape 关闭并恢复触发按钮，背景为 inert/`aria-hidden`，mode/权限控件提供 `aria-pressed`。被拒绝的 `..` Session id 会保留全部草稿并显示本地化弹窗错误，随后使用合法 id 创建 Echo Session 成功，Connection 区没有遗留旧错误。
+- 运行断言通过：唯一 Echo 每条 prompt 只回复一次；人为延迟 FileReader 700 ms 时 Send 会禁用，文字不能与图片分开发送，图片最终出现在目标 human message 上。浏览器 console/page/request failure 列表均为空。
+- 最终本地验收通过 `pnpm typecheck`、Web production build、26 个文件 **157/157** 项测试、EventLog/shared/source-sidecar/Node/Bun smokes，以及包含 Rust `cargo check` 的 `pnpm desktop:check`。第一次全量套件中 3 个既有 5 秒 CLI subprocess 测试在并发负载下超时；三项单独重跑立即通过，关闭浏览器服务后的第二次全量运行也以 157/157 干净通过。Tauri 仍提示未安装完整 Xcode。这个晚于 `29470431610` 的 UX HEAD 仍需要新的 Windows Packages run。
 
 ## 2026-07-16 显式 workspace 边界整改
 

@@ -239,7 +239,9 @@ At desktop/tablet widths the three primary columns remain independent scrolling
 regions, with narrower sidebars below 1120 px instead of moving configuration on
 top of the chat. At 900 px and below the app becomes a naturally scrolling
 single-column document; the Session list is height-bounded, Chat keeps a stable
-transcript viewport, and the composer is reachable. Session setup keeps its
+transcript viewport, and the composer is reachable. New session stays pinned to
+the bottom of the independently scrolling Session list rather than rendering
+under the following Chat layer. Session setup keeps its
 header and actions visible while only its content grid scrolls.
 
 Continue Session now restores the last compaction boundary and versioned shared
