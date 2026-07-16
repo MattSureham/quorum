@@ -926,6 +926,13 @@ textarea:focus {
   grid-column: 1 / -1;
 }
 
+.session-participant-section .participant-picker-list {
+  max-height: clamp(190px, 32dvh, 300px);
+  padding-right: 3px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .permission-policy-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -3037,6 +3037,65 @@ function SessionSetupModal({
         </div>
 
         <fieldset className="session-setup-grid" disabled={starting} aria-busy={starting}>
+          <section className="session-setup-section wide session-participant-section">
+            <div className="mini-heading">{t("Participants")}</div>
+            <div className="participant-order-editor">
+              <div className="participant-order-head">
+                <div>
+                  <strong>{t("Order priority")}</strong>
+                  <span>{t("Round robin follows this order strictly; bidding modes use it to break equal bids and for the final wrap-up pass.")}</span>
+                </div>
+              </div>
+              <div className="participant-order-list">
+                {orderedParticipants.length ? orderedParticipants.map((participant, index) => (
+                  <div className="participant-order-item" key={participant.id}>
+                    <span>{index + 1}</span>
+                    <strong>{participant.display}</strong>
+                    <div>
+                      <button
+                        type="button"
+                        className="icon-action"
+                        disabled={index === 0}
+                        title={`${t("Move up")}: ${participant.display}`}
+                        aria-label={`${t("Move up")}: ${participant.display}`}
+                        onClick={() => moveParticipant(participant.id, -1)}
+                      >
+                        <ChevronUp size={15} />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-action"
+                        disabled={index === orderedParticipants.length - 1}
+                        title={`${t("Move down")}: ${participant.display}`}
+                        aria-label={`${t("Move down")}: ${participant.display}`}
+                        onClick={() => moveParticipant(participant.id, 1)}
+                      >
+                        <ChevronDown size={15} />
+                      </button>
+                    </div>
+                  </div>
+                )) : <span className="field-note">{t("No participants selected")}</span>}
+              </div>
+            </div>
+            <div className="participant-picker-list">
+              {participantOptions.map((participant) => (
+                <label key={participant.id} className={participant.available === false ? "participant-picker-row unavailable" : "participant-picker-row"}>
+                  <input
+                    type="checkbox"
+                    disabled={participant.available === false}
+                    checked={draft.participantIds.includes(participant.id)}
+                    onChange={() => toggleParticipant(participant.id)}
+                  />
+                  <div>
+                    <strong>{participant.display}</strong>
+                    <span>{participant.detail}</span>
+                  </div>
+                  <i>{participant.active ? t("current room") : participant.available === false ? t("needs key") : t("available")}</i>
+                </label>
+              ))}
+            </div>
+          </section>
+
           <section className="session-setup-section">
             <div className="mini-heading">{t("New session")}</div>
             <label>
@@ -3171,65 +3230,6 @@ function SessionSetupModal({
                 }}
               />
             </label>
-          </section>
-
-          <section className="session-setup-section wide">
-            <div className="mini-heading">{t("Participants")}</div>
-            <div className="participant-order-editor">
-              <div className="participant-order-head">
-                <div>
-                  <strong>{t("Order priority")}</strong>
-                  <span>{t("Round robin follows this order strictly; bidding modes use it to break equal bids and for the final wrap-up pass.")}</span>
-                </div>
-              </div>
-              <div className="participant-order-list">
-                {orderedParticipants.length ? orderedParticipants.map((participant, index) => (
-                  <div className="participant-order-item" key={participant.id}>
-                    <span>{index + 1}</span>
-                    <strong>{participant.display}</strong>
-                    <div>
-                      <button
-                        type="button"
-                        className="icon-action"
-                        disabled={index === 0}
-                        title={`${t("Move up")}: ${participant.display}`}
-                        aria-label={`${t("Move up")}: ${participant.display}`}
-                        onClick={() => moveParticipant(participant.id, -1)}
-                      >
-                        <ChevronUp size={15} />
-                      </button>
-                      <button
-                        type="button"
-                        className="icon-action"
-                        disabled={index === orderedParticipants.length - 1}
-                        title={`${t("Move down")}: ${participant.display}`}
-                        aria-label={`${t("Move down")}: ${participant.display}`}
-                        onClick={() => moveParticipant(participant.id, 1)}
-                      >
-                        <ChevronDown size={15} />
-                      </button>
-                    </div>
-                  </div>
-                )) : <span className="field-note">{t("No participants selected")}</span>}
-              </div>
-            </div>
-            <div className="participant-picker-list">
-              {participantOptions.map((participant) => (
-                <label key={participant.id} className={participant.available === false ? "participant-picker-row unavailable" : "participant-picker-row"}>
-                  <input
-                    type="checkbox"
-                    disabled={participant.available === false}
-                    checked={draft.participantIds.includes(participant.id)}
-                    onChange={() => toggleParticipant(participant.id)}
-                  />
-                  <div>
-                    <strong>{participant.display}</strong>
-                    <span>{participant.detail}</span>
-                  </div>
-                  <i>{participant.active ? t("current room") : participant.available === false ? t("needs key") : t("available")}</i>
-                </label>
-              ))}
-            </div>
           </section>
 
           <section className="session-setup-section wide session-permission-section">
