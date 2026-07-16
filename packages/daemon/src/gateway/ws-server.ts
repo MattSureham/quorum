@@ -95,14 +95,20 @@ export class Gateway {
     });
     ws.on("message", (raw) => {
       let msg: any;
+      let requestId: string | undefined;
       try {
-        msg = ClientMessageSchema.parse(JSON.parse(String(raw)));
+        const candidate = JSON.parse(String(raw));
+        requestId = candidate && typeof candidate === "object" && typeof candidate.requestId === "string"
+          ? candidate.requestId.slice(0, 128)
+          : undefined;
+        msg = ClientMessageSchema.parse(candidate);
       } catch (err) {
         const attachmentError = err && typeof err === "object" && "issues" in err
           && Array.isArray((err as any).issues)
           && (err as any).issues.some((issue: any) => issue.path?.includes("attachments"));
         ws.send(JSON.stringify({
           t: "error",
+          ...(requestId ? { requestId } : {}),
           text: attachmentError
             ? "invalid attachments: use images up to 5 MB or PDF/DOCX files up to 10 MB each"
             : "bad message",
@@ -136,14 +142,14 @@ export class Gateway {
     }
     if (m.t === "create_session") {
       if (!this.deps.createSession) {
-        ws.send(JSON.stringify({ t: "error", text: "session creation is not available" }));
+        ws.send(JSON.stringify({ t: "error", requestId: m.requestId, text: "session creation is not available" }));
         return;
       }
       void Promise.resolve().then(() => this.deps.createSession!(m.session)).then((session) => {
         const registered = this.registerSession(session);
-        ws.send(JSON.stringify({ t: "session_created", room: registered.room, rooms: this.rooms() }));
+        ws.send(JSON.stringify({ t: "session_created", requestId: m.requestId, room: registered.room, rooms: this.rooms() }));
       }).catch((err) =>
-        ws.send(JSON.stringify({ t: "error", text: `create_session failed: ${err instanceof Error ? err.message : String(err)}` })),
+        ws.send(JSON.stringify({ t: "error", requestId: m.requestId, text: `create_session failed: ${err instanceof Error ? err.message : String(err)}` })),
       );
       return;
     }

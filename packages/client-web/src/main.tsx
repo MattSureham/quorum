@@ -4,6 +4,11 @@ import { canSendComposer } from "./composer-state.js";
 import { canCreateCustomApiProfile, normalizeStoredCustomProfile } from "./profile-config.js";
 import { RichMessage } from "./rich-message.js";
 import { latestTurnLifecycleAfter } from "./run-status.js";
+import {
+  matchesSessionCreateError,
+  matchesSessionCreateResponse,
+  type PendingSessionCreate,
+} from "./session-create-correlation.js";
 import { withPermissionPolicy, type PermissionPolicy } from "./session-participant-config.js";
 import { shouldHandleSocketMessage } from "./socket-message-filter.js";
 import {
@@ -398,9 +403,11 @@ function useDialogFocusTrap(
     const dialog = dialogRef.current;
     if (!dialog) return undefined;
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
+    const focusableElements = () => [...dialog.querySelectorAll<HTMLElement>(dialogFocusableSelector)]
+      .filter((element) => !element.matches(":disabled"));
     const focusFirst = () => {
       const preferred = dialog.querySelector<HTMLElement>("[data-dialog-autofocus]");
-      const fallback = dialog.querySelector<HTMLElement>(dialogFocusableSelector);
+      const fallback = focusableElements()[0];
       (preferred ?? fallback ?? dialog).focus();
     };
     const focusFrame = requestAnimationFrame(focusFirst);
@@ -411,7 +418,7 @@ function useDialogFocusTrap(
         return;
       }
       if (event.key !== "Tab") return;
-      const focusable = [...dialog.querySelectorAll<HTMLElement>(dialogFocusableSelector)];
+      const focusable = focusableElements();
       if (!focusable.length) {
         event.preventDefault();
         dialog.focus();
@@ -440,7 +447,7 @@ type ServerMessage =
   | { t: "snapshot"; room: Room; events: RoomEvent[]; summaries?: MemorySummary[] }
   | { t: "event"; event: RoomEvent }
   | { t: "sessions"; rooms: Room[] }
-  | { t: "session_created"; room: Room; rooms: Room[] }
+  | { t: "session_created"; requestId?: string; room: Room; rooms: Room[] }
   | { t: "session_continued"; room: Room; rooms: Room[] }
   | { t: "session_deleted"; sessionId: string; rooms: Room[] }
   | { t: "replay_projection"; afterSeq: number; headSeq: number; eventCount: number; projection: SharedSessionProjectionResult }
@@ -453,7 +460,7 @@ type ServerMessage =
   | { t: "workspace_directories_error"; requestId: string; text: string }
   | { t: "attachment"; roomId: string; requestId: string; eventId: string; attachment: MessageAttachment }
   | { t: "attachment_error"; roomId: string; requestId: string; text: string }
-  | { t: "error"; text: string };
+  | { t: "error"; requestId?: string; text: string };
 
 type WorkspaceDirectoryListing = Extract<ServerMessage, { t: "workspace_directories" }>;
 
@@ -1343,7 +1350,7 @@ function App() {
   const composerAttachmentsRef = useRef<MessageAttachment[]>([]);
   const attachmentReadCountRef = useRef(0);
   const attachmentReadQueueRef = useRef<Promise<void>>(Promise.resolve());
-  const pendingSessionCreateRef = useRef<string>();
+  const pendingSessionCreateRef = useRef<PendingSessionCreate>();
   const sessionCreateTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const appShellRef = useRef<HTMLElement>(null);
   const attachmentRequestsRef = useRef(new Map<string, string>());
@@ -1534,13 +1541,11 @@ function App() {
             }
           }
         } else if (message.t === "session_created") {
-          if (pendingSessionCreateRef.current === message.room.id) {
-            clearPendingSessionCreate();
-            setSessionSetupError("");
-            setSessionSetupOpen(false);
-          }
-          setError("");
-          sessionBootstrapPending = false;
+          const pendingCreate = pendingSessionCreateRef.current;
+          const matchesPendingCreate = matchesSessionCreateResponse(pendingCreate, {
+            requestId: message.requestId,
+            roomId: message.room.id,
+          });
           deletedSessionIdsRef.current.delete(message.room.id);
           setDeletedSessionIds((current) => {
             const nextDeleted = new Set(current);
@@ -1549,6 +1554,16 @@ function App() {
           });
           setRooms(message.rooms.filter((item) => !deletedSessionIdsRef.current.has(item.id)));
           setSessionsLoaded(true);
+          // A correlated response from an expired/replaced request may update
+          // the list, but it must never switch the active room behind a dialog.
+          if ((message.requestId || pendingCreate) && !matchesPendingCreate) return;
+          if (matchesPendingCreate) {
+            clearPendingSessionCreate();
+            setSessionSetupError("");
+            setSessionSetupOpen(false);
+          }
+          setError("");
+          sessionBootstrapPending = false;
           setRoom(message.room);
           setEvents([]);
           setAttachmentPayloads(new Map());
@@ -1673,7 +1688,7 @@ function App() {
             setError(`${t("Attachment unavailable")}: ${message.text}`);
           }
         } else if (message.t === "error") {
-          if (pendingSessionCreateRef.current) {
+          if (matchesSessionCreateError(pendingSessionCreateRef.current, message.requestId)) {
             clearPendingSessionCreate();
             setSessionSetupError(translate(
               languageRef.current,
@@ -1877,8 +1892,10 @@ function App() {
     }
     setSessionSetupError("");
     setError("");
+    const requestId = `create-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     if (send({
       t: "create_session",
+      requestId,
       session: {
         id,
         title: draft.title.trim() || id,
@@ -1888,10 +1905,10 @@ function App() {
         participants,
       },
     })) {
-      pendingSessionCreateRef.current = id;
+      pendingSessionCreateRef.current = { requestId, roomId: id };
       setSessionStarting(true);
       sessionCreateTimerRef.current = setTimeout(() => {
-        if (pendingSessionCreateRef.current !== id) return;
+        if (pendingSessionCreateRef.current?.requestId !== requestId) return;
         clearPendingSessionCreate();
         setSessionSetupError(translate(
           languageRef.current,
@@ -3016,7 +3033,7 @@ function SessionSetupModal({
           </button>
         </div>
 
-        <div className="session-setup-grid">
+        <fieldset className="session-setup-grid" disabled={starting} aria-busy={starting}>
           <section className="session-setup-section">
             <div className="mini-heading">{t("New session")}</div>
             <label>
@@ -3229,7 +3246,7 @@ function SessionSetupModal({
               ))}
             </div>
           </section>
-        </div>
+        </fieldset>
 
         {error ? <div className="inline-alert session-setup-alert" role="alert"><AlertTriangle size={14} />{error}</div> : null}
         <div className="credential-modal-actions session-setup-actions">

@@ -894,6 +894,9 @@ textarea:focus {
   min-height: 0;
   overflow: auto;
   padding-right: 3px;
+  margin: 0;
+  border: 0;
+  min-inline-size: 0;
 }
 
 .session-setup-modal > .credential-modal-head,

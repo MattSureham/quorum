@@ -157,6 +157,7 @@ export const ClientMessageSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("list_sessions"), roomId: z.string().optional() }),
   z.object({
     t: z.literal("create_session"),
+    requestId: z.string().min(1).max(128).optional(),
     roomId: z.string().optional(),
     session: z.object({
       id: SessionIdSchema,

@@ -56,6 +56,13 @@ Working handoff for an agent picking up **Quorum**. Current as of **2026-07-16**
 - `settleAndArbitrate()` now checks `pendingPrompts` before confirming follow-up bids, applying sole-agent completion, or transitioning idle. A prompt submitted after turn finalization but during the settling delay starts a fresh epoch immediately instead of remaining dormant until another human message wakes the scheduler.
 - A timing regression waits for a sole Echo-style agent to enter `settling`, submits the second prompt there, and requires two completed turns with captured prompts in exact FIFO order before returning idle. All 29 SessionManager tests pass.
 
+### 2026-07-16 correlated Session creation and legacy Echo cleanup
+
+- Web Session creation now generates a bounded `requestId`; gateway schema errors, creation failures, and `session_created` success responses echo it. The setup dialog only reacts to its matching request. Unrelated generic errors cannot dismiss it, and a stale success can refresh the Session registry without switching the active room behind the modal.
+- The complete setup grid is a disabled fieldset while creation is pending, so visible values cannot diverge from the submitted payload. The focus trap filters controls disabled through fieldset inheritance.
+- Historical Echo participants are no longer copied verbatim. The client rebuilds adapter config from strict `text` and `script` allowlists, including per-script-step field/type/size bounds, and drops legacy `permissionPolicy` or other unsupported fields.
+- Protocol, gateway, correlation, and Echo-config suites pass 30 focused tests; typecheck passes. Final browser acceptance still needs to exercise the frozen pending state with a delayed response.
+
 ### 2026-07-16 explicit workspace boundary remediation
 
 - `create_session` no longer falls back to the bootstrap room's workspace when `workspacePath` is omitted. A blank New Session workspace is now neutral on the server as well as in the UI; the folder picker also stops using the active room path as an implicit starting selection.

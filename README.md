@@ -235,6 +235,11 @@ New Session creation is confirmation-driven: the setup dialog remains open and
 keeps its draft until the daemon returns `session_created`. Validation, gateway
 rejection, disconnect, and timeout errors are shown inside the dialog instead of
 discarding the form or leaving a stale raw gateway error in the Connection panel.
+Each create command and response carries a `requestId`; unrelated gateway errors
+cannot fail the pending form, and late/stale success responses may refresh the
+Session list but cannot switch the active room. All setup controls are frozen
+while the matching request is pending. Historical Echo configs are reduced to
+their strict `text`/`script` fields before a room is copied.
 The dialog traps keyboard focus, closes with Escape when no request is pending,
 marks the background inert, restores the opener focus, and exposes mode and
 permission choices as pressed-state controls for assistive technology.

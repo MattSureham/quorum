@@ -12,6 +12,7 @@ const participant = {
 function createMessage(adapterConfig: Record<string, unknown>) {
   return {
     t: "create_session",
+    requestId: "create-1",
     session: {
       id: "room",
       title: "Room",
@@ -38,6 +39,7 @@ describe("ClientMessageSchema adapter configuration", () => {
   it("accepts the Echo participant payload produced by Session setup", () => {
     expect(ClientMessageSchema.safeParse({
       t: "create_session",
+      requestId: "echo-create-1",
       session: {
         id: "echo-room",
         title: "Echo room",

@@ -52,6 +52,13 @@
 - `settleAndArbitrate()` 现在会在确认后续 bid、执行单 agent 完成分支或转入 idle 前先检查 `pendingPrompts`。Turn 已 finalize、但仍处于 settling 延迟时提交的 prompt 会立即开启新 epoch，不会沉睡到下一条 human 消息来唤醒调度器。
 - 时序回归会等待唯一 Echo 风格 agent 进入 `settling`，在该阶段提交第二条 prompt，并要求两个 turn 按捕获的精确 FIFO 顺序完成后才回到 idle。SessionManager 29 项测试全部通过。
 
+## 2026-07-16 Session 创建关联与旧 Echo 清洗
+
+- Web Session 创建现在会生成有界 `requestId`；gateway 的 schema 错误、创建失败与 `session_created` 成功响应都会原样带回。设置弹窗只响应匹配请求：无关通用错误不能关闭弹窗，迟到成功只能刷新 Session registry，不能在 modal 背后切换活动房间。
+- 创建 pending 时，完整设置 grid 会成为 disabled fieldset，因此可见字段不会与已提交 payload 分叉；焦点锁定逻辑也会过滤通过 fieldset 继承禁用的控件。
+- 历史 Echo participant 不再原样复制。客户端会按严格 `text`/`script` allowlist 重建 adapter config，并约束每个 script step 的字段、类型与大小，旧 `permissionPolicy` 及其他不支持字段会被丢弃。
+- Protocol、gateway、correlation 与 Echo config 共 30 项定向测试通过，typecheck 通过。最终浏览器验收仍需用延迟响应验证 pending 冻结状态。
+
 ## 2026-07-16 显式 workspace 边界整改
 
 - `create_session` 在省略 `workspacePath` 时不再回退到启动房间的 workspace。New Session 留空 workspace 现在在服务端和 UI 两端都保持中性；文件夹选择器也不再把当前房间路径当作隐式起点。

@@ -40,6 +40,72 @@ function nextMessage(ws: WebSocket): Promise<any> {
 }
 
 describe("Gateway", () => {
+  it("correlates session creation success and validation errors by request id", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const gateway = new Gateway({
+      log,
+      room,
+      setPolicy: () => undefined,
+      createSession: async (input) => {
+        const createdRoom: Room = {
+          id: input.id,
+          title: input.title,
+          branch: "main",
+          policy: room.policy,
+          schedulerMode: "bid",
+          participants: input.participants,
+          createdAt: Date.now(),
+        };
+        return {
+          log: new EventLog(input.id, new InMemoryStore()),
+          room: createdRoom,
+          setPolicy: () => undefined,
+        };
+      },
+    }, 0);
+    await gateway.ready;
+    const ws = await connect(gateway.url());
+    try {
+      const invalidPromise = nextMessage(ws);
+      ws.send(JSON.stringify({
+        t: "create_session",
+        requestId: "create-invalid",
+        session: {
+          id: "invalid-room",
+          title: "Invalid",
+          mode: "open-discussion",
+          participants: [
+            { id: "human", kind: "human", display: "Human", status: "idle" },
+            { id: "echo", kind: "agent", display: "Echo", adapter: "echo", adapterConfig: { permissionPolicy: "workspace-write" }, status: "idle" },
+          ],
+        },
+      }));
+      expect(await invalidPromise).toMatchObject({ t: "error", requestId: "create-invalid", text: "bad message" });
+
+      const createdPromise = nextMessage(ws);
+      ws.send(JSON.stringify({
+        t: "create_session",
+        requestId: "create-valid",
+        session: {
+          id: "created-room",
+          title: "Created",
+          mode: "open-discussion",
+          participants: [
+            { id: "human", kind: "human", display: "Human", status: "idle" },
+            { id: "echo", kind: "agent", display: "Echo", adapter: "echo", adapterConfig: { text: "ready" }, status: "idle" },
+          ],
+        },
+      }));
+      expect(await createdPromise).toMatchObject({
+        t: "session_created",
+        requestId: "create-valid",
+        room: { id: "created-room" },
+      });
+    } finally {
+      await gateway.close();
+    }
+  });
+
   it("returns daemon-side workspace directory listings", async () => {
     const log = new EventLog("room", new InMemoryStore());
     const gateway = new Gateway({
