@@ -602,7 +602,12 @@ blockquotes, links, fenced code, and Markdown images. A fenced `mermaid` block
 renders flowcharts, sequence diagrams, pie charts, and XY charts on demand. Raw
 HTML is disabled; Mermaid per-diagram configuration and active-content hooks are
 rejected, Mermaid runs in strict mode, and generated SVG is sanitized before it
-is inserted into the page. Invalid diagrams retain a readable source fallback.
+is inserted into the page. Agent-authored Markdown images are restricted to
+bounded embedded PNG/JPEG/GIF/WebP data URLs; remote, relative, protocol-relative,
+`blob:`, `file:`, and SVG image sources render as blocked text instead of causing
+an automatic network or localhost request. The desktop CSP independently limits
+images to self/data/blob and network connections to the local sidecar/IPC surface.
+Invalid diagrams retain a readable source fallback.
 Every agent receives these presentation capabilities in its turn context and is
 asked to keep a textual conclusion alongside any visual.
 

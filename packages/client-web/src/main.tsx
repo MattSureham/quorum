@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { canCreateCustomApiProfile, normalizeStoredCustomProfile } from "./profile-config.js";
 import { RichMessage } from "./rich-message.js";
 import { latestTerminalTurnAfter } from "./run-status.js";
+import { shouldHandleSocketMessage } from "./socket-message-filter.js";
 import {
   Activity,
   AlertTriangle,
@@ -1405,10 +1406,9 @@ function App() {
         socket.send(JSON.stringify({ t: "get_credentials" }));
       });
       socket.addEventListener("message", (raw) => {
-        if (wsRef.current !== socket) return;
         const message = JSON.parse(String(raw.data)) as ServerMessage;
+        if (!shouldHandleSocketMessage(socket, wsRef.current, message, activeRoomIdRef.current)) return;
         if (message.t === "snapshot") {
-          if (activeRoomIdRef.current && message.room.id !== activeRoomIdRef.current) return;
           if (deletedSessionIdsRef.current.has(message.room.id)) return;
           sessionBootstrapPending = false;
           loadedRoomIdRef.current = message.room.id;
@@ -1422,7 +1422,6 @@ function App() {
           setAgentHealth({});
           socket.send(JSON.stringify({ t: "check_agents", roomId: message.room.id }));
         } else if (message.t === "event") {
-          if (message.event.roomId !== activeRoomIdRef.current) return;
           setEvents((current) => ingest(mergeEvents(current, [message.event])));
         } else if (message.t === "sessions") {
           const availableRooms = message.rooms.filter((item) => !deletedSessionIdsRef.current.has(item.id));
@@ -1469,7 +1468,6 @@ function App() {
           setDraftSettings(nextSettings);
           socket.send(JSON.stringify({ t: "subscribe", roomId: message.room.id, sinceSeq: 0 }));
         } else if (message.t === "session_continued") {
-          if (activeRoomIdRef.current && message.room.id !== activeRoomIdRef.current) return;
           sessionBootstrapPending = false;
           deletedSessionIdsRef.current.delete(message.room.id);
           setDeletedSessionIds((current) => {

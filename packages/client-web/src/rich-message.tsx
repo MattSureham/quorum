@@ -1,7 +1,7 @@
 import React, { useEffect, useId, useMemo, useState } from "react";
 import DOMPurify from "dompurify";
 import ReactMarkdown, { defaultUrlTransform, type Components, type UrlTransform } from "react-markdown";
-import rehypeSanitize from "rehype-sanitize";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 import { isSafeImageSource, mermaidSourceError } from "./rich-message-security.js";
 
@@ -92,6 +92,14 @@ const safeUrlTransform: UrlTransform = (url, key, node) => {
   return defaultUrlTransform(url);
 };
 
+const markdownSanitizeSchema = {
+  ...defaultSchema,
+  protocols: {
+    ...defaultSchema.protocols,
+    src: [...(defaultSchema.protocols?.src ?? []), "data"],
+  },
+};
+
 export function RichMessage({ text, t }: { text: string; t: Translate }) {
   const components = useMemo<Components>(() => ({
     a({ node: _node, ...props }) {
@@ -119,7 +127,7 @@ export function RichMessage({ text, t }: { text: string; t: Translate }) {
     <div className="rich-message">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeSanitize]}
+        rehypePlugins={[[rehypeSanitize, markdownSanitizeSchema]]}
         skipHtml
         urlTransform={safeUrlTransform}
         components={components}

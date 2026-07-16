@@ -40,6 +40,13 @@
 - Composer 的文件读取现在按 ref 中的当前附件集合串行处理。两个同时发生的粘贴/上传批次不能再各自用过期数量通过校验，从而绕过最多 6 个文件/20 MB 总量限制；拒绝新批次时，已有 composer 内容保持不变。
 - 回归覆盖新事件拆分、旧库迁移、按需还原、Session 删除、gateway 成功/失败响应与协议长度限制。定向 persistence/gateway/schema 共 33 项、typecheck 与 Web production build 已通过；本检查点尚待全量测试与打包平台验证。
 
+## 2026-07-16 被动聊天渲染与旧 socket 隔离
+
+- Agent 输出的 Markdown 图片不再允许触发 HTTP(S)、localhost、相对路径、协议相对或 `blob:` 加载。只有有界的内嵌 PNG/JPEG/GIF/WebP data URL 能同时通过 React Markdown URL transform 与 sanitizer 协议门；SVG 及其他主动 data 格式仍会被拦截。
+- Tauri 现在启用显式 CSP：图片仅允许 self/data/blob，object/frame/form 均禁用，连接仅允许 self、Tauri IPC 及 sidecar/开发服务器所需的 loopback HTTP/WebSocket。`tauri info` 能正确识别该策略，Rust `cargo check` 通过。
+- 长连接 WebSocket listener 现在使用有测试覆盖的来源 socket/当前 room 过滤器。被替换 socket 的消息、其他 room 的迟到 event、过期 Continue/snapshot 响应都不能混入当前聊天；附件响应仍单独按 request 与 room 双重校验。
+- Rich message、socket filter 与 desktop config 共 9 项定向测试通过；typecheck、Web production build 与 `desktop:check` 通过。本机缺完整 Xcode，因此此检查点未生成 macOS bundle。
+
 ## 2026-07-15 PDF 与 DOCX 聊天附件
 
 - Chat 的“文件”选择器现在支持 PNG/JPEG/GIF/WebP 图片以及 PDF、DOCX 文档。图片保留缩略图与粘贴能力；文档卡片会显示提取状态、可用时的页数、警告，并保留本机原文件下载入口。

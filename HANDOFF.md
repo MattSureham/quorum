@@ -44,6 +44,13 @@ Working handoff for an agent picking up **Quorum**. Current as of **2026-07-16**
 - Composer file reads are serialized against a ref-backed current attachment set. Two simultaneous paste/upload batches can no longer both validate against stale counts and exceed the six-file/20 MB request limits; a rejected batch leaves prior composer state intact.
 - Regression coverage verifies new-event detachment, legacy migration, on-demand hydration, deletion, gateway success/error replies, and protocol bounds. The targeted persistence/gateway/schema suites pass 33 tests; typecheck and the Web production build pass. Full-suite and packaged-platform validation remain pending for this checkpoint.
 
+### 2026-07-16 passive chat rendering and stale-socket isolation
+
+- Agent-authored Markdown images can no longer initiate HTTP(S), localhost, relative-path, protocol-relative, or `blob:` loads. Only bounded embedded PNG/JPEG/GIF/WebP data URLs pass both the React Markdown URL transform and sanitizer protocol gate; SVG and other active data formats remain blocked.
+- Tauri now has an explicit CSP: images are limited to self/data/blob, object/frame/form surfaces are disabled, and connections are limited to self, Tauri IPC, and loopback HTTP/WebSocket for the sidecar and development server. `tauri info` recognizes the policy and Rust `cargo check` passes.
+- The long-lived WebSocket listener now uses a tested source-socket/active-room filter. Messages from replaced sockets, late events for another room, and stale Continue/snapshot replies cannot enter the active transcript. Attachment responses remain request-correlated and room-checked separately.
+- Nine targeted rich-message, socket-filter, and desktop-config tests pass; typecheck, Web production build, and `desktop:check` pass. Full Xcode is not installed, so no macOS bundle was produced at this checkpoint.
+
 ### 2026-07-15 PDF and DOCX chat attachments
 
 - The chat File picker now accepts PNG/JPEG/GIF/WebP images plus PDF and DOCX documents. Images retain thumbnail/paste behavior; document cards expose extraction state, page count when available, warnings, and a download link to the locally persisted original.

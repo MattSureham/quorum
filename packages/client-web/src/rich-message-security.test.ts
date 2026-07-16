@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import { isSafeImageSource, mermaidSourceError } from "./rich-message-security.js";
 
 describe("rich message security", () => {
-  it("accepts displayable image sources and rejects executable protocols", () => {
-    expect(isSafeImageSource("https://example.com/chart.png")).toBe(true);
-    expect(isSafeImageSource("/assets/chart.webp")).toBe(true);
+  it("accepts embedded raster images without permitting automatic network requests", () => {
     expect(isSafeImageSource("data:image/png;base64,aGVsbG8=")).toBe(true);
+    expect(isSafeImageSource("https://example.com/chart.png")).toBe(false);
+    expect(isSafeImageSource("http://127.0.0.1:8787/private.png")).toBe(false);
+    expect(isSafeImageSource("//example.com/chart.png")).toBe(false);
+    expect(isSafeImageSource("/assets/chart.webp")).toBe(false);
+    expect(isSafeImageSource("blob:https://example.com/id")).toBe(false);
     expect(isSafeImageSource("javascript:alert(1)")).toBe(false);
     expect(isSafeImageSource("data:image/svg+xml;base64,PHN2Zz4=")).toBe(false);
     expect(isSafeImageSource("file:///Users/example/private.png")).toBe(false);

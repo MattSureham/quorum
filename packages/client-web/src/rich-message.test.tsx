@@ -15,14 +15,25 @@ describe("RichMessage", () => {
 
 - [x] Checked
 
-![Chart](https://example.com/chart.png)
+![Chart](data:image/png;base64,aGVsbG8=)
 `} />);
 
     expect(html).toContain("<h2>Result</h2>");
     expect(html).toContain("<table>");
     expect(html).toContain('type="checkbox"');
-    expect(html).toContain('src="https://example.com/chart.png"');
+    expect(html).toContain('src="data:image/png;base64,aGVsbG8="');
     expect(html).toContain('loading="lazy"');
+  });
+
+  it("does not turn agent-supplied remote images into automatic requests", () => {
+    const html = renderToStaticMarkup(<RichMessage t={t} text={`![remote](https://example.com/tracker.png)
+
+![localhost](http://127.0.0.1:8787/private)
+`} />);
+
+    expect(html).not.toContain("https://example.com");
+    expect(html).not.toContain("http://127.0.0.1");
+    expect(html.match(/Image blocked/g)).toHaveLength(2);
   });
 
   it("removes raw HTML, blocks executable image URLs, and recognizes Mermaid blocks", () => {

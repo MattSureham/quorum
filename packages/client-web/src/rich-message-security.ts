@@ -8,9 +8,7 @@ export function isSafeImageSource(value: string | undefined): boolean {
   if (!value) return false;
   const source = value.trim();
   if (!source) return false;
-  if (SAFE_DATA_IMAGE.test(source)) return source.length <= 7_000_000;
-  if (/^(?:https?:|blob:)/iu.test(source)) return true;
-  return /^(?:\.?\.?\/|\/)[^\s]*$/u.test(source);
+  return SAFE_DATA_IMAGE.test(source) && source.length <= 7_000_000;
 }
 
 export function mermaidSourceError(source: string): string | undefined {
