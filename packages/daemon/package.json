@@ -13,8 +13,8 @@
   "dependencies": {
     "@quorum/core": "workspace:*",
     "@quorum/protocol": "workspace:*",
+    "@xmldom/xmldom": "0.8.13",
     "better-sqlite3": "^11.3.0",
-    "mammoth": "^1.12.0",
     "unpdf": "^1.6.2",
     "ws": "^8.18.0",
     "yauzl": "^3.4.0"

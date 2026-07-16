@@ -1,4 +1,7 @@
 import type { MessageAttachment } from "@quorum/protocol";
+import { DOMParser } from "@xmldom/xmldom";
+import type { Readable } from "node:stream";
+import type { Entry, ZipFile } from "yauzl";
 
 export const PDF_MIME_TYPE = "application/pdf";
 export const DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -13,6 +16,7 @@ const EXTRACTION_TIMEOUT_MS = 20_000;
 const MAX_DOCX_ARCHIVE_ENTRIES = 2_000;
 const MAX_DOCX_ENTRY_BYTES = 25_000_000;
 const MAX_DOCX_UNCOMPRESSED_BYTES = 50_000_000;
+const MAX_DOCX_DOCUMENT_XML_BYTES = 8_000_000;
 
 interface ExtractedDocumentText {
   text: string;
@@ -83,11 +87,13 @@ function decodeAttachment(attachment: MessageAttachment): Uint8Array {
 async function extractDocument(attachment: MessageAttachment, bytes: Uint8Array, maxCharacters: number): Promise<MessageAttachment> {
   try {
     assertDocumentSignature(attachment, bytes);
-    const extracted: ExtractedDocumentText = await withTimeout(
-      attachment.mimeType === PDF_MIME_TYPE ? extractPdf(bytes) : extractDocx(bytes),
-      EXTRACTION_TIMEOUT_MS,
-      `${attachment.name} text extraction timed out`,
-    );
+    const extracted: ExtractedDocumentText = attachment.mimeType === PDF_MIME_TYPE
+      ? await withTimeout(extractPdf(bytes), EXTRACTION_TIMEOUT_MS, `${attachment.name} text extraction timed out`)
+      : await withAbortableTimeout(
+        (signal) => extractDocx(bytes, signal),
+        EXTRACTION_TIMEOUT_MS,
+        `${attachment.name} text extraction timed out`,
+      );
     const normalizedText = normalizeText(extracted.text);
     const sourceCharacters = normalizedText.length;
     if (!sourceCharacters) {
@@ -160,69 +166,172 @@ async function extractPdf(bytes: Uint8Array): Promise<ExtractedDocumentText> {
   return { text: result.text, pageCount: result.totalPages };
 }
 
-async function extractDocx(bytes: Uint8Array): Promise<ExtractedDocumentText> {
-  await validateDocxArchive(bytes);
-  const imported = await import("mammoth");
-  const mammoth = imported.default ?? imported;
-  const result = await mammoth.extractRawText({ buffer: Buffer.from(bytes) });
-  const warnings = result.messages
-    .filter((message) => message.type === "warning")
-    .map((message) => message.message)
-    .join(" ");
-  return { text: result.value, ...(warnings ? { warning: warnings } : {}) };
+async function extractDocx(bytes: Uint8Array, signal: AbortSignal): Promise<ExtractedDocumentText> {
+  const documentXml = await readAndValidateDocxArchive(bytes, signal);
+  if (signal.aborted) throw abortReason(signal);
+  return { text: extractDocxText(documentXml) };
 }
 
-async function validateDocxArchive(bytes: Uint8Array): Promise<void> {
+async function readAndValidateDocxArchive(bytes: Uint8Array, signal: AbortSignal): Promise<Buffer> {
   const { fromBuffer } = await import("yauzl");
-  await new Promise<void>((resolve, reject) => {
-    fromBuffer(Buffer.from(bytes), { lazyEntries: true, validateEntrySizes: true }, (openError, zipfile) => {
-      if (openError || !zipfile) {
-        reject(openError ?? new Error("could not open DOCX archive"));
+  return new Promise<Buffer>((resolve, reject) => {
+    let activeStream: Readable | undefined;
+    let openedZipfile: ZipFile | undefined;
+    let settled = false;
+    const finishFailure = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener("abort", onAbort);
+      activeStream?.destroy();
+      try { openedZipfile?.close(); } catch { /* already closed */ }
+      reject(error instanceof Error ? error : new Error(String(error)));
+    };
+    const onAbort = () => finishFailure(abortReason(signal));
+    if (signal.aborted) {
+      finishFailure(abortReason(signal));
+      return;
+    }
+    signal.addEventListener("abort", onAbort, { once: true });
+
+    // validateEntrySizes is deliberately disabled: forged central-directory
+    // sizes are treated only as an early rejection hint. The stream counters
+    // below enforce limits against bytes actually produced by DEFLATE.
+    fromBuffer(Buffer.from(bytes), { lazyEntries: true, validateEntrySizes: false }, (openError, zipfile) => {
+      if (settled) {
+        try { zipfile?.close(); } catch { /* already closed */ }
         return;
       }
-      let settled = false;
+      if (openError || !zipfile) {
+        finishFailure(openError ?? new Error("could not open DOCX archive"));
+        return;
+      }
+      openedZipfile = zipfile;
       let entries = 0;
-      let totalUncompressedBytes = 0;
+      let totalDeclaredBytes = 0;
+      let totalActualBytes = 0;
       let hasContentTypes = false;
-      let hasMainDocument = false;
-      const fail = (error: unknown) => {
+      let documentXml: Buffer | undefined;
+      zipfile.on("error", finishFailure);
+      zipfile.on("entry", (entry: Entry) => {
         if (settled) return;
-        settled = true;
-        try { zipfile.close(); } catch { /* already closed */ }
-        reject(error instanceof Error ? error : new Error(String(error)));
-      };
-      zipfile.on("error", fail);
-      zipfile.on("entry", (entry) => {
         entries += 1;
-        totalUncompressedBytes += entry.uncompressedSize;
+        totalDeclaredBytes += entry.uncompressedSize;
         if (entries > MAX_DOCX_ARCHIVE_ENTRIES) {
-          fail(new Error(`DOCX archive exceeds ${MAX_DOCX_ARCHIVE_ENTRIES} entries`));
+          finishFailure(new Error(`DOCX archive exceeds ${MAX_DOCX_ARCHIVE_ENTRIES} entries`));
           return;
         }
         if (entry.uncompressedSize > MAX_DOCX_ENTRY_BYTES) {
-          fail(new Error(`DOCX entry exceeds the ${MAX_DOCX_ENTRY_BYTES / 1_000_000} MB expanded-size limit`));
+          finishFailure(new Error(`DOCX entry exceeds the ${MAX_DOCX_ENTRY_BYTES / 1_000_000} MB declared expanded-size limit`));
           return;
         }
-        if (totalUncompressedBytes > MAX_DOCX_UNCOMPRESSED_BYTES) {
-          fail(new Error(`DOCX archive exceeds the ${MAX_DOCX_UNCOMPRESSED_BYTES / 1_000_000} MB expanded-size limit`));
+        if (totalDeclaredBytes > MAX_DOCX_UNCOMPRESSED_BYTES) {
+          finishFailure(new Error(`DOCX archive exceeds the ${MAX_DOCX_UNCOMPRESSED_BYTES / 1_000_000} MB declared expanded-size limit`));
           return;
         }
         if (entry.fileName === "[Content_Types].xml") hasContentTypes = true;
-        if (entry.fileName === "word/document.xml") hasMainDocument = true;
-        zipfile.readEntry();
+        if (entry.fileName.endsWith("/")) {
+          zipfile.readEntry();
+          return;
+        }
+        zipfile.openReadStream(entry, (streamError, stream) => {
+          if (settled) {
+            stream?.destroy();
+            return;
+          }
+          if (streamError || !stream) {
+            finishFailure(streamError ?? new Error(`could not read DOCX entry ${entry.fileName}`));
+            return;
+          }
+          activeStream = stream;
+          let entryActualBytes = 0;
+          const captureDocument = entry.fileName === "word/document.xml";
+          const chunks: Buffer[] = [];
+          stream.on("data", (chunk: Buffer) => {
+            if (settled) return;
+            const data = Buffer.from(chunk);
+            entryActualBytes += data.byteLength;
+            totalActualBytes += data.byteLength;
+            if (entryActualBytes > MAX_DOCX_ENTRY_BYTES) {
+              finishFailure(new Error(`DOCX entry exceeds the ${MAX_DOCX_ENTRY_BYTES / 1_000_000} MB actual expanded-size limit`));
+              return;
+            }
+            if (totalActualBytes > MAX_DOCX_UNCOMPRESSED_BYTES) {
+              finishFailure(new Error(`DOCX archive exceeds the ${MAX_DOCX_UNCOMPRESSED_BYTES / 1_000_000} MB actual expanded-size limit`));
+              return;
+            }
+            if (captureDocument) {
+              if (entryActualBytes > MAX_DOCX_DOCUMENT_XML_BYTES) {
+                finishFailure(new Error(`DOCX main document XML exceeds the ${MAX_DOCX_DOCUMENT_XML_BYTES / 1_000_000} MB actual expanded-size limit`));
+                return;
+              }
+              chunks.push(data);
+            }
+          });
+          stream.on("error", finishFailure);
+          stream.on("end", () => {
+            if (settled) return;
+            activeStream = undefined;
+            if (captureDocument) documentXml = Buffer.concat(chunks, entryActualBytes);
+            zipfile.readEntry();
+          });
+        });
       });
       zipfile.on("end", () => {
         if (settled) return;
-        if (!hasContentTypes || !hasMainDocument) {
-          fail(new Error("ZIP container is missing required DOCX document parts"));
+        if (!hasContentTypes || !documentXml) {
+          finishFailure(new Error("ZIP container is missing required DOCX document parts"));
           return;
         }
         settled = true;
-        resolve();
+        signal.removeEventListener("abort", onAbort);
+        resolve(documentXml);
       });
       zipfile.readEntry();
     });
   });
+}
+
+function extractDocxText(documentXml: Buffer): string {
+  const xml = documentXml.toString("utf8");
+  if (/<!DOCTYPE|<!ENTITY/i.test(xml)) throw new Error("DOCX XML declarations with entities are not allowed");
+  const errors: string[] = [];
+  const document = new DOMParser({
+    errorHandler: {
+      warning: () => undefined,
+      error: (message) => errors.push(String(message)),
+      fatalError: (message) => errors.push(String(message)),
+    },
+  }).parseFromString(xml, "application/xml");
+  if (!document?.documentElement || errors.length) {
+    throw new Error(`invalid DOCX document XML${errors[0] ? `: ${errors[0]}` : ""}`);
+  }
+
+  const output: string[] = [];
+  const visit = (node: any): void => {
+    const localName = String(node.localName ?? node.nodeName ?? "").split(":").pop();
+    if (localName === "t") {
+      output.push(node.textContent ?? "");
+      return;
+    }
+    if (localName === "tab") {
+      output.push("\t");
+      return;
+    }
+    if (localName === "br" || localName === "cr") {
+      output.push("\n");
+      return;
+    }
+    for (let child = node.firstChild; child; child = child.nextSibling) visit(child);
+    if (localName === "p") output.push("\n\n");
+    else if (localName === "tc") output.push("\t");
+    else if (localName === "tr") output.push("\n");
+  };
+  visit(document.documentElement);
+  return output.join("");
+}
+
+function abortReason(signal: AbortSignal): Error {
+  return signal.reason instanceof Error ? signal.reason : new Error("document extraction aborted");
 }
 
 function normalizeText(text: string): string {
@@ -258,5 +367,19 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: s
     ]);
   } finally {
     if (timer) clearTimeout(timer);
+  }
+}
+
+async function withAbortableTimeout<T>(
+  task: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new Error(message)), timeoutMs);
+  try {
+    return await task(controller.signal);
+  } finally {
+    clearTimeout(timer);
   }
 }

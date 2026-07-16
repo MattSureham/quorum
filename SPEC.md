@@ -633,6 +633,9 @@ type ClientMessage =
 原文件与提取结果，但后续历史 Context Bundle 只携带附件元数据，不重复 data URL 或全文。
 扫描 PDF 暂不做 OCR。网络边界最多 6 个附件，图片每个 5 MB、文档每个 10 MB、
 解码后总计 20 MB；单文档最多注入 120,000 字符，单 prompt 文档总计 160,000 字符。
+DOCX 不信任 central-directory 声明的展开大小：sidecar 必须实际流式读取并累计每个
+entry，对主 `word/document.xml` 另设 8 MB 实际展开上限。超时必须主动关闭 ZIP/stream，
+不允许仅用 `Promise.race` 返回后让解压继续在后台执行。
 
 **Server → Client**
 ```ts

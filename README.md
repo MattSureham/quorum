@@ -219,9 +219,12 @@ plain-text extracts are shared with every agent only for the active topic. The
 gateway accepts at most six attachments: raster images up to 5 MB, PDF/DOCX up
 to 10 MB each, and 20 MB total. Extracts are capped at 120,000 characters per
 document and 160,000 characters per prompt. DOCX ZIP metadata is preflighted for
-entry-count and expanded-size limits before Mammoth opens the document. Scanned
-PDFs without embedded text are reported as requiring OCR; OCR is not implemented
-yet.
+entry-count and declared-size limits, then every entry is actually streamed and
+counted under per-entry and total expanded-size ceilings. The main OOXML document
+part has an additional 8 MB actual-size limit and is parsed locally only after
+validation. DOCX timeout aborts close the active ZIP stream rather than leaving
+decompression running in the background. Scanned PDFs without embedded text are
+reported as requiring OCR; OCR is not implemented yet.
 
 Session setup exposes a first-pass permission policy: read-only, workspace-write,
 approval-required, or full-auto. The selected policy is written into participant
@@ -596,8 +599,8 @@ asked to keep a textual conclusion alongside any visual.
 
 Chat messages can include safe raster images, PDF files, and DOCX files. The Web
 UI renders image thumbnails and document status cards, while the local sidecar
-extracts PDF text with `unpdf` and DOCX text with Mammoth before starting the
-agent turn. Direct `api-model` agents receive current-topic images through
+extracts PDF text with `unpdf` and DOCX paragraph text from the validated OOXML
+document part before starting the agent turn. Direct `api-model` agents receive current-topic images through
 OpenAI-compatible `image_url` multimodal content; every API and CLI agent
 receives the bounded PDF/DOCX text through the Context Bundle. The authoritative
 event retains the local original and extraction result, while later historical

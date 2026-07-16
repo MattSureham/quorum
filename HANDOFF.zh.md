@@ -21,10 +21,16 @@
 - 软目标轮数 wrap-up 现在会在调度器检查“上一个唯一候选者已失败且没有剩余 bid”之后才评估。单 agent 失败会只返回人类控制一次，不再立即把同一 agent 当作总结者再运行一次。
 - Core 回归在同一 event store 上重建 SessionManager，确认两条 round-robin prompt 完成后的 turn 数不会在重启后增加；另一测试确认唯一失败候选者只产生一条 `turn_failed` 且没有 wrap-up 请求。SessionManager 27 项测试全部通过。
 
+## 2026-07-16 DOCX 实际展开量加固
+
+- DOCX 校验不再把 `Entry.uncompressedSize` 当作强制上限的真相来源。Central-directory 数值仍用于早期拒绝，但每个非目录 entry 现在都会串行流式读取，并按实际展开字节强制单 entry 25 MB、总计 50 MB 上限。`word/document.xml` 在任何 XML 解析前还有独立 8 MB 实际大小上限。
+- DOCX 超时现在会中止 `AbortController`、销毁活动解压 stream 并关闭 ZIP。原来的 `Promise.race` 可能已报失败但 Mammoth 仍在解析；Mammoth 已从 daemon 依赖中移除。校验后的主文档 OOXML 改由 `@xmldom/xmldom` 解析，拒绝 DTD/entity 声明，并提取段落、tab 和换行，不会再次打开压缩包。
+- 构造回归将 810 万个文本字符压缩到 100 KB 以下，同时伪报 entry 仅 1 KB；它会被实际字节上限拒绝，不会进入 XML 解析。文档/gateway 定向测试 19 项、typecheck 及 compiled Bun sidecar 真实 PDF/DOCX smoke 均通过。
+
 ## 2026-07-15 PDF 与 DOCX 聊天附件
 
 - Chat 的“文件”选择器现在支持 PNG/JPEG/GIF/WebP 图片以及 PDF、DOCX 文档。图片保留缩略图与粘贴能力；文档卡片会显示提取状态、可用时的页数、警告，并保留本机原文件下载入口。
-- daemon 会先验证 MIME 与 data URL 一致、解码后的实际字节数和 PDF/DOCX 文件签名。DOCX 解压前还会预检 central directory 中的必需 OOXML 部件、entry 数量、单项与总展开大小。PDF 使用 `unpdf` 提取内嵌文本，DOCX 使用 Mammoth 提取段落文本。解析失败会直接显示在文档卡片；没有内嵌文本的扫描 PDF 会明确提示需要 OCR，不会伪装成已经读懂。OCR 与旧版 `.doc` 暂未实现。
+- daemon 会先验证 MIME 与 data URL 一致、解码后的实际字节数和 PDF/DOCX 文件签名。DOCX 先预检元数据，再实际流式累计展开量，最后进行有界 OOXML 段落提取；PDF 使用 `unpdf` 提取内嵌文本。解析失败会直接显示在文档卡片；没有内嵌文本的扫描 PDF 会明确提示需要 OCR，不会伪装成已经读懂。OCR 与旧版 `.doc` 暂未实现。
 - 提取文本会作为“非可信参考内容”注入当前 topic 中每个 agent 的 Context Bundle，因此 API 与 CLI agent 得到相同文档内容。后续历史 projection 只保留元数据与提取状态，不携带 data URL 或全文；单文档最多注入 120,000 字符，单次 prompt 的文档总量最多 160,000 字符。
 - 网络边界最多接受 6 个附件：图片每个 5 MB，PDF/DOCX 每个 10 MB，解码后总计 20 MB。只允许多模态链路支持的安全位图格式，SVG 上传会被拒绝。异步解析期间按房间串行处理消息，连续快速发送两个文档也不会打乱 event seq。
 - 真实解析回归覆盖 PDF 文本/页数、DOCX 段落、空白扫描式 PDF、损坏容器、伪造编码/展开大小、schema MIME 门、拒绝客户端伪造的提取文本、当前 topic 上下文注入与 gateway enrichment。本地 typecheck、`133/133` 测试、Web production build 以及同时携带真实 PDF/DOCX 的 compiled Bun sidecar smoke 已通过。Windows Packages 现在也会运行同一条 compiled 文档 smoke，而不再只编译 sidecar。当前 in-app browser 没有浏览器实例，因此仍无法进行点击/截图验收。
