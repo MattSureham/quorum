@@ -45,6 +45,23 @@ describe("ClientMessageSchema adapter configuration", () => {
     }).success).toBe(true);
   });
 
+  it("accepts bounded attachment payload lookup commands", () => {
+    expect(ClientMessageSchema.safeParse({
+      t: "get_attachment",
+      roomId: "room",
+      requestId: "request-1",
+      eventId: "event-1",
+      attachmentId: "attachment-1",
+    }).success).toBe(true);
+    expect(ClientMessageSchema.safeParse({
+      t: "get_attachment",
+      roomId: "room",
+      requestId: "x".repeat(129),
+      eventId: "event-1",
+      attachmentId: "attachment-1",
+    }).success).toBe(false);
+  });
+
   it("accepts only bounded whole-number discussion-round targets", () => {
     expect(ClientMessageSchema.safeParse({
       ...createMessage({ sandbox: "read-only" }),

@@ -59,7 +59,8 @@ export interface MessageAttachment {
   id: string;
   name: string;
   mimeType: string;
-  dataUrl: string;
+  dataUrl?: string;
+  payloadAvailable?: boolean;
   sizeBytes?: number;
   extractedText?: string;
   extraction?: AttachmentExtraction;

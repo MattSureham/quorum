@@ -37,6 +37,13 @@ Working handoff for an agent picking up **Quorum**. Current as of **2026-07-16**
 - Codex subprocesses use a dedicated process group on Unix-like systems; termination sends group `SIGINT`, escalates to `SIGKILL`, and then waits for actual closure. Windows uses `taskkill /PID ... /T`, escalates with `/F`, and likewise waits. Abort, explicit interrupt, native-resume failure, and early generator return share the same idempotent termination promise.
 - A cross-platform fake CLI emits `turn.failed`, waits, and attempts to write a survival marker. The adapter yields failure in bounded time and the marker remains absent after its scheduled write point, proving the process tree was gone before control returned. All 9 Codex adapter tests and typecheck pass locally; Windows workflow validation remains required for the `.cmd`/`taskkill` branch.
 
+### 2026-07-16 bounded attachment replay
+
+- SQLite message events now retain attachment metadata and extraction status only. Original data URLs and extracted document bodies are transactionally stored in the Session-scoped `attachment_payloads` table, so `replay(0)`, WebSocket subscribe snapshots, memory compaction, and Context Bundle scans no longer parse or resend every historical base64 payload.
+- Legacy databases are migrated once: event rows containing attachment `dataUrl` fields are detached into the payload table without changing event ids or sequence numbers. Session deletion removes the detached payload rows. An `EventLog.readAttachment()` lookup and bounded `get_attachment` WebSocket command retrieve one payload by room/event/attachment id; the Chat UI renders a load button for historical image/document cards and keeps newly posted live attachments immediate.
+- Composer file reads are serialized against a ref-backed current attachment set. Two simultaneous paste/upload batches can no longer both validate against stale counts and exceed the six-file/20 MB request limits; a rejected batch leaves prior composer state intact.
+- Regression coverage verifies new-event detachment, legacy migration, on-demand hydration, deletion, gateway success/error replies, and protocol bounds. The targeted persistence/gateway/schema suites pass 33 tests; typecheck and the Web production build pass. Full-suite and packaged-platform validation remain pending for this checkpoint.
+
 ### 2026-07-15 PDF and DOCX chat attachments
 
 - The chat File picker now accepts PNG/JPEG/GIF/WebP images plus PDF and DOCX documents. Images retain thumbnail/paste behavior; document cards expose extraction state, page count when available, warnings, and a download link to the locally persisted original.

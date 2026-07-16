@@ -33,6 +33,13 @@
 - Unix 类系统中 Codex 子进程使用独立进程组：终止先向整组发送 `SIGINT`，必要时升级为 `SIGKILL`，然后等待真实关闭。Windows 使用 `taskkill /PID ... /T`，必要时增加 `/F`，并同样等待。Abort、显式 interrupt、原生 resume 失败与 generator 提前返回共用同一个幂等终止 Promise。
 - 跨平台 fake CLI 会输出 `turn.failed`、等待，再尝试写入 survival marker。Adapter 会在有界时间内 yield 失败，且到预定写入时点后 marker 仍不存在，证明控制权返回前进程树已消失。本地 Codex adapter 9 项测试与 typecheck 已通过；`.cmd`/`taskkill` 分支仍需 Windows workflow 验证。
 
+## 2026-07-16 有界附件回放
+
+- SQLite 消息事件现在只保留附件元数据与提取状态。原始 data URL 和文档提取正文会在同一事务中写入 Session 范围的 `attachment_payloads` 表；`replay(0)`、WebSocket subscribe snapshot、memory compaction 与 Context Bundle 扫描不再反复解析或发送全部历史 base64 payload。
+- 旧数据库会执行一次迁移：事件 JSON 中已有的附件 `dataUrl` 会拆入 payload 表，event id 与 seq 不变；删除 Session 时也会删除这些 payload。新增 `EventLog.readAttachment()` 与有界的 `get_attachment` WebSocket 命令，可按 room/event/attachment id 精确读取一个原件。Chat 对历史图片/文档显示加载按钮，新发送的实时附件仍会立即显示。
+- Composer 的文件读取现在按 ref 中的当前附件集合串行处理。两个同时发生的粘贴/上传批次不能再各自用过期数量通过校验，从而绕过最多 6 个文件/20 MB 总量限制；拒绝新批次时，已有 composer 内容保持不变。
+- 回归覆盖新事件拆分、旧库迁移、按需还原、Session 删除、gateway 成功/失败响应与协议长度限制。定向 persistence/gateway/schema 共 33 项、typecheck 与 Web production build 已通过；本检查点尚待全量测试与打包平台验证。
+
 ## 2026-07-15 PDF 与 DOCX 聊天附件
 
 - Chat 的“文件”选择器现在支持 PNG/JPEG/GIF/WebP 图片以及 PDF、DOCX 文档。图片保留缩略图与粘贴能力；文档卡片会显示提取状态、可用时的页数、警告，并保留本机原文件下载入口。

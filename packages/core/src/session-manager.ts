@@ -151,7 +151,7 @@ export class SessionManager {
         this.pendingPrompts.push({
           text: body.text ?? "",
           addressedTo: event.addressedTo ?? [],
-          attachments: body.attachments ?? [],
+          attachments: opts.log.hydrateMessageAttachments(event),
           eventSeq: event.seq,
         });
       }

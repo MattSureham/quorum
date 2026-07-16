@@ -70,10 +70,11 @@ export async function prepareMessageAttachments(attachments: MessageAttachment[]
 
 function decodeAttachment(attachment: MessageAttachment): Uint8Array {
   const prefix = `data:${attachment.mimeType};base64,`;
-  if (!attachment.dataUrl.startsWith(prefix)) {
+  const dataUrl = attachment.dataUrl ?? "";
+  if (!dataUrl.startsWith(prefix)) {
     throw new Error(`${attachment.name} has a mismatched data URL MIME type`);
   }
-  const encoded = attachment.dataUrl.slice(prefix.length);
+  const encoded = dataUrl.slice(prefix.length);
   if (!encoded || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded) || encoded.length % 4 === 1) {
     throw new Error(`${attachment.name} has invalid base64 data`);
   }

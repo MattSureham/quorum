@@ -1,7 +1,7 @@
 import { createRequire } from "node:module";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import type { Room, RoomEvent, SharedMemoryCommand, WriteResult } from "@quorum/protocol";
+import type { MessageAttachment, Room, RoomEvent, SharedMemoryCommand, WriteResult } from "@quorum/protocol";
 import type { MemorySummary } from "@quorum/protocol";
 import type { EventStore } from "@quorum/core";
 
@@ -70,6 +70,36 @@ function json(value: unknown): string {
   return JSON.stringify(value);
 }
 
+interface AttachmentPayloadRow {
+  attachmentId: string;
+  metadata: MessageAttachment;
+  dataUrl?: string;
+  extractedText?: string;
+}
+
+function externalizeAttachmentPayloads(event: RoomEvent): { event: RoomEvent; payloads: AttachmentPayloadRow[] } {
+  if (event.type !== "message") return { event, payloads: [] };
+  const body = event.body as { text?: string; attachments?: MessageAttachment[] };
+  if (!body.attachments?.length) return { event, payloads: [] };
+  const payloads: AttachmentPayloadRow[] = [];
+  const attachments = body.attachments.map((attachment) => {
+    const { dataUrl, extractedText, ...metadata } = attachment;
+    if (dataUrl || extractedText) {
+      const storedMetadata: MessageAttachment = {
+        ...metadata,
+        payloadAvailable: !!dataUrl,
+      };
+      payloads.push({ attachmentId: attachment.id, metadata: storedMetadata, dataUrl, extractedText });
+      return storedMetadata;
+    }
+    return attachment;
+  });
+  return {
+    event: { ...event, body: { ...body, attachments } },
+    payloads,
+  };
+}
+
 /** Append-only event store backed by SQLite. */
 export class SqliteStore implements EventStore {
   private readonly db: SqliteDb;
@@ -101,6 +131,18 @@ export class SqliteStore implements EventStore {
         data TEXT NOT NULL
       );
       CREATE UNIQUE INDEX IF NOT EXISTS idx_events_room_seq ON events(room_id, seq);
+
+      CREATE TABLE IF NOT EXISTS attachment_payloads (
+        room_id TEXT NOT NULL,
+        event_id TEXT NOT NULL,
+        attachment_id TEXT NOT NULL,
+        metadata TEXT NOT NULL,
+        data_url TEXT,
+        extracted_text TEXT,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (room_id, event_id, attachment_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_attachment_payloads_event ON attachment_payloads(room_id, event_id);
 
       CREATE TABLE IF NOT EXISTS sessions (
         session_id TEXT PRIMARY KEY,
@@ -227,6 +269,40 @@ export class SqliteStore implements EventStore {
       CREATE INDEX IF NOT EXISTS idx_events_room_type_seq ON events(room_id, type, seq);
       CREATE INDEX IF NOT EXISTS idx_events_room_turn_id ON events(room_id, turn_id);
     `);
+    this.migrateLegacyAttachmentPayloads();
+  }
+
+  private migrateLegacyAttachmentPayloads(): void {
+    const migrated = this.db.prepare("SELECT 1 AS ok FROM schema_migrations WHERE version=2").get() as any;
+    if (migrated?.ok) return;
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const rows = this.db.prepare(`SELECT id, room_id, ts, data FROM events WHERE data LIKE '%"dataUrl"%'`).all() as any[];
+      const insert = this.db.prepare(`
+        INSERT OR REPLACE INTO attachment_payloads
+          (room_id, event_id, attachment_id, metadata, data_url, extracted_text, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+      const update = this.db.prepare("UPDATE events SET data=? WHERE id=?");
+      for (const row of rows) {
+        try {
+          const parsed = JSON.parse(row.data) as RoomEvent;
+          const detached = externalizeAttachmentPayloads(parsed);
+          if (!detached.payloads.length) continue;
+          for (const payload of detached.payloads) {
+            insert.run(row.room_id, row.id, payload.attachmentId, json(payload.metadata), payload.dataUrl ?? null, payload.extractedText ?? null, row.ts);
+          }
+          update.run(json(detached.event), row.id);
+        } catch {
+          // Keep an unreadable legacy row untouched rather than risking data loss.
+        }
+      }
+      this.db.prepare("INSERT OR REPLACE INTO schema_migrations (version, applied_at) VALUES (2, ?)").run(Date.now());
+      this.db.exec("COMMIT");
+    } catch (err) {
+      this.db.exec("ROLLBACK");
+      throw err;
+    }
   }
 
   private ensureColumn(table: string, column: string, definition: string): void {
@@ -236,12 +312,29 @@ export class SqliteStore implements EventStore {
   }
 
   persist(e: RoomEvent): void {
+    const detached = externalizeAttachmentPayloads(e);
     this.db.exec("BEGIN IMMEDIATE");
     try {
+      const insertAttachment = this.db.prepare(`
+        INSERT OR REPLACE INTO attachment_payloads
+          (room_id, event_id, attachment_id, metadata, data_url, extracted_text, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const payload of detached.payloads) {
+        insertAttachment.run(
+          e.roomId,
+          e.id,
+          payload.attachmentId,
+          json(payload.metadata),
+          payload.dataUrl ?? null,
+          payload.extractedText ?? null,
+          e.ts,
+        );
+      }
       this.db
         .prepare("INSERT INTO events (id, room_id, seq, ts, type, turn_id, visibility, author_id, data) VALUES (?,?,?,?,?,?,?,?,?)")
-        .run(e.id, e.roomId, e.seq, e.ts, e.type, e.turnId ?? null, e.visibility, e.author.id, json(e));
-      this.applyProjection(e);
+        .run(e.id, e.roomId, e.seq, e.ts, e.type, e.turnId ?? null, e.visibility, e.author.id, json(detached.event));
+      this.applyProjection(detached.event);
       this.db.exec("COMMIT");
     } catch (err) {
       this.db.exec("ROLLBACK");
@@ -259,6 +352,21 @@ export class SqliteStore implements EventStore {
   maxSeq(roomId: string): number {
     const r = this.db.prepare("SELECT MAX(seq) AS m FROM events WHERE room_id=?").get(roomId) as any;
     return r?.m ?? 0;
+  }
+
+  readAttachment(roomId: string, eventId: string, attachmentId: string): MessageAttachment | undefined {
+    const row = this.db.prepare(`
+      SELECT metadata, data_url, extracted_text
+      FROM attachment_payloads
+      WHERE room_id=? AND event_id=? AND attachment_id=?
+    `).get(roomId, eventId, attachmentId) as any;
+    if (!row) return undefined;
+    const metadata = JSON.parse(row.metadata) as MessageAttachment;
+    return {
+      ...metadata,
+      ...(row.data_url ? { dataUrl: row.data_url } : {}),
+      ...(row.extracted_text ? { extractedText: row.extracted_text } : {}),
+    };
   }
 
   close(): void {
@@ -330,6 +438,7 @@ export class SqliteStore implements EventStore {
     this.db.exec("BEGIN IMMEDIATE");
     try {
       this.db.prepare("DELETE FROM events WHERE room_id=?").run(sessionId);
+      this.db.prepare("DELETE FROM attachment_payloads WHERE room_id=?").run(sessionId);
       this.db.prepare("DELETE FROM session_snapshots WHERE session_id=?").run(sessionId);
       this.db.prepare("DELETE FROM turns WHERE session_id=?").run(sessionId);
       this.db.prepare("DELETE FROM bids WHERE session_id=?").run(sessionId);

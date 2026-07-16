@@ -1943,7 +1943,8 @@ h1 {
   background: #ffffff;
 }
 
-.chat-document > a {
+.chat-document > a,
+.chat-document > .attachment-load {
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr) 20px;
   align-items: center;
@@ -1954,26 +1955,58 @@ h1 {
   text-decoration: none;
 }
 
-.chat-document > a:hover {
+.chat-document > .attachment-load {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.chat-document > a:hover,
+.chat-document > .attachment-load:hover:not(:disabled) {
   background: #f3f8f6;
 }
 
-.chat-document > a span {
+.chat-document > a span,
+.chat-document > .attachment-load span {
   display: grid;
   min-width: 0;
   gap: 2px;
 }
 
-.chat-document > a strong {
+.chat-document > a strong,
+.chat-document > .attachment-load strong {
   overflow: hidden;
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.chat-document > a small {
+.chat-document > a small,
+.chat-document > .attachment-load small {
   color: #687873;
   font-size: 11px;
+}
+
+.chat-message-attachments .attachment-load {
+  display: grid;
+  width: 220px;
+  min-height: 110px;
+  place-items: center;
+  gap: 5px;
+  border: 1px dashed #b9cbc4;
+  border-radius: 8px;
+  background: #f8fbfa;
+  color: #315e52;
+  cursor: pointer;
+  font: inherit;
+}
+
+.attachment-load:disabled {
+  cursor: progress;
+  opacity: 0.65;
 }
 
 .chat-document.truncated,

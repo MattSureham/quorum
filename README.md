@@ -215,8 +215,11 @@ remains an internal hard safety ceiling rather than the user-facing round target
 
 Continue Session now restores the last compaction boundary and versioned shared
 memory from the event store; shared memory is included in the deterministic
-Context Bundle. Attachment data URLs and extracted document bodies are excluded
-from historical text projections and context summaries. Vision API requests
+Context Bundle. Attachment data URLs and extracted document bodies are stored in
+a separate SQLite payload table rather than inside append-only event JSON. Replay,
+subscribe, context compaction, and ordinary chat history therefore carry bounded
+attachment metadata only; the Web UI retrieves one original payload on demand
+when the user opens a historical attachment. Vision API requests
 receive only the images attached to the prompt that opened the current epoch.
 PDF and DOCX attachments are parsed locally by the sidecar and their bounded
 plain-text extracts are shared with every agent only for the active topic. The
@@ -365,7 +368,9 @@ also be pasted directly into the message composer with `Ctrl/Cmd+V`. Pasted
 images use the same preview, removal, visibility, payload limits, and send path
 as uploaded files; ordinary text paste continues to work normally. Document
 cards show extraction status, page count when available, truncation/parser
-warnings, and retain a download link to the locally persisted original.
+warnings, and retain access to the locally persisted original. Historical cards
+load that original on demand, so reconnecting to a long room does not resend every
+past base64 image or document through WebSocket snapshots.
 
 Security/reliability hardening in the current shared-session path:
 
@@ -607,8 +612,9 @@ extracts PDF text with `unpdf` and DOCX paragraph text from the validated OOXML
 document part before starting the agent turn. Direct `api-model` agents receive current-topic images through
 OpenAI-compatible `image_url` multimodal content; every API and CLI agent
 receives the bounded PDF/DOCX text through the Context Bundle. The authoritative
-event retains the local original and extraction result, while later historical
-prompts carry attachment metadata rather than repeating data URLs or full
+event retains attachment metadata and extraction status; the original data URL
+and extracted body live in a Session-scoped SQLite payload row that can be loaded
+individually. Historical prompts and snapshots do not repeat data URLs or full
 document text. A dedicated local-file bridge for CLI image input remains a
 future enhancement.
 

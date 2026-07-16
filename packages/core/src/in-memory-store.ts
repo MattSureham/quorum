@@ -22,6 +22,12 @@ export class InMemoryStore implements EventStore {
     return arr && arr.length ? arr[arr.length - 1]!.seq : 0;
   }
 
+  readAttachment(roomId: string, eventId: string, attachmentId: string) {
+    const event = (this.events.get(roomId) ?? []).find((item) => item.id === eventId);
+    const attachments = (event?.body as { attachments?: import("@quorum/protocol").MessageAttachment[] } | undefined)?.attachments ?? [];
+    return attachments.find((attachment) => attachment.id === attachmentId);
+  }
+
   persistWorkingMemorySummary(summary: MemorySummary): void {
     const arr = this.summaries.get(summary.sessionId) ?? [];
     arr.push(summary);

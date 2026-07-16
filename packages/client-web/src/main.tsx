@@ -127,6 +127,9 @@ const zhText: Record<string, string> = {
   "Attachments exceed the 20 MB total limit.": "附件超过 20 MB 总大小限制。",
   "Use at most 6 attachments.": "最多添加 6 个附件。",
   "Failed to read attachment": "无法读取附件",
+  "Load attachment": "加载附件",
+  "Loading attachment": "正在加载附件",
+  "Attachment unavailable": "附件不可用",
   "Document text": "文档文本",
   "Shared with all agents": "已共享给所有智能体",
   "Document ready": "已读取",
@@ -376,6 +379,8 @@ type ServerMessage =
   | { t: "agent_health"; roomId: string; health: Record<string, AgentHealth> }
   | { t: "workspace_directories"; requestId: string; path: string; parent?: string; directories: Array<{ name: string; path: string }> }
   | { t: "workspace_directories_error"; requestId: string; text: string }
+  | { t: "attachment"; roomId: string; requestId: string; eventId: string; attachment: MessageAttachment }
+  | { t: "attachment_error"; roomId: string; requestId: string; text: string }
   | { t: "error"; text: string };
 
 type WorkspaceDirectoryListing = Extract<ServerMessage, { t: "workspace_directories" }>;
@@ -1228,6 +1233,8 @@ function App() {
   const [selectedTargets, setSelectedTargets] = useState<string[]>([]);
   const [composer, setComposer] = useState("");
   const [composerAttachments, setComposerAttachments] = useState<MessageAttachment[]>([]);
+  const [attachmentPayloads, setAttachmentPayloads] = useState<Map<string, MessageAttachment>>(() => new Map());
+  const [loadingAttachmentKeys, setLoadingAttachmentKeys] = useState<Set<string>>(() => new Set());
   const [lastSubmittedAt, setLastSubmittedAt] = useState<number | undefined>();
   const [now, setNow] = useState(Date.now());
   const [replayAfterSeq, setReplayAfterSeq] = useState("0");
@@ -1256,6 +1263,9 @@ function App() {
   const teardownRef = useRef(false);
   const feedRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const composerAttachmentsRef = useRef<MessageAttachment[]>([]);
+  const attachmentReadQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const attachmentRequestsRef = useRef(new Map<string, string>());
   const directoryRequestsRef = useRef(new Map<string, {
     resolve: (listing: WorkspaceDirectoryListing) => void;
     reject: (error: Error) => void;
@@ -1395,18 +1405,24 @@ function App() {
         socket.send(JSON.stringify({ t: "get_credentials" }));
       });
       socket.addEventListener("message", (raw) => {
+        if (wsRef.current !== socket) return;
         const message = JSON.parse(String(raw.data)) as ServerMessage;
         if (message.t === "snapshot") {
+          if (activeRoomIdRef.current && message.room.id !== activeRoomIdRef.current) return;
           if (deletedSessionIdsRef.current.has(message.room.id)) return;
           sessionBootstrapPending = false;
           loadedRoomIdRef.current = message.room.id;
           setRoom(message.room);
           setRooms((current) => upsertRoom(current, message.room).filter((item) => !deletedSessionIdsRef.current.has(item.id)));
           setEvents((current) => ingest(mergeEvents(current, message.events)));
+          setAttachmentPayloads(new Map());
+          setLoadingAttachmentKeys(new Set());
+          attachmentRequestsRef.current.clear();
           if (message.summaries) setMemorySummaries(message.summaries);
           setAgentHealth({});
           socket.send(JSON.stringify({ t: "check_agents", roomId: message.room.id }));
         } else if (message.t === "event") {
+          if (message.event.roomId !== activeRoomIdRef.current) return;
           setEvents((current) => ingest(mergeEvents(current, [message.event])));
         } else if (message.t === "sessions") {
           const availableRooms = message.rooms.filter((item) => !deletedSessionIdsRef.current.has(item.id));
@@ -1417,6 +1433,7 @@ function App() {
             const preferredId = activeRoomIdRef.current || next.roomId;
             const target = availableRooms.find((item) => item.id === preferredId) ?? availableRooms[0];
             if (target) {
+              activeRoomIdRef.current = target.id;
               socket.send(JSON.stringify({ t: "continue_session", sessionId: target.id }));
             } else {
               activeRoomIdRef.current = "";
@@ -1439,6 +1456,9 @@ function App() {
           setSessionsLoaded(true);
           setRoom(message.room);
           setEvents([]);
+          setAttachmentPayloads(new Map());
+          setLoadingAttachmentKeys(new Set());
+          attachmentRequestsRef.current.clear();
           setAgentHealth({});
           lastSeqRef.current = 0;
           const nextSettings = { ...next, roomId: message.room.id };
@@ -1449,6 +1469,7 @@ function App() {
           setDraftSettings(nextSettings);
           socket.send(JSON.stringify({ t: "subscribe", roomId: message.room.id, sinceSeq: 0 }));
         } else if (message.t === "session_continued") {
+          if (activeRoomIdRef.current && message.room.id !== activeRoomIdRef.current) return;
           sessionBootstrapPending = false;
           deletedSessionIdsRef.current.delete(message.room.id);
           setDeletedSessionIds((current) => {
@@ -1460,6 +1481,9 @@ function App() {
           setSessionsLoaded(true);
           setRoom(message.room);
           setEvents([]);
+          setAttachmentPayloads(new Map());
+          setLoadingAttachmentKeys(new Set());
+          attachmentRequestsRef.current.clear();
           setAgentHealth({});
           lastSeqRef.current = 0;
           const nextSettings = { ...next, roomId: message.room.id };
@@ -1539,6 +1563,21 @@ function App() {
           directoryRequestsRef.current.delete(message.requestId);
           if (message.t === "workspace_directories") pending.resolve(message);
           else pending.reject(new Error(message.text));
+        } else if (message.t === "attachment" || message.t === "attachment_error") {
+          const key = attachmentRequestsRef.current.get(message.requestId);
+          if (!key) return;
+          attachmentRequestsRef.current.delete(message.requestId);
+          setLoadingAttachmentKeys((current) => {
+            const nextLoading = new Set(current);
+            nextLoading.delete(key);
+            return nextLoading;
+          });
+          if (message.roomId !== activeRoomIdRef.current) return;
+          if (message.t === "attachment") {
+            setAttachmentPayloads((current) => new Map(current).set(key, message.attachment));
+          } else {
+            setError(`${t("Attachment unavailable")}: ${message.text}`);
+          }
         } else if (message.t === "error") {
           deletedSessionIdsRef.current.clear();
           setDeletedSessionIds(new Set());
@@ -1630,6 +1669,9 @@ function App() {
     setSettings(next);
     setDraftSettings(next);
     setEvents([]);
+    setAttachmentPayloads(new Map());
+    setLoadingAttachmentKeys(new Set());
+    attachmentRequestsRef.current.clear();
     setSelectedTargets([]);
     setLastSubmittedAt(undefined);
     lastSeqRef.current = 0;
@@ -1750,6 +1792,7 @@ function App() {
     })) {
       setLastSubmittedAt(Date.now());
       setComposer("");
+      composerAttachmentsRef.current = [];
       setComposerAttachments([]);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
@@ -1759,25 +1802,32 @@ function App() {
     if (!files) return;
     const selected = [...files];
     if (!selected.length) return;
-    try {
-      if (composerAttachments.length + selected.length > 6) throw new Error(t("Use at most 6 attachments."));
-      const supported = selected.map((file) => {
-        const mimeType = supportedAttachmentMimeType(file);
-        if (!mimeType) throw new Error(t("Only PNG, JPEG, GIF, WebP, PDF, and DOCX files are supported."));
-        const limit = mimeType.startsWith("image/") ? MAX_IMAGE_BYTES : MAX_DOCUMENT_BYTES;
-        if (file.size > limit) throw new Error(t("Images may be up to 5 MB; PDF and DOCX files may be up to 10 MB."));
-        return { file, mimeType };
-      });
-      const totalBytes = composerAttachments.reduce((sum, item) => sum + (item.sizeBytes ?? 0), 0)
-        + supported.reduce((sum, item) => sum + item.file.size, 0);
-      if (totalBytes > MAX_TOTAL_ATTACHMENT_BYTES) throw new Error(t("Attachments exceed the 20 MB total limit."));
-      const loaded = await Promise.all(supported.map(({ file, mimeType }) => readMessageAttachment(file, mimeType)));
-      setComposerAttachments((current) => [...current, ...loaded]);
-    } catch (attachmentError) {
-      setError(attachmentError instanceof Error ? attachmentError.message : t("Failed to read attachment"));
-    } finally {
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
+    const operation = attachmentReadQueueRef.current.then(async () => {
+      try {
+        const current = composerAttachmentsRef.current;
+        if (current.length + selected.length > 6) throw new Error(t("Use at most 6 attachments."));
+        const supported = selected.map((file) => {
+          const mimeType = supportedAttachmentMimeType(file);
+          if (!mimeType) throw new Error(t("Only PNG, JPEG, GIF, WebP, PDF, and DOCX files are supported."));
+          const limit = mimeType.startsWith("image/") ? MAX_IMAGE_BYTES : MAX_DOCUMENT_BYTES;
+          if (file.size > limit) throw new Error(t("Images may be up to 5 MB; PDF and DOCX files may be up to 10 MB."));
+          return { file, mimeType };
+        });
+        const totalBytes = current.reduce((sum, item) => sum + (item.sizeBytes ?? 0), 0)
+          + supported.reduce((sum, item) => sum + item.file.size, 0);
+        if (totalBytes > MAX_TOTAL_ATTACHMENT_BYTES) throw new Error(t("Attachments exceed the 20 MB total limit."));
+        const loaded = await Promise.all(supported.map(({ file, mimeType }) => readMessageAttachment(file, mimeType)));
+        const nextAttachments = [...current, ...loaded];
+        composerAttachmentsRef.current = nextAttachments;
+        setComposerAttachments(nextAttachments);
+      } catch (attachmentError) {
+        setError(attachmentError instanceof Error ? attachmentError.message : t("Failed to read attachment"));
+      } finally {
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      }
+    });
+    attachmentReadQueueRef.current = operation.catch(() => undefined);
+    await operation;
   }
 
   function pasteImages(event: React.ClipboardEvent<HTMLTextAreaElement>) {
@@ -1791,7 +1841,26 @@ function App() {
   }
 
   function removeAttachment(id: string) {
-    setComposerAttachments((current) => current.filter((item) => item.id !== id));
+    const nextAttachments = composerAttachmentsRef.current.filter((item) => item.id !== id);
+    composerAttachmentsRef.current = nextAttachments;
+    setComposerAttachments(nextAttachments);
+  }
+
+  function loadHistoricalAttachment(eventId: string, attachmentId: string) {
+    const key = attachmentPayloadKey(eventId, attachmentId);
+    if (attachmentPayloads.has(key) || loadingAttachmentKeys.has(key)) return;
+    const requestId = `attachment-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    attachmentRequestsRef.current.set(requestId, key);
+    setLoadingAttachmentKeys((current) => new Set(current).add(key));
+    if (!send({ t: "get_attachment", requestId, eventId, attachmentId })) {
+      attachmentRequestsRef.current.delete(requestId);
+      setLoadingAttachmentKeys((current) => {
+        const nextLoading = new Set(current);
+        nextLoading.delete(key);
+        return nextLoading;
+      });
+      setError(t("Attachment unavailable"));
+    }
   }
 
   function sendInterrupt() {
@@ -2107,7 +2176,16 @@ function App() {
           </div>
           <div className="event-feed" ref={feedRef} onScroll={onFeedScroll}>
             {chatEvents.length ? (
-              chatEvents.map((item) => <ChatMessageRow key={item.id} event={item} t={t} />)
+              chatEvents.map((item) => (
+                <ChatMessageRow
+                  key={item.id}
+                  event={item}
+                  attachmentPayloads={attachmentPayloads}
+                  loadingAttachmentKeys={loadingAttachmentKeys}
+                  onLoadAttachment={loadHistoricalAttachment}
+                  t={t}
+                />
+              ))
             ) : (
               <div className="empty-chat">
                 <MessageSquare size={18} />
@@ -3385,10 +3463,30 @@ function MemoryPanel({
   );
 }
 
-function ChatMessageRow({ event, t }: { event: RoomEvent; t: Translate }) {
+function attachmentPayloadKey(eventId: string, attachmentId: string): string {
+  return `${eventId}:${attachmentId}`;
+}
+
+function ChatMessageRow({
+  event,
+  attachmentPayloads,
+  loadingAttachmentKeys,
+  onLoadAttachment,
+  t,
+}: {
+  event: RoomEvent;
+  attachmentPayloads: Map<string, MessageAttachment>;
+  loadingAttachmentKeys: Set<string>;
+  onLoadAttachment: (eventId: string, attachmentId: string) => void;
+  t: Translate;
+}) {
   const body = event.body as MessageBody;
-  const images = body.attachments?.filter((attachment) => attachment.mimeType.startsWith("image/")) ?? [];
-  const documents = body.attachments?.filter((attachment) => !attachment.mimeType.startsWith("image/")) ?? [];
+  const attachments = (body.attachments ?? []).map((attachment) => ({
+    ...attachment,
+    ...attachmentPayloads.get(attachmentPayloadKey(event.id, attachment.id)),
+  }));
+  const images = attachments.filter((attachment) => attachment.mimeType.startsWith("image/"));
+  const documents = attachments.filter((attachment) => !attachment.mimeType.startsWith("image/"));
   return (
     <article className={`chat-message-row ${event.author.kind}`}>
       <div className="chat-message-meta">
@@ -3400,9 +3498,21 @@ function ChatMessageRow({ event, t }: { event: RoomEvent; t: Translate }) {
         <div className="chat-message-attachments">
           {images.map((image) => (
             <figure key={image.id}>
-              <a href={image.dataUrl} target="_blank" rel="noreferrer noopener">
-                <img src={image.dataUrl} alt={image.name} loading="lazy" />
-              </a>
+              {image.dataUrl ? (
+                <a href={image.dataUrl} target="_blank" rel="noreferrer noopener">
+                  <img src={image.dataUrl} alt={image.name} loading="lazy" />
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  className="attachment-load"
+                  disabled={loadingAttachmentKeys.has(attachmentPayloadKey(event.id, image.id))}
+                  onClick={() => onLoadAttachment(event.id, image.id)}
+                >
+                  <Download size={17} />
+                  <span>{t(loadingAttachmentKeys.has(attachmentPayloadKey(event.id, image.id)) ? "Loading attachment" : "Load attachment")}</span>
+                </button>
+              )}
               <figcaption>{image.name}</figcaption>
             </figure>
           ))}
@@ -3412,7 +3522,7 @@ function ChatMessageRow({ event, t }: { event: RoomEvent; t: Translate }) {
         <div className="chat-document-attachments">
           {documents.map((document) => (
             <figure key={document.id} className={`chat-document ${document.extraction?.status ?? "pending"}`}>
-              <a href={document.dataUrl} download={document.name}>
+              {document.dataUrl ? <a href={document.dataUrl} download={document.name}>
                 <FileText size={22} />
                 <span>
                   <strong>{document.name}</strong>
@@ -3422,7 +3532,19 @@ function ChatMessageRow({ event, t }: { event: RoomEvent; t: Translate }) {
                   </small>
                 </span>
                 <Download size={16} />
-              </a>
+              </a> : <button
+                type="button"
+                className="attachment-load"
+                disabled={loadingAttachmentKeys.has(attachmentPayloadKey(event.id, document.id))}
+                onClick={() => onLoadAttachment(event.id, document.id)}
+              >
+                <FileText size={22} />
+                <span>
+                  <strong>{document.name}</strong>
+                  <small>{t(loadingAttachmentKeys.has(attachmentPayloadKey(event.id, document.id)) ? "Loading attachment" : "Load attachment")}</small>
+                </span>
+                <Download size={16} />
+              </button>}
               {document.extraction?.warning ? <figcaption>{document.extraction.warning}</figcaption> : null}
             </figure>
           ))}

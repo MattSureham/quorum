@@ -1,6 +1,6 @@
 import { BaseAgentAdapter } from "./base.js";
 import type { TurnInput, PartialRoomEvent } from "@quorum/core";
-import type { ParticipantDescriptor, Capabilities } from "@quorum/protocol";
+import type { ParticipantDescriptor, Capabilities, MessageAttachment } from "@quorum/protocol";
 
 export interface ApiModelOptions {
   model?: string;
@@ -82,7 +82,7 @@ function anthropicContentFor(input: TurnInput, text: string): Array<Record<strin
   return [
     { type: "text", text },
     ...(input.attachments ?? [])
-      .filter((attachment) => attachment.mimeType.startsWith("image/"))
+      .filter(hasImagePayload)
       .map((image) => ({
         type: "image",
         source: {
@@ -96,7 +96,7 @@ function anthropicContentFor(input: TurnInput, text: string): Array<Record<strin
 
 function userContentFor(input: TurnInput, text: string): string | Array<Record<string, unknown>> {
   const images = (input.attachments ?? [])
-    .filter((attachment) => attachment.mimeType.startsWith("image/"));
+    .filter(hasImagePayload);
   if (!images.length) return text;
   return [
     { type: "text", text },
@@ -105,4 +105,8 @@ function userContentFor(input: TurnInput, text: string): string | Array<Record<s
       image_url: { url: image.dataUrl },
     })),
   ];
+}
+
+function hasImagePayload(attachment: MessageAttachment): attachment is MessageAttachment & { dataUrl: string } {
+  return attachment.mimeType.startsWith("image/") && typeof attachment.dataUrl === "string" && attachment.dataUrl.length > 0;
 }

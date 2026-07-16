@@ -266,6 +266,15 @@ export class Gateway {
         }));
         break;
       }
+      case "get_attachment": {
+        const attachment = session.log.readAttachment(m.eventId, m.attachmentId);
+        if (!attachment) {
+          ws.send(JSON.stringify({ t: "attachment_error", roomId: session.room.id, requestId: m.requestId, text: "attachment payload is unavailable" }));
+          break;
+        }
+        ws.send(JSON.stringify({ t: "attachment", roomId: session.room.id, requestId: m.requestId, eventId: m.eventId, attachment }));
+        break;
+      }
       case "compact_memory":
         if (session.compactMemory) {
           void Promise.resolve(session.compactMemory(m.fromSeq, m.toSeq)).then((summary) => {

@@ -186,6 +186,81 @@ describe("SqliteStore", () => {
     }
   });
 
+  it("stores attachment payloads outside replay events and hydrates them on demand", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "quorum-sqlite-attachments-"));
+    const dbPath = join(dir, "attachments.sqlite");
+    const store = new SqliteStore(dbPath);
+    const log = new EventLog("room", store);
+    const dataUrl = `data:image/png;base64,${"A".repeat(32_000)}`;
+    const extractedText = "document extract ".repeat(2_000);
+
+    const event = await log.append({
+      ...human,
+      body: {
+        text: "inspect these",
+        attachments: [{
+          id: "attachment-1",
+          name: "chart.png",
+          mimeType: "image/png",
+          sizeBytes: 24_000,
+          dataUrl,
+          extractedText,
+          extraction: { status: "ready", sourceCharacters: extractedText.length, includedCharacters: extractedText.length },
+        }],
+      },
+    });
+
+    const replayed = log.replay(0);
+    const metadata = (replayed[0]!.body as any).attachments[0];
+    expect(metadata).toMatchObject({ id: "attachment-1", payloadAvailable: true });
+    expect(metadata.dataUrl).toBeUndefined();
+    expect(metadata.extractedText).toBeUndefined();
+    expect(JSON.stringify(replayed)).not.toContain("A".repeat(1_000));
+    expect(log.readAttachment(event.id, "attachment-1")).toMatchObject({ dataUrl, extractedText });
+
+    store.deleteSession("room");
+    expect(log.readAttachment(event.id, "attachment-1")).toBeUndefined();
+    store.close();
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it("externalizes attachment payloads from legacy event rows during migration", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "quorum-sqlite-legacy-attachments-"));
+    const dbPath = join(dir, "legacy-attachments.sqlite");
+    const dataUrl = "data:image/png;base64,TEVHQUNZ";
+    const legacyEvent = {
+      id: "legacy-attachment-event",
+      roomId: "room",
+      seq: 1,
+      ts: 100,
+      author: { kind: "human", id: "human", display: "Human" },
+      type: "message",
+      body: {
+        text: "legacy",
+        attachments: [{ id: "legacy-image", name: "old.png", mimeType: "image/png", dataUrl, sizeBytes: 6 }],
+      },
+      visibility: "room",
+    };
+    const db = new Database(dbPath);
+    db.exec(`
+      CREATE TABLE events (
+        id TEXT PRIMARY KEY, room_id TEXT, seq INTEGER, ts INTEGER, data TEXT NOT NULL
+      );
+    `);
+    db.prepare("INSERT INTO events (id, room_id, seq, ts, data) VALUES (?,?,?,?,?)")
+      .run(legacyEvent.id, legacyEvent.roomId, legacyEvent.seq, legacyEvent.ts, JSON.stringify(legacyEvent));
+    db.close();
+
+    const store = new SqliteStore(dbPath);
+    const log = new EventLog("room", store);
+    const metadata = (log.replay(0)[0]!.body as any).attachments[0];
+    expect(metadata.dataUrl).toBeUndefined();
+    expect(metadata.payloadAvailable).toBe(true);
+    expect(log.readAttachment(legacyEvent.id, "legacy-image")?.dataUrl).toBe(dataUrl);
+    store.close();
+    await rm(dir, { recursive: true, force: true });
+  });
+
   it("persists and reads working-memory summaries", async () => {
     const dir = await mkdtemp(join(tmpdir(), "quorum-sqlite-memory-"));
     const dbPath = join(dir, "memory.sqlite");

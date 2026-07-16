@@ -108,6 +108,36 @@ describe("Gateway", () => {
       expect(event.event.body.attachments).toHaveLength(1);
       expect(event.event.body.attachments[0].name).toBe("chart.png");
 
+      const attachmentPromise = nextMessage(ws);
+      ws.send(JSON.stringify({
+        t: "get_attachment",
+        roomId: "room",
+        requestId: "attachment-request-1",
+        eventId: event.event.id,
+        attachmentId: "img-1",
+      }));
+      expect(await attachmentPromise).toMatchObject({
+        t: "attachment",
+        roomId: "room",
+        requestId: "attachment-request-1",
+        eventId: event.event.id,
+        attachment: { id: "img-1", dataUrl: "data:image/png;base64,AAAA" },
+      });
+
+      const missingAttachmentPromise = nextMessage(ws);
+      ws.send(JSON.stringify({
+        t: "get_attachment",
+        roomId: "room",
+        requestId: "attachment-request-2",
+        eventId: event.event.id,
+        attachmentId: "missing",
+      }));
+      expect(await missingAttachmentPromise).toMatchObject({
+        t: "attachment_error",
+        roomId: "room",
+        requestId: "attachment-request-2",
+      });
+
       const documentBytes = Buffer.from("PK-not-a-docx");
       const documentPromise = nextMessage(ws);
       ws.send(JSON.stringify({

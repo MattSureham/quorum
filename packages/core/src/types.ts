@@ -14,6 +14,7 @@ export interface EventStore {
   readWorkingMemorySummaries?(sessionId: string): MemorySummary[];
   readSharedMemory?(sessionId: string): Array<{ namespace: string; key: string; version: number; value: unknown }>;
   writeSharedMemory?(sessionId: string, command: SharedMemoryCommand): WriteResult;
+  readAttachment?(roomId: string, eventId: string, attachmentId: string): MessageAttachment | undefined;
 }
 
 // What callers hand to EventLog.append (seq/id/ts filled in by the log).

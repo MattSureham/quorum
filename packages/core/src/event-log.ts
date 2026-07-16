@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import type { MemorySummary, RoomEvent, SharedMemoryCommand, WriteResult } from "@quorum/protocol";
+import type { MemorySummary, MessageAttachment, RoomEvent, SharedMemoryCommand, WriteResult } from "@quorum/protocol";
 import { type EventStore, type AppendInput } from "./types.js";
 import { ulid } from "./ids.js";
 
@@ -71,6 +71,15 @@ export class EventLog {
 
   readSharedMemory(): Array<{ namespace: string; key: string; version: number; value: unknown }> {
     return this.store.readSharedMemory?.(this.roomId) ?? [];
+  }
+
+  readAttachment(eventId: string, attachmentId: string): MessageAttachment | undefined {
+    return this.store.readAttachment?.(this.roomId, eventId, attachmentId);
+  }
+
+  hydrateMessageAttachments(event: RoomEvent): MessageAttachment[] {
+    const attachments = (event.body as { attachments?: MessageAttachment[] })?.attachments ?? [];
+    return attachments.map((attachment) => this.readAttachment(event.id, attachment.id) ?? attachment);
   }
 
   writeSharedMemory(command: SharedMemoryCommand): WriteResult {
