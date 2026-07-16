@@ -13,6 +13,12 @@ Working handoff for an agent picking up **Quorum**. Current as of **2026-07-16**
 - Document support is implemented across `packages/protocol/src/schema.ts`, `packages/daemon/src/attachments/document-extractor.ts`, the WebSocket gateway, `packages/core/src/session-manager.ts`, and `packages/client-web/src/main.tsx`. `scripts/bun-sidecar-smoke.ts` is the packaging regression path and must continue exercising real PDF and DOCX files on Windows.
 - Remaining release boundaries are explicit: scanned PDFs need OCR, legacy `.doc` is unsupported, and real-machine portable interaction is still manual acceptance. The in-app browser exposed no instance, but isolated standalone Playwright click/screenshot QA is now complete as recorded below. Full Xcode is unavailable locally, so this feature did not trigger a fresh macOS bundle build.
 
+### 2026-07-16 New Session participant visibility remediation
+
+- Session setup now places participant selection before metadata, mode, and permission controls. The participant picker has a bounded internal scroll area, so the first available agents remain in the initial modal viewport instead of being pushed beneath the fixed Start/Close footer.
+- Participant rows opt out of flex shrinking. Long local-agent descriptions therefore increase their own row height rather than overflowing into the next model, including on a 390 px mobile viewport. Permission choices use a compact two-column layout on wider screens and one column below the existing responsive breakpoint.
+- Isolated Playwright/Chrome acceptance passed at **1440x858**, **958x858**, and **390x844**. At every size the first participant was visible above the footer, the Echo checkbox toggled off and on, all adjacent participant rows had non-overlapping geometry, and browser console/page-error lists remained empty. Local `pnpm typecheck`, Web production build, and **166/166** tests also pass.
+
 ### 2026-07-16 review-remediation local acceptance
 
 - The independent P1/P2/P3 findings reported on 2026-07-16 are implemented through `e335e1f..7f548c9`: explicit neutral workspaces, round-robin recovery idempotency, actual DOCX expansion limits, Codex process-tree termination ordering, detached attachment payloads, stale-socket filtering, passive Markdown/CSP rendering, concurrent composer limits, newest-turn run status, and Node fallback runtime packaging.

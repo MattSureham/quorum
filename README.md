@@ -110,6 +110,12 @@ credential sources for API-model agents; they are not webchat sessions and are
 not shown as the primary selection surface. Diagnostics such as replay, memory,
 tools, and checkpoints are collapsed so they do not dominate normal use.
 
+**New session** opens with participant selection first. The participant list has
+its own bounded scroll area, so agents and API models remain selectable without
+being pushed under the fixed Start action when many profiles are configured or
+the window is narrow. Session metadata, discussion mode, and permission policy
+follow in the same scrollable setup form.
+
 The Web UI supports English and Chinese from the left **Connection** panel. The
 selected language is stored in `localStorage` as `quorum.client.language` and
 applies immediately to the primary session, chat, participant, credential, and

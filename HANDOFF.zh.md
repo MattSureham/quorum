@@ -9,6 +9,12 @@
 - 文档支持的主要实现位于 `packages/protocol/src/schema.ts`、`packages/daemon/src/attachments/document-extractor.ts`、WebSocket gateway、`packages/core/src/session-manager.ts` 与 `packages/client-web/src/main.tsx`。`scripts/bun-sidecar-smoke.ts` 是打包回归路径，Windows workflow 中必须继续用真实 PDF/DOCX 执行它。
 - 剩余发布边界已明确：扫描 PDF 仍需 OCR，旧 `.doc` 不支持，真实 Windows 机器的 portable 交互仍属于人工验收。内置浏览器没有可用实例，但下文记录的隔离 standalone Playwright 点击/截图验收已经完成。本机没有完整 Xcode，因此本功能未触发新的 macOS bundle 构建。
 
+## 2026-07-16 New Session 参与者可见性整改
+
+- Session 设置现在把参与者选择放在 metadata、讨论模式与权限选项之前。参与者列表拥有独立且有界的滚动区域，因此即使配置了很多模型或窗口较窄，首批可用 agent 也不会被固定的 Start/Close 底栏压到首屏之外。
+- 参与者行不再被 flex 容器压缩。较长的本地 agent 说明会增高自己的行，而不会溢出覆盖下一模型；390 px 手机宽度也遵循这一规则。权限选项在宽屏使用紧凑两列，在现有响应式断点以下恢复单列。
+- 隔离的 Playwright/Chrome 验收在 **1440x858**、**958x858**、**390x844** 全部通过：首位参与者均位于 footer 上方，Echo 复选框可关闭并重新勾选，所有相邻参与者行的几何区域均不重叠，浏览器 console/page error 为空。本地 `pnpm typecheck`、Web production build 与 **166/166** 项测试也全部通过。
+
 ## 2026-07-16 评审整改本地验收
 
 - 2026-07-16 独立评审列出的 P1/P2/P3 项已通过 `e335e1f..7f548c9` 实现：显式中性 workspace、round-robin 恢复幂等、DOCX 实际展开量、Codex 进程树终止顺序、附件 payload 拆分、旧 socket 过滤、被动 Markdown/CSP、composer 并发上限、最新 turn 状态以及 Node fallback runtime 打包。
