@@ -46,11 +46,15 @@ await writeWorkspacePackage("protocol");
 await writeWorkspacePackage("core");
 await writeWorkspacePackage("daemon");
 await mkdir(resolve(nodeModules, "@quorum"), { recursive: true });
+await mkdir(resolve(nodeModules, "@xmldom"), { recursive: true });
 await link(resolve(outDir, "packages/protocol"), resolve(nodeModules, "@quorum/protocol"));
 await link(resolve(outDir, "packages/core"), resolve(nodeModules, "@quorum/core"));
 await link(resolve(outDir, "packages/daemon"), resolve(nodeModules, "@quorum/daemon"));
+await link(resolve("packages/daemon/node_modules/@xmldom/xmldom"), resolve(nodeModules, "@xmldom/xmldom"));
 await link(resolve("packages/daemon/node_modules/better-sqlite3"), resolve(nodeModules, "better-sqlite3"));
+await link(resolve("packages/daemon/node_modules/unpdf"), resolve(nodeModules, "unpdf"));
 await link(resolve("packages/daemon/node_modules/ws"), resolve(nodeModules, "ws"));
+await link(resolve("packages/daemon/node_modules/yauzl"), resolve(nodeModules, "yauzl"));
 await link(resolve("packages/protocol/node_modules/zod"), resolve(nodeModules, "zod"));
 
 await writeFile(

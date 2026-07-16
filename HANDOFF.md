@@ -57,6 +57,11 @@ Working handoff for an agent picking up **Quorum**. Current as of **2026-07-16**
 - An interrupt associated with the active turn is shown as `Cancelling turn` while the adapter/process is still stopping. Its matching `turn_cancelled` terminal becomes `Interrupted`; it can no longer fall through the shared Session's generic last-terminal marker and appear as `Completed`.
 - The lifecycle helper also supports legacy/malformed streams without phase events and has focused regressions for old-failure/new-running precedence and interrupt-to-cancel convergence. Five run-status tests and typecheck pass; full-suite validation remains pending.
 
+### 2026-07-16 Node fallback document dependencies
+
+- Final smoke validation found that the optional Node sidecar layout had not been updated when DOCX parsing moved to `@xmldom/xmldom`; startup failed before handshake with `ERR_MODULE_NOT_FOUND`. The builder now includes `@xmldom/xmldom`, `unpdf`, and `yauzl` alongside the existing runtime links.
+- `node-sidecar-smoke` asserts every declared runtime dependency exists in the assembled layout before launch, then completes the WebSocket echo round trip. Node fallback and Bun single-file sidecar smokes both pass with 12 events. Bun remains the default packaged Windows sidecar.
+
 ### 2026-07-15 PDF and DOCX chat attachments
 
 - The chat File picker now accepts PNG/JPEG/GIF/WebP images plus PDF and DOCX documents. Images retain thumbnail/paste behavior; document cards expose extraction state, page count when available, warnings, and a download link to the locally persisted original.

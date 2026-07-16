@@ -53,6 +53,11 @@
 - 与活动 turn 关联的 interrupt 在 adapter/进程仍停止时显示“正在中断发言”；匹配的 `turn_cancelled` 到达后显示“已中断”。它不会再落入 shared Session 的通用最后终态标记而误显示“已完成”。
 - 生命周期 helper 也能处理缺少 phase event 的旧式/异常事件流，并有“旧失败 + 新运行”以及“interrupt 收敛为 cancelled”的定向回归。Run-status 5 项测试与 typecheck 通过；尚待全量验证。
 
+## 2026-07-16 Node fallback 文档依赖
+
+- 最终 smoke 验证发现：DOCX 解析改用 `@xmldom/xmldom` 后，可选 Node sidecar 的布局清单没有同步，导致进程在 handshake 前以 `ERR_MODULE_NOT_FOUND` 退出。Builder 现在除原有依赖外，还会加入 `@xmldom/xmldom`、`unpdf` 与 `yauzl`。
+- `node-sidecar-smoke` 会在启动前断言 assembled layout 中每个声明的 runtime dependency 都存在，再完成 WebSocket echo 往返。Node fallback 与 Bun 单文件 sidecar smoke 均以 12 个事件通过；Windows 默认打包仍使用 Bun sidecar。
+
 ## 2026-07-15 PDF 与 DOCX 聊天附件
 
 - Chat 的“文件”选择器现在支持 PNG/JPEG/GIF/WebP 图片以及 PDF、DOCX 文档。图片保留缩略图与粘贴能力；文档卡片会显示提取状态、可用时的页数、警告，并保留本机原文件下载入口。

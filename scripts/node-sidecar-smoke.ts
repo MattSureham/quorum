@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdtemp } from "node:fs/promises";
+import { access, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { RoomEvent } from "@quorum/protocol";
@@ -58,6 +58,9 @@ function roundTrip(handshake: Handshake): Promise<RoomEvent[]> {
 }
 
 await import("./build-sidecar-node.js");
+for (const dependency of ["@xmldom/xmldom", "better-sqlite3", "unpdf", "ws", "yauzl", "zod"]) {
+  await access(resolve("dist-sidecar/node/node_modules", dependency));
+}
 
 const dir = await mkdtemp(join(tmpdir(), "quorum-node-sidecar-smoke-"));
 const proc = spawn(resolve("dist-sidecar/node/quorum-sidecar"), [], {

@@ -81,6 +81,13 @@ To run a fast shared-session smoke test without opening the browser:
 pnpm smoke:shared
 ```
 
+The optional Node sidecar fallback is assembled with `pnpm sidecar:node:build`
+and verified with `pnpm sidecar:node:smoke`. Its runtime layout explicitly links
+the document stack (`@xmldom/xmldom`, `unpdf`, and `yauzl`) as well as SQLite,
+WebSocket, and schema dependencies; update that list whenever the daemon gains a
+new eagerly imported runtime package. Windows portable/installer builds continue
+to use the single-file Bun sidecar by default.
+
 The test suite includes a three-agent shared-session integration test that verifies
 queued bids can drive an open discussion across three agents.
 
