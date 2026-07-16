@@ -385,7 +385,10 @@ as uploaded files; ordinary text paste continues to work normally. Document
 cards show extraction status, page count when available, truncation/parser
 warnings, and retain access to the locally persisted original. Historical cards
 load that original on demand, so reconnecting to a long room does not resend every
-past base64 image or document through WebSocket snapshots.
+past base64 image or document through WebSocket snapshots. While a newly selected
+file is still being read, the composer shows `Reading files` and disables Send,
+the attachment picker, and Cmd/Ctrl+Enter submission. Text cannot leave first and
+strand the completed attachment in the following draft.
 
 Security/reliability hardening in the current shared-session path:
 

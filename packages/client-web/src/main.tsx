@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { canSendComposer } from "./composer-state.js";
 import { canCreateCustomApiProfile, normalizeStoredCustomProfile } from "./profile-config.js";
 import { RichMessage } from "./rich-message.js";
 import { latestTurnLifecycleAfter } from "./run-status.js";
@@ -128,6 +129,8 @@ const zhText: Record<string, string> = {
   "Attachments exceed the 20 MB total limit.": "附件超过 20 MB 总大小限制。",
   "Use at most 6 attachments.": "最多添加 6 个附件。",
   "Failed to read attachment": "无法读取附件",
+  "Reading files": "正在读取文件",
+  "Files are still being prepared. Sending will be available when they are ready.": "文件仍在准备中，读取完成后即可发送。",
   "Load attachment": "加载附件",
   "Loading attachment": "正在加载附件",
   "Attachment unavailable": "附件不可用",
@@ -1239,6 +1242,7 @@ function App() {
   const [selectedTargets, setSelectedTargets] = useState<string[]>([]);
   const [composer, setComposer] = useState("");
   const [composerAttachments, setComposerAttachments] = useState<MessageAttachment[]>([]);
+  const [pendingAttachmentReads, setPendingAttachmentReads] = useState(0);
   const [attachmentPayloads, setAttachmentPayloads] = useState<Map<string, MessageAttachment>>(() => new Map());
   const [loadingAttachmentKeys, setLoadingAttachmentKeys] = useState<Set<string>>(() => new Set());
   const [lastSubmittedAt, setLastSubmittedAt] = useState<number | undefined>();
@@ -1270,6 +1274,7 @@ function App() {
   const feedRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const composerAttachmentsRef = useRef<MessageAttachment[]>([]);
+  const attachmentReadCountRef = useRef(0);
   const attachmentReadQueueRef = useRef<Promise<void>>(Promise.resolve());
   const attachmentRequestsRef = useRef(new Map<string, string>());
   const directoryRequestsRef = useRef(new Map<string, {
@@ -1317,6 +1322,7 @@ function App() {
   const latestRelease = [...displayEvents].reverse().find((item) => item.type === "floor_release")?.body as FloorReleaseBody | undefined;
   const policy = displayRoom.policy;
   const connected = status === "connected";
+  const composerCanSend = canSendComposer(connected, composer, composerAttachments.length, pendingAttachmentReads);
   const approvals = isPreview ? [] : pendingApprovals(events);
   const holdsWriteFloor = isPreview ? false : humanHoldsWriteFloor(events);
   const shared = useMemo(() => projectSharedSession(displayEvents), [displayEvents]);
@@ -1786,7 +1792,7 @@ function App() {
 
   function sendMessage() {
     const text = composer.trim();
-    if (!text && !composerAttachments.length) return;
+    if (!canSendComposer(connected, text, composerAttachmentsRef.current.length, attachmentReadCountRef.current)) return;
     if (send({
       t: "post_message",
       text,
@@ -1805,6 +1811,8 @@ function App() {
     if (!files) return;
     const selected = [...files];
     if (!selected.length) return;
+    attachmentReadCountRef.current += 1;
+    setPendingAttachmentReads(attachmentReadCountRef.current);
     const operation = attachmentReadQueueRef.current.then(async () => {
       try {
         const current = composerAttachmentsRef.current;
@@ -1830,7 +1838,12 @@ function App() {
       }
     });
     attachmentReadQueueRef.current = operation.catch(() => undefined);
-    await operation;
+    try {
+      await operation;
+    } finally {
+      attachmentReadCountRef.current = Math.max(0, attachmentReadCountRef.current - 1);
+      setPendingAttachmentReads(attachmentReadCountRef.current);
+    }
   }
 
   function pasteImages(event: React.ClipboardEvent<HTMLTextAreaElement>) {
@@ -2266,6 +2279,15 @@ function App() {
             </div>
           ) : null}
           {composerAttachments.length ? <AttachmentVisibility attachments={composerAttachments} agents={agents} t={t} /> : null}
+          {pendingAttachmentReads ? (
+            <div className="attachment-read-status" role="status" aria-live="polite">
+              <RefreshCcw size={14} className="spin" />
+              <span>
+                <strong>{t("Reading files")}</strong>
+                {t("Files are still being prepared. Sending will be available when they are ready.")}
+              </span>
+            </div>
+          ) : null}
           <div className="composer-actions">
             <input
               ref={fileInputRef}
@@ -2275,11 +2297,11 @@ function App() {
               className="hidden-file-input"
               onChange={(input) => void attachFiles(input.currentTarget.files)}
             />
-            <button className="secondary-action attach-action" type="button" disabled={!connected} onClick={() => fileInputRef.current?.click()}>
-              <Plus size={16} />
-              <span>{t("File")}</span>
+            <button className="secondary-action attach-action" type="button" disabled={!connected || pendingAttachmentReads > 0} onClick={() => fileInputRef.current?.click()}>
+              {pendingAttachmentReads ? <RefreshCcw size={16} className="spin" /> : <Plus size={16} />}
+              <span>{pendingAttachmentReads ? t("Reading files") : t("File")}</span>
             </button>
-            <button className="send-action" type="button" disabled={!connected || (!composer.trim() && !composerAttachments.length)} onClick={sendMessage}>
+            <button className="send-action" type="button" disabled={!composerCanSend} onClick={sendMessage}>
               <Send size={16} />
               <span>{t("Send")}</span>
             </button>

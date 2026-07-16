@@ -25,6 +25,12 @@ Working handoff for an agent picking up **Quorum**. Current as of **2026-07-16**
 - Bid-based open-discussion/raise-hand Sessions with one eligible agent now become idle after its first completed response. They no longer recollect the same sole bid until the six-turn safety ceiling or create a duplicate wrap-up response. Explicit round-robin remains the mechanism for intentional repeated single-agent passes.
 - Frontend adapter mapping, protocol payload, and core scheduler regressions pass 42 focused tests; typecheck passes. Responsive/modal/attachment Playwright findings are tracked in the following work, so this checkpoint is not yet the final UX acceptance.
 
+### 2026-07-16 Playwright UX remediation: attachment send gate
+
+- File selection and clipboard-image paste now increment a synchronous ref-backed pending-read count before any FileReader work begins. Send and Cmd/Ctrl+Enter both consult that ref, so delayed reads cannot let text leave without its selected attachment.
+- The composer exposes a bilingual live `Reading files` status and disables Send plus the file picker until every queued read settles. Existing attachments and text remain intact if a later batch fails validation.
+- A pure composer-state regression covers connected/disconnected, text-only, attachment-only, and pending-read cases; its two tests and typecheck pass. The delayed-FileReader browser scenario remains part of final Playwright acceptance.
+
 ### 2026-07-16 explicit workspace boundary remediation
 
 - `create_session` no longer falls back to the bootstrap room's workspace when `workspacePath` is omitted. A blank New Session workspace is now neutral on the server as well as in the UI; the folder picker also stops using the active room path as an implicit starting selection.

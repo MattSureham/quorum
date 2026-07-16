@@ -21,6 +21,12 @@
 - 基于 bid 的自由讨论/举手 Session 如果只有一个 eligible agent，会在其首个完成回复后回到 idle；不会再反复收集同一个 bid 直到六轮安全上限，也不会再追加重复 wrap-up。需要单 agent 多次执行时仍可显式使用 round-robin。
 - 前端 adapter 映射、协议 payload 与核心调度共 42 项定向回归通过，typecheck 通过。响应式、modal 与附件 Playwright 问题仍在后续阶段处理，因此本检查点不是最终 UX 验收。
 
+## 2026-07-16 Playwright UX 整改：附件发送门
+
+- 文件选择与剪贴板图片粘贴会在任何 FileReader 工作开始前，同步增加由 ref 维护的 pending-read 计数。Send 与 Cmd/Ctrl+Enter 都会读取该 ref，因此延迟读取期间文字不能先于所选附件发送。
+- Composer 会显示中英双语“正在读取文件”状态，并在全部排队读取结束前禁用 Send 与文件选择器。后续批次若校验失败，已有文字与附件保持不变。
+- 纯 composer-state 回归覆盖连接/断开、纯文字、纯附件和 pending-read，共 2 项测试与 typecheck 通过。延迟 FileReader 场景留到最终 Playwright 验收复测。
+
 ## 2026-07-16 显式 workspace 边界整改
 
 - `create_session` 在省略 `workspacePath` 时不再回退到启动房间的 workspace。New Session 留空 workspace 现在在服务端和 UI 两端都保持中性；文件夹选择器也不再把当前房间路径当作隐式起点。

@@ -1476,6 +1476,29 @@ h1 {
   min-height: 40px;
 }
 
+.attachment-read-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 7px 9px;
+  border: 1px solid #cbdcf4;
+  border-radius: 8px;
+  color: #315c8a;
+  background: #f2f6fc;
+  font-size: 12px;
+}
+
+.attachment-read-status > span {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.attachment-read-status strong {
+  color: #244f7d;
+}
+
 .run-status-banner {
   display: grid;
   grid-template-columns: 10px minmax(0, 1fr) auto;
