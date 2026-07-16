@@ -263,7 +263,9 @@ Session ids, participant ids, and workspace paths are marked as operational
 metadata and must not be treated as evidence that the user's subject is Quorum
 or the workspace project. A newly-created Session inherits no workspace when the
 field is omitted; only an explicitly selected path enables repository context,
-file tools, and workspace editing.
+file tools, and workspace editing. Prompt activation is durably keyed by the
+human message sequence for every scheduler, including round robin, so a queued
+prompt that completed before shutdown is not executed again after restart.
 
 Packaging status: developer one-command launch exists, and a local sidecar entry
 now exists at `packages/daemon/src/sidecar.ts`. It binds a random loopback port,

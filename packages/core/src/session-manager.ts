@@ -278,6 +278,14 @@ export class SessionManager {
     this.pendingBids.clear();
     if (this.isRoundRobin()) {
       this.roundRobinQueue = this.roundRobinSchedule();
+      // This durable activation marker is also the recovery idempotency key.
+      // Without promptSeq, a queued round-robin prompt looks unprocessed after
+      // restart even when every scheduled turn already completed.
+      await this.transition("collecting_bids", {
+        epoch: this.epoch,
+        promptSeq: prompt.eventSeq,
+        scheduler: "round-robin",
+      });
       await this.grantNextRoundRobinSpeaker();
       return;
     }
@@ -673,12 +681,12 @@ export class SessionManager {
           this.opts.maxTurnsPerTopic ?? 6,
           softTargetTurns + Math.max(1, this.orderedAgentIds().length),
         );
-      if (softTargetTurns !== undefined && this.turnsThisTopic >= softTargetTurns) {
-        await this.beginWrapUp("target discussion rounds reached");
-        return "none";
-      }
       if (this.lastTurnOutcome && this.lastTurnOutcome !== "done" && this.pendingBids.size === 0) {
         await this.transition("idle", { reason: "all candidate turns failed", turns: this.turnsThisTopic });
+        return "none";
+      }
+      if (softTargetTurns !== undefined && this.turnsThisTopic >= softTargetTurns) {
+        await this.beginWrapUp("target discussion rounds reached");
         return "none";
       }
       if (this.turnsThisTopic >= maxTurns - 1) {

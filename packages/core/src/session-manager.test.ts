@@ -285,6 +285,47 @@ describe("SessionManager", () => {
     }
   });
 
+  it("does not replay a completed queued round-robin prompt after restart", async () => {
+    const store = new InMemoryStore();
+    const firstLog = new EventLog("room", store);
+    const first = new SessionManager({
+      sessionId: "room",
+      title: "Round-robin restart",
+      log: firstLog,
+      agents: [new StubSpeaker("agent", { delayMs: 50 })],
+      schedulerMode: "round-robin",
+      settlingWindowMs: 5,
+      turnTimeoutMs: 1_000,
+    });
+    first.start();
+    void first.submitUserPrompt("first");
+    await waitFor(() => firstLog.replay(0).some((event) => event.type === "turn_started"));
+    await first.submitUserPrompt("queued");
+    await waitFor(() => firstLog.replay(0).filter((event) => event.type === "turn_completed").length === 2, 1_500);
+    await waitFor(() => first.snapshot().phase === "idle");
+    await first.stop();
+
+    const completedBeforeRestart = firstLog.replay(0).filter((event) => event.type === "turn_completed").length;
+    const secondLog = new EventLog("room", store);
+    const second = new SessionManager({
+      sessionId: "room",
+      title: "Round-robin restart",
+      log: secondLog,
+      agents: [new StubSpeaker("agent")],
+      schedulerMode: "round-robin",
+      settlingWindowMs: 5,
+      turnTimeoutMs: 1_000,
+    });
+    second.start();
+    try {
+      await sleep(100);
+      expect(secondLog.replay(0).filter((event) => event.type === "turn_completed")).toHaveLength(completedBeforeRestart);
+      expect(second.snapshot().phase).toBe("idle");
+    } finally {
+      await second.stop();
+    }
+  });
+
   it("closes an orphaned agent turn and normalizes the phase after restart", async () => {
     const store = new InMemoryStore();
     const before = new EventLog("room", store);
@@ -359,6 +400,29 @@ describe("SessionManager", () => {
       expect((failed?.body as any).failure.message).toContain("timed out after 30ms");
       expect(log.replay(0).filter((event) => event.type === "phase_changed" && (event.body as any).to === "collecting_bids")).toHaveLength(1);
       expect(log.replay(0).some((event) => event.type === "turn_cancelled")).toBe(false);
+    } finally {
+      await session.stop();
+    }
+  });
+
+  it("does not re-run a failed sole candidate as a soft-round wrap-up", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const session = new SessionManager({
+      sessionId: "room",
+      title: "Failed soft round",
+      log,
+      agents: [new FailingSpeaker("agent")],
+      targetDiscussionRounds: 1,
+      settlingWindowMs: 5,
+      turnTimeoutMs: 1_000,
+    });
+    session.start();
+    try {
+      await session.submitUserPrompt("fail once");
+      await waitFor(() => session.snapshot().phase === "idle" && log.replay(0).some((event) => event.type === "turn_failed"));
+      await sleep(50);
+      expect(log.replay(0).filter((event) => event.type === "turn_failed")).toHaveLength(1);
+      expect(log.replay(0).some((event) => event.type === "system" && (event.body as any).wrapUp)).toBe(false);
     } finally {
       await session.stop();
     }

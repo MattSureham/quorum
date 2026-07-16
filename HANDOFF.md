@@ -19,6 +19,12 @@ Working handoff for an agent picking up **Quorum**. Current as of **2026-07-16**
 - Neutral CLI working directories now use a bounded readable slug plus a SHA-256-derived Session-id fingerprint. `..` cannot resolve to the temporary root, and ids such as `room/a` and `room?a` cannot collide after slug normalization. New network-created Session ids are bounded to 128 path-safe characters and reject relative path segments.
 - Regression coverage verifies a bootstrap room with an explicit repository cannot leak it into a newly-created neutral Session, and verifies traversal/collision resistance. The targeted schema, CLI safety, and shared-host suites pass with 22 tests.
 
+### 2026-07-16 restart idempotency and failed-turn scheduling
+
+- Round-robin prompt activation now persists the same `phase_changed.promptSeq` recovery anchor as bid-based modes before selecting the first speaker. A queued round-robin prompt that completed normally is therefore excluded from startup recovery instead of executing again and potentially repeating tools or file edits.
+- Soft target-round wrap-up is evaluated only after the scheduler checks whether the last sole candidate failed with no remaining bids. A one-agent failure now returns to human control once rather than immediately running the same agent again as wrap-up.
+- Core regressions recreate a SessionManager over the same event store after two round-robin prompts and assert the completed-turn count remains unchanged; a separate test asserts a failing sole soft-round candidate produces exactly one `turn_failed` and no wrap-up request. All 27 SessionManager tests pass.
+
 ### 2026-07-15 PDF and DOCX chat attachments
 
 - The chat File picker now accepts PNG/JPEG/GIF/WebP images plus PDF and DOCX documents. Images retain thumbnail/paste behavior; document cards expose extraction state, page count when available, warnings, and a download link to the locally persisted original.

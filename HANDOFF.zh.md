@@ -15,6 +15,12 @@
 - 中性 CLI 工作目录现使用有界可读 slug 加基于完整 Session id 的 SHA-256 指纹。`..` 无法落到临时根目录，`room/a` 与 `room?a` 等归一化后相同的 id 也不会共用目录。新的网络创建 Session id 最长 128 个路径安全字符，并拒绝相对路径片段。
 - 回归覆盖：已显式绑定仓库的启动房间不会将路径泄漏给新建中性 Session，并验证了路径逃逸/碰撞防护。定向 schema、CLI safety 与 shared-host 测试共 22 项全部通过。
 
+## 2026-07-16 重启幂等性与失败 turn 调度
+
+- Round-robin 现在会在选择首位发言者前，持久化与 bid 模式相同的 `phase_changed.promptSeq` 恢复锚点。已正常完成的排队 round-robin prompt 因而会在启动恢复中被排除，不会再次执行工具或文件修改。
+- 软目标轮数 wrap-up 现在会在调度器检查“上一个唯一候选者已失败且没有剩余 bid”之后才评估。单 agent 失败会只返回人类控制一次，不再立即把同一 agent 当作总结者再运行一次。
+- Core 回归在同一 event store 上重建 SessionManager，确认两条 round-robin prompt 完成后的 turn 数不会在重启后增加；另一测试确认唯一失败候选者只产生一条 `turn_failed` 且没有 wrap-up 请求。SessionManager 27 项测试全部通过。
+
 ## 2026-07-15 PDF 与 DOCX 聊天附件
 
 - Chat 的“文件”选择器现在支持 PNG/JPEG/GIF/WebP 图片以及 PDF、DOCX 文档。图片保留缩略图与粘贴能力；文档卡片会显示提取状态、可用时的页数、警告，并保留本机原文件下载入口。
