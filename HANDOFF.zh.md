@@ -1,6 +1,13 @@
 # 交接文档（HANDOFF）
 
-给接手 **Quorum** 的下一个 agent 的工作交接。截至 **2026-07-15**，以 `main` 当前 HEAD 为准。English version: [`HANDOFF.md`](./HANDOFF.md)。
+给接手 **Quorum** 的下一个 agent 的工作交接。截至 **2026-07-16**，以 `main` 当前 HEAD 为准。English version: [`HANDOFF.md`](./HANDOFF.md)。
+
+## 2026-07-16 同步检查点
+
+- 本次纯文档交接更新前，仓库工作树干净且已与 `origin/main` 同步。最新实现基线为 `0ba5255`；`d4100e5` 只记录已完成的 Windows 打包证据。PDF/DOCX 功能、Windows smoke 集成与跨平台 smoke harness 修复之后没有新的代码变更。
+- [Windows Packages run 29407135897](https://github.com/MattSureham/quorum/actions/runs/29407135897) 是当前打包验收基线：133 项测试全部通过，编译后的 Windows sidecar 实际解析了真实 PDF 与 DOCX，Web UI、未签名 NSIS、portable 布局校验和四类 artifact 上传均成功。测试者可直接下载 portable artifact，运行它不需要 clone 或 pull 仓库。
+- 文档支持的主要实现位于 `packages/protocol/src/schema.ts`、`packages/daemon/src/attachments/document-extractor.ts`、WebSocket gateway、`packages/core/src/session-manager.ts` 与 `packages/client-web/src/main.tsx`。`scripts/bun-sidecar-smoke.ts` 是打包回归路径，Windows workflow 中必须继续用真实 PDF/DOCX 执行它。
+- 剩余发布边界已明确：扫描 PDF 仍需 OCR，旧 `.doc` 不支持，本环境无法做浏览器点击/截图验收，真实 Windows 机器的 portable 交互仍属于人工验收。请勿将这些描述为已实现或已验证。本机也没有完整 Xcode，因此本功能未触发新的 macOS bundle 构建。
 
 ## 2026-07-15 PDF 与 DOCX 聊天附件
 

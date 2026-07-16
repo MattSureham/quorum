@@ -1,10 +1,17 @@
 # HANDOFF
 
-Working handoff for an agent picking up **Quorum**. Current as of **2026-07-15** on `main`. 中文版见 [`HANDOFF.zh.md`](./HANDOFF.zh.md)。
+Working handoff for an agent picking up **Quorum**. Current as of **2026-07-16** on `main`. 中文版见 [`HANDOFF.zh.md`](./HANDOFF.zh.md)。
 
 > 2026-07-07 architecture update: Quorum is being migrated to the shared-session architecture from the agent-framework meeting. New implementation handoff: [`AGENT_FRAMEWORK_HANDOFF.md`](./AGENT_FRAMEWORK_HANDOFF.md). Full copied docs live in [`docs/architecture/`](./docs/architecture/).
 
 ## Current State For The Next Agent
+
+### 2026-07-16 synchronization checkpoint
+
+- The repository was clean and synchronized with `origin/main` before this handoff-only update. The latest implementation baseline is `0ba5255`; `d4100e5` only records its completed Windows packaging evidence. No code changes followed the PDF/DOCX feature, Windows smoke integration, or cross-platform smoke-harness fix.
+- [Windows Packages run 29407135897](https://github.com/MattSureham/quorum/actions/runs/29407135897) is the current packaged acceptance baseline. It passed all 133 tests, parsed a real PDF and DOCX through the compiled Windows sidecar, built the Web UI and unsigned NSIS installer, validated the portable layout, and uploaded all four artifact groups. A tester can download the portable artifact directly; cloning or pulling the repository is not required to run it.
+- Document support is implemented across `packages/protocol/src/schema.ts`, `packages/daemon/src/attachments/document-extractor.ts`, the WebSocket gateway, `packages/core/src/session-manager.ts`, and `packages/client-web/src/main.tsx`. `scripts/bun-sidecar-smoke.ts` is the packaging regression path and must continue exercising real PDF and DOCX files on Windows.
+- Remaining release boundaries are explicit: scanned PDFs need OCR, legacy `.doc` is unsupported, browser click/screenshot QA was unavailable in this environment, and real-machine portable interaction is still manual acceptance. Do not describe these as implemented or verified. Full Xcode is also unavailable locally, so this feature did not trigger a fresh macOS bundle build.
 
 ### 2026-07-15 PDF and DOCX chat attachments
 
