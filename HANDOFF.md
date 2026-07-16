@@ -18,6 +18,7 @@ Working handoff for an agent picking up **Quorum**. Current as of **2026-07-16**
 - Session setup now places participant selection before metadata, mode, and permission controls. The participant picker has a bounded internal scroll area, so the first available agents remain in the initial modal viewport instead of being pushed beneath the fixed Start/Close footer.
 - Participant rows opt out of flex shrinking. Long local-agent descriptions therefore increase their own row height rather than overflowing into the next model, including on a 390 px mobile viewport. Permission choices use a compact two-column layout on wider screens and one column below the existing responsive breakpoint.
 - Isolated Playwright/Chrome acceptance passed at **1440x858**, **958x858**, and **390x844**. At every size the first participant was visible above the footer, the Echo checkbox toggled off and on, all adjacent participant rows had non-overlapping geometry, and browser console/page-error lists remained empty. Local `pnpm typecheck`, Web production build, and **166/166** tests also pass.
+- [Windows Packages run 29487295657](https://github.com/MattSureham/quorum/actions/runs/29487295657) is green on the exact `1ab960c` checkpoint. It repeated all 166 tests, compiled-sidecar smoke, Web and unsigned NSIS builds, portable assembly/layout validation, and all four artifact uploads in 8m29s.
 
 ### 2026-07-16 review-remediation local acceptance
 

@@ -14,6 +14,7 @@
 - Session 设置现在把参与者选择放在 metadata、讨论模式与权限选项之前。参与者列表拥有独立且有界的滚动区域，因此即使配置了很多模型或窗口较窄，首批可用 agent 也不会被固定的 Start/Close 底栏压到首屏之外。
 - 参与者行不再被 flex 容器压缩。较长的本地 agent 说明会增高自己的行，而不会溢出覆盖下一模型；390 px 手机宽度也遵循这一规则。权限选项在宽屏使用紧凑两列，在现有响应式断点以下恢复单列。
 - 隔离的 Playwright/Chrome 验收在 **1440x858**、**958x858**、**390x844** 全部通过：首位参与者均位于 footer 上方，Echo 复选框可关闭并重新勾选，所有相邻参与者行的几何区域均不重叠，浏览器 console/page error 为空。本地 `pnpm typecheck`、Web production build 与 **166/166** 项测试也全部通过。
+- [Windows Packages run 29487295657](https://github.com/MattSureham/quorum/actions/runs/29487295657) 已在精确的 `1ab960c` 检查点全绿：8m29s 内再次通过 166 项测试、compiled sidecar smoke、Web 与未签名 NSIS build、portable 组装/布局校验和四类 artifact 上传。
 
 ## 2026-07-16 评审整改本地验收
 
