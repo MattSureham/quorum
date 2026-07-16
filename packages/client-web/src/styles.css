@@ -2930,7 +2930,9 @@ h1 {
   font-size: 12px;
 }
 
-@media (max-width: 1120px) {
+/* Below this width, full desktop sidebars leave too little room for one-line
+   title, policy controls, and Interrupt. Keep three columns but compact them. */
+@media (max-width: 1280px) {
   .app-shell {
     grid-template-columns: 190px minmax(0, 1fr) 270px;
     grid-template-rows: minmax(0, 1fr);
@@ -3006,7 +3008,9 @@ h1 {
   }
 }
 
-@media (max-width: 900px) {
+/* A three-column center below roughly 500px cannot preserve readable history
+   and a fixed composer in one viewport. Switch to the scrolling document. */
+@media (max-width: 960px) {
   body {
     overflow-x: hidden;
     overflow-y: auto;

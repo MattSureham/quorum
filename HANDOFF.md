@@ -39,8 +39,8 @@ Working handoff for an agent picking up **Quorum**. Current as of **2026-07-16**
 
 ### 2026-07-16 Playwright UX remediation: responsive shell and reachable actions
 
-- The 1120 px layout no longer moves the configuration sidebar into a full-width second grid row that covers the fixed-height Chat. Tablet layouts retain compressed left/center/right columns with independently scrolling sidebars and a compact stacked top bar.
-- At 900 px and below, fixed `100vh` clipping is removed from the app shell, workspace, and sidebars. The document can scroll naturally, only the Session list panel is bounded to 42dvh, Chat receives a stable 360-520 px transcript viewport, and the composer plus configuration remain reachable. New session is sticky inside that independently scrolling list, so it cannot render underneath Chat and lose pointer input.
+- At 1280 px and below, tablet layouts retain compressed left/center/right columns with independently scrolling sidebars and a stacked top bar. This wider threshold covers the former one-pixel blind spot at 1121 px: all three policy selectors and Interrupt fit inside the 661 px center column.
+- At 960 px and below, fixed `100vh` clipping is removed from the app shell, workspace, and sidebars. The document can scroll naturally, only the Session list panel is bounded to 42dvh, Chat receives a stable 360-520 px transcript viewport, and the composer plus configuration remain reachable. This covers the former 901 px blind spot without regressing the accepted 1024 px three-column layout. New session is sticky inside that independently scrolling list, so it cannot render underneath Chat and lose pointer input.
 - Session setup is a flex dialog with a scrollable content grid and fixed header/error/actions; on mobile it uses the available `100dvh` height, so Start stays in the first viewport. Typecheck, Web production build, and `git diff --check` pass; exact 1440/1024/390 browser acceptance is recorded below.
 
 ### 2026-07-16 Playwright UX remediation: final browser acceptance

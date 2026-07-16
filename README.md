@@ -244,9 +244,9 @@ The dialog traps keyboard focus, closes with Escape when no request is pending,
 marks the background inert, restores the opener focus, and exposes mode and
 permission choices as pressed-state controls for assistive technology.
 At desktop/tablet widths the three primary columns remain independent scrolling
-regions, with narrower sidebars below 1120 px instead of moving configuration on
-top of the chat. At 900 px and below the app becomes a naturally scrolling
-single-column document; the Session list is height-bounded, Chat keeps a stable
+regions, with narrower sidebars at 1280 px and below instead of moving
+configuration on top of the chat. At 960 px and below the app becomes a
+naturally scrolling single-column document; the Session list is height-bounded, Chat keeps a stable
 transcript viewport, and the composer is reachable. New session stays pinned to
 the bottom of the independently scrolling Session list rather than rendering
 under the following Chat layer. Session setup keeps its

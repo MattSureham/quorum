@@ -35,8 +35,8 @@
 
 ## 2026-07-16 Playwright UX 整改：响应式外壳与可达操作区
 
-- 1120 px 布局不再把右侧配置栏移到覆盖固定高度 Chat 的全宽第二行。平板宽度保留压缩后的左/中/右三栏，两个侧栏独立滚动，顶部操作区紧凑换行。
-- 900 px 及以下会解除 app shell、workspace 和侧栏的固定 `100vh` 裁切，页面可自然滚动。只有 Session 列表面板限制为 42dvh，Chat transcript 保持 360-520 px 稳定视口，composer 与后续配置均可到达。New session 固定在这个独立滚动列表底部，不会再渲染到 Chat 下方而失去点击输入。
+- 1280 px 及以下保留压缩后的左/中/右三栏，两个侧栏独立滚动，顶部操作区纵向排列。扩大后的阈值覆盖了原来的 1121 px 单像素盲区：三个策略选择器和 Interrupt 均能完整放入 661 px 的中栏。
+- 960 px 及以下会解除 app shell、workspace 和侧栏的固定 `100vh` 裁切，页面可自然滚动。只有 Session 列表面板限制为 42dvh，Chat transcript 保持 360-520 px 稳定视口，composer 与后续配置均可到达；这覆盖了原来的 901 px 盲区，同时不改变已验收的 1024 px 三栏布局。New session 固定在这个独立滚动列表底部，不会再渲染到 Chat 下方而失去点击输入。
 - Session 设置改为 flex dialog，只有内容 grid 滚动，标题、错误和底部操作固定；手机上使用可用 `100dvh` 高度，因此 Start 始终留在首屏。Typecheck、Web production build 与 `git diff --check` 通过；1440/1024/390 的真实浏览器验收记录在下一节。
 
 ## 2026-07-16 Playwright UX 整改：最终浏览器验收
