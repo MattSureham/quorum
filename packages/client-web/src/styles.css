@@ -1080,6 +1080,7 @@ textarea:focus {
 
 .participant-picker-row {
   display: grid;
+  flex-shrink: 0;
   grid-template-columns: 18px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
