@@ -275,6 +275,37 @@ describe("SessionManager", () => {
     }
   });
 
+  it("activates prompts submitted during the sole-agent settling window in FIFO order", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const speaker = new PromptCaptureSpeaker("echo", { confidence: 1 });
+    const session = new SessionManager({
+      sessionId: "room",
+      title: "Settling prompt queue",
+      log,
+      agents: [speaker],
+      maxTurnsPerTopic: 6,
+      schedulerMode: "bid",
+      settlingWindowMs: 80,
+    });
+
+    session.start();
+    try {
+      await session.submitUserPrompt("first");
+      await waitFor(() => session.snapshot().phase === "settling");
+      await session.submitUserPrompt("second");
+      await waitFor(() => log.replay(0).filter((event) => event.type === "turn_completed").length === 2, 1_500);
+
+      expect(speaker.prompts).toEqual(["first", "second"]);
+      expect(log.replay(0)
+        .filter((event) => event.type === "message" && event.author.kind === "human")
+        .map((event) => (event.body as any).text)).toEqual(["first", "second"]);
+      await waitFor(() => session.snapshot().phase === "settling");
+      await waitFor(() => session.snapshot().phase === "idle");
+    } finally {
+      await session.stop();
+    }
+  });
+
   it("restores an unprocessed queued prompt after restart", async () => {
     const store = new InMemoryStore();
     const firstLog = new EventLog("room", store);

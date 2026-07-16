@@ -661,6 +661,14 @@ export class SessionManager {
     if (!this.running) return;
     const action = await this.mailbox.enqueue("settleAndArbitrate", async (): Promise<"collect" | "none"> => {
       if (this.phase !== "settling") return "none";
+      // A prompt can arrive after turn finalization has scheduled this settling
+      // window. Give that queued human input the same priority as a prompt that
+      // arrived during the active turn; otherwise an idle transition can strand
+      // it until a later message happens to wake the scheduler.
+      if (this.pendingPrompts.length) {
+        await this.activateNextQueuedPrompt();
+        return "none";
+      }
       for (const bid of this.pendingBids.values()) {
         await this.append("bid_settled", { bidId: bid.bidId, action: "confirmed" }, "debug", {
           author: { kind: "agent", id: bid.agentId, display: bid.agentId },

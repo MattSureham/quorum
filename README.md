@@ -184,6 +184,9 @@ Prompts received while an agent is speaking are persisted immediately and then
 processed through a FIFO queue, with a fresh epoch and bid collection after the
 active turn. Adapter failures use structured `turn_failed`/`turn_trace` payloads
 instead of appearing as successful turns with no visible reply.
+Prompts arriving during the post-turn settling window use the same queue: the
+settler checks pending human input before follow-up bids or an idle transition,
+so a sole-agent Session cannot strand the second message until a third arrives.
 Queued prompt markers are replayed after daemon restart, so an accepted but not
 yet activated prompt is not stranded when the process exits mid-turn. New
 shared sessions use a minimum three-minute agent execution deadline. A deadline

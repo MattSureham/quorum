@@ -51,6 +51,11 @@ Working handoff for an agent picking up **Quorum**. Current as of **2026-07-16**
 - Runtime assertions passed: one Echo participant returns exactly one reply per prompt; a 700 ms delayed FileReader disables Send and cannot separate text from its image; the image appears on the intended human message. Browser console/page/request failure lists remained empty.
 - Final local validation passes `pnpm typecheck`, Web production build, **157/157** tests across 26 files, EventLog/shared/source-sidecar/Node/Bun smokes, and `pnpm desktop:check` including Rust `cargo check`. The first full-suite run had three existing 5-second CLI subprocess tests time out under concurrent load; all three passed immediately in isolation, and a clean second full-suite run passed 157/157. Tauri still reports that full Xcode is not installed. A new Windows Packages run is still required for this post-`29470431610` UX HEAD.
 
+### 2026-07-16 settling-window prompt queue remediation
+
+- `settleAndArbitrate()` now checks `pendingPrompts` before confirming follow-up bids, applying sole-agent completion, or transitioning idle. A prompt submitted after turn finalization but during the settling delay starts a fresh epoch immediately instead of remaining dormant until another human message wakes the scheduler.
+- A timing regression waits for a sole Echo-style agent to enter `settling`, submits the second prompt there, and requires two completed turns with captured prompts in exact FIFO order before returning idle. All 29 SessionManager tests pass.
+
 ### 2026-07-16 explicit workspace boundary remediation
 
 - `create_session` no longer falls back to the bootstrap room's workspace when `workspacePath` is omitted. A blank New Session workspace is now neutral on the server as well as in the UI; the folder picker also stops using the active room path as an implicit starting selection.

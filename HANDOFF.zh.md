@@ -47,6 +47,11 @@
 - 运行断言通过：唯一 Echo 每条 prompt 只回复一次；人为延迟 FileReader 700 ms 时 Send 会禁用，文字不能与图片分开发送，图片最终出现在目标 human message 上。浏览器 console/page/request failure 列表均为空。
 - 最终本地验收通过 `pnpm typecheck`、Web production build、26 个文件 **157/157** 项测试、EventLog/shared/source-sidecar/Node/Bun smokes，以及包含 Rust `cargo check` 的 `pnpm desktop:check`。第一次全量套件中 3 个既有 5 秒 CLI subprocess 测试在并发负载下超时；三项单独重跑立即通过，关闭浏览器服务后的第二次全量运行也以 157/157 干净通过。Tauri 仍提示未安装完整 Xcode。这个晚于 `29470431610` 的 UX HEAD 仍需要新的 Windows Packages run。
 
+## 2026-07-16 settling 窗口 prompt 队列整改
+
+- `settleAndArbitrate()` 现在会在确认后续 bid、执行单 agent 完成分支或转入 idle 前先检查 `pendingPrompts`。Turn 已 finalize、但仍处于 settling 延迟时提交的 prompt 会立即开启新 epoch，不会沉睡到下一条 human 消息来唤醒调度器。
+- 时序回归会等待唯一 Echo 风格 agent 进入 `settling`，在该阶段提交第二条 prompt，并要求两个 turn 按捕获的精确 FIFO 顺序完成后才回到 idle。SessionManager 29 项测试全部通过。
+
 ## 2026-07-16 显式 workspace 边界整改
 
 - `create_session` 在省略 `workspacePath` 时不再回退到启动房间的 workspace。New Session 留空 workspace 现在在服务端和 UI 两端都保持中性；文件夹选择器也不再把当前房间路径当作隐式起点。
