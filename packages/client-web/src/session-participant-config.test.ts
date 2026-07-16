@@ -25,6 +25,28 @@ describe("withPermissionPolicy", () => {
     }), "read-only").adapterConfig).toEqual({ text: "ready" });
   });
 
+  it("rejects coercible enum values and omits scripts with no valid steps", () => {
+    expect(() => cleanEchoAdapterConfig({
+      text: "fallback",
+      script: [
+        "bad",
+        { permissionPolicy: "full-auto" },
+        { type: ["message"], intent: ["reply"] },
+        { type: { toString: null }, intent: { toString: null } },
+      ],
+    })).not.toThrow();
+    expect(cleanEchoAdapterConfig({
+      text: "fallback",
+      script: [
+        "bad",
+        { permissionPolicy: "full-auto" },
+        { type: ["message"], intent: ["reply"] },
+        { type: { toString: null }, intent: { toString: null } },
+      ],
+    })).toEqual({ text: "fallback" });
+    expect(cleanEchoAdapterConfig({ script: ["bad", { permissionPolicy: "full-auto" }] })).toBeUndefined();
+  });
+
   it("maps file permissions for local CLI adapters", () => {
     expect(withPermissionPolicy(agent("codex"), "approval-required").adapterConfig).toMatchObject({
       permissionPolicy: "approval-required",

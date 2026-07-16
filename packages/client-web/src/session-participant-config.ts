@@ -7,17 +7,18 @@ function cleanEchoStep(value: unknown): Record<string, unknown> | undefined {
   const source = value as Record<string, unknown>;
   const step: Record<string, unknown> = {};
   if (Number.isInteger(source.delayMs) && Number(source.delayMs) >= 0 && Number(source.delayMs) <= 60_000) step.delayMs = source.delayMs;
-  if (["message", "thinking", "floor_request", "tool"].includes(String(source.type))) step.type = source.type;
+  if (typeof source.type === "string" && ["message", "thinking", "floor_request", "tool"].includes(source.type)) step.type = source.type;
   if (typeof source.text === "string") step.text = source.text.slice(0, 20_000);
   if (Array.isArray(source.addressedTo)) {
-    step.addressedTo = source.addressedTo
+    const addressedTo = source.addressedTo
       .filter((item): item is string => typeof item === "string")
       .slice(0, 100)
       .map((item) => item.slice(0, 128));
+    if (addressedTo.length) step.addressedTo = addressedTo;
   }
-  if (["reply", "rebut", "act"].includes(String(source.intent))) step.intent = source.intent;
+  if (typeof source.intent === "string" && ["reply", "rebut", "act"].includes(source.intent)) step.intent = source.intent;
   if (typeof source.tool === "string") step.tool = source.tool.slice(0, 200);
-  return step;
+  return Object.keys(step).length ? step : undefined;
 }
 
 /** Strip fields copied from historical Echo Sessions to the strict schema. */
@@ -25,7 +26,13 @@ export function cleanEchoAdapterConfig(config?: Record<string, unknown>): Record
   if (!config) return undefined;
   const cleaned: Record<string, unknown> = {};
   if (typeof config.text === "string") cleaned.text = config.text.slice(0, 20_000);
-  if (Array.isArray(config.script)) cleaned.script = config.script.slice(0, 100).map(cleanEchoStep).filter(Boolean);
+  if (Array.isArray(config.script)) {
+    const script = config.script
+      .slice(0, 100)
+      .map(cleanEchoStep)
+      .filter((step): step is Record<string, unknown> => step !== undefined);
+    if (script.length) cleaned.script = script;
+  }
   return Object.keys(cleaned).length ? cleaned : undefined;
 }
 

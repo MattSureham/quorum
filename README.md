@@ -239,7 +239,10 @@ Each create command and response carries a `requestId`; unrelated gateway errors
 cannot fail the pending form, and late/stale success responses may refresh the
 Session list but cannot switch the active room. All setup controls are frozen
 while the matching request is pending. Historical Echo configs are reduced to
-their strict `text`/`script` fields before a room is copied.
+their strict `text`/`script` fields before a room is copied. Echo `type` and
+`intent` values must already be primitive strings; coercible arrays/objects and
+empty script steps are discarded. If no valid script remains, `script` is
+omitted so the adapter uses top-level `text` or its deterministic default.
 The dialog traps keyboard focus, closes with Escape when no request is pending,
 marks the background inert, restores the opener focus, and exposes mode and
 permission choices as pressed-state controls for assistive technology.
@@ -476,15 +479,15 @@ pnpm test           # vitest
 pnpm typecheck      # tsc -b (needs deps installed)
 ```
 
-The 2026-07-16 UX reliability follow-up passes `163/163` tests across 27 files,
+The 2026-07-16 UX reliability follow-up passes `166/166` tests across 28 files,
 typecheck, the Web production build, EventLog/shared/source/Node/Bun sidecar
 smokes, and the desktop Rust check. Isolated Playwright acceptance also covers
 the exact 1121x768 and 901x768 responsive boundaries, a prompt submitted during
 `settling`, attachment deletion during a delayed read, and correlated/frozen
 Session creation.
 [Windows Packages run 29482869976](https://github.com/MattSureham/quorum/actions/runs/29482869976)
-passes the same 163 tests on Windows, builds and smokes the compiled sidecar,
-and uploads validated unsigned NSIS and portable artifacts.
+is the preceding 163-test packaged baseline; a fresh run is required for the
+three-test Echo legacy-config follow-up.
 
 > Note: the dependency-free path (`demo`, `smoke`) runs straight from TypeScript
 > source via `tsx`. The real adapters/gateway/store need their deps installed,

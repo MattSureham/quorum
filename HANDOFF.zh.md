@@ -45,7 +45,7 @@
 - 1440x1000、1121x768、1024x768、901x768 与 390x844 的自动化断言全部通过：无水平溢出；配置栏不覆盖 Chat；策略控件和 Interrupt 完整可见；composer/Send 可达；多 Session 名称与连接状态不会跑出平板侧栏；移动端 New session 可实际接收点击；Session 底部操作始终位于首个弹窗视口。901 px 下 Chat feed 约为 403 px，不再是报告中的 44 px。
 - 键盘与状态断言通过：Session 设置打开后焦点位于内部，Tab/Shift+Tab 不会逃逸，Escape 关闭并恢复触发按钮，背景为 inert/`aria-hidden`，mode/权限控件提供 `aria-pressed`。被拒绝的 `..` Session id 会保留全部草稿并显示本地化弹窗错误，随后使用合法 id 创建 Echo Session 成功，Connection 区没有遗留旧错误。延迟真实 `session_created` 并注入无关 WebSocket error 后，pending 表单保持冻结，只有匹配的成功响应能关闭并切换。
 - 运行断言通过：唯一 Echo 每条 prompt 只回复一次；`settling` 阶段提交的第二条 prompt 无需第三条唤醒即可按 FIFO 得到独立回复；人为延迟 FileReader 700 ms 时 Send 会禁用，文字不能与图片分开发送；B 读取期间删除 A 后最终只剩 B。浏览器 console/page error 列表均为空。
-- 最终本地验收通过 `pnpm typecheck`、Web production build、27 个文件 **163/163** 项测试、EventLog/shared/source-sidecar/Node/Bun smokes，以及包含 Rust `cargo check` 的 `pnpm desktop:check`；`git diff --check` 通过。Tauri 仍提示未安装完整 Xcode。Windows Packages run [29482869976](https://github.com/MattSureham/quorum/actions/runs/29482869976) 已在精确的 `a91cfe7` 实现/文档检查点全绿：测试、compiled sidecar smoke、Web、未签名 NSIS、portable 组装与布局校验、四类 artifact 上传全部通过，用时 7m43s。
+- 最终本地验收通过 `pnpm typecheck`、Web production build、28 个文件 **166/166** 项测试、EventLog/shared/source-sidecar/Node/Bun smokes，以及包含 Rust `cargo check` 的 `pnpm desktop:check`；`git diff --check` 通过。Tauri 仍提示未安装完整 Xcode。Windows Packages run [29482869976](https://github.com/MattSureham/quorum/actions/runs/29482869976) 是较早 `a91cfe7` 的 163 项全绿检查点；Echo 历史配置后续修复仍需新的 Windows run。
 
 ## 2026-07-16 settling 窗口 prompt 队列整改
 
@@ -56,8 +56,8 @@
 
 - Web Session 创建现在会生成有界 `requestId`；gateway 的 schema 错误、创建失败与 `session_created` 成功响应都会原样带回。设置弹窗只响应匹配请求：无关通用错误不能关闭弹窗，迟到成功只能刷新 Session registry，不能在 modal 背后切换活动房间。
 - 创建 pending 时，完整设置 grid 会成为 disabled fieldset，因此可见字段不会与已提交 payload 分叉；焦点锁定逻辑也会过滤通过 fieldset 继承禁用的控件。
-- 历史 Echo participant 不再原样复制。客户端会按严格 `text`/`script` allowlist 重建 adapter config，并约束每个 script step 的字段、类型与大小，旧 `permissionPolicy` 及其他不支持字段会被丢弃。
-- Protocol、gateway、correlation 与 Echo config 共 30 项定向测试通过，typecheck 通过。浏览器验收会延迟匹配成功、注入无关错误，并确认 pending 表单持续禁用直到收到自己的响应。
+- 历史 Echo participant 不再原样复制。客户端会按严格 `text`/`script` allowlist 重建 adapter config，并约束每个 script step 的字段、类型与大小，旧 `permissionPolicy` 及其他不支持字段会被丢弃。`type`/`intent` 只接受原本就是 primitive string 的值，不会把可强制转换的数组或对象写回；清洗后的空 step 会移除，全部清空时省略 `script`，让顶层 `text` 继续生效。daemon 也会把已落库的 `script: []` 当成未配置。
+- 新的“清洗器 → 网络 schema → Echo runtime”组合回归覆盖数组 enum、`{toString: null}`、只有未知字段的 step、顶层文字回退，以及已落库空脚本。3 个定向文件 18/18 通过，typecheck 与 Web production build 通过。浏览器验收会延迟匹配成功、注入无关错误，并确认 pending 表单持续禁用直到收到自己的响应。
 
 ## 2026-07-16 异步读取期间的附件删除
 

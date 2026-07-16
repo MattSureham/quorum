@@ -27,7 +27,7 @@ interface EchoOptions {
 // built-in adapters
 registerAdapter("echo", (d) => {
   const cfg = (d.adapterConfig as EchoOptions | undefined) ?? {};
-  const script = cfg.script ?? [{ type: "message" as const, text: cfg.text ?? "echo" }];
+  const script = cfg.script?.length ? cfg.script : [{ type: "message" as const, text: cfg.text ?? "echo" }];
   return new EchoAdapter(d, () => script);
 });
 registerAdapter("claude-code", (d) => new ClaudeCodeAdapter(d, (d.adapterConfig as ClaudeOptions) ?? {}));
