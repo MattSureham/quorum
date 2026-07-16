@@ -37,6 +37,12 @@ Working handoff for an agent picking up **Quorum**. Current as of **2026-07-16**
 - A successful create clears stale Connection errors. While creation is pending, Start shows progress and duplicate submit, backdrop close, Escape, and close controls are disabled; timeout returns the dialog to an editable retry state.
 - Session setup and API credential dialogs now trap Tab/Shift+Tab, focus inside on open, support Escape, restore the opener on close, and make the application shell inert/`aria-hidden` behind the modal. Mode and permission buttons expose `aria-pressed` and named group semantics. Typecheck and the Web production build pass; responsive geometry and browser keyboard assertions remain in the final UX pass.
 
+### 2026-07-16 Playwright UX remediation: responsive shell and reachable actions
+
+- The 1120 px layout no longer moves the configuration sidebar into a full-width second grid row that covers the fixed-height Chat. Tablet layouts retain compressed left/center/right columns with independently scrolling sidebars and a compact stacked top bar.
+- At 900 px and below, fixed `100vh` clipping is removed from the app shell, workspace, and sidebars. The document can scroll naturally, the Session sidebar is bounded to 42dvh, Chat receives a stable 360-520 px transcript viewport, and the composer plus configuration remain reachable.
+- Session setup is a flex dialog with a scrollable content grid and fixed header/error/actions; on mobile it uses the available `100dvh` height, so Start stays in the first viewport. Typecheck, Web production build, and `git diff --check` pass; exact 1440/1024/390 browser screenshots are the next acceptance step.
+
 ### 2026-07-16 explicit workspace boundary remediation
 
 - `create_session` no longer falls back to the bootstrap room's workspace when `workspacePath` is omitted. A blank New Session workspace is now neutral on the server as well as in the UI; the folder picker also stops using the active room path as an implicit starting selection.

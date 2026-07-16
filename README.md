@@ -235,6 +235,12 @@ discarding the form or leaving a stale raw gateway error in the Connection panel
 The dialog traps keyboard focus, closes with Escape when no request is pending,
 marks the background inert, restores the opener focus, and exposes mode and
 permission choices as pressed-state controls for assistive technology.
+At desktop/tablet widths the three primary columns remain independent scrolling
+regions, with narrower sidebars below 1120 px instead of moving configuration on
+top of the chat. At 900 px and below the app becomes a naturally scrolling
+single-column document; the Session list is height-bounded, Chat keeps a stable
+transcript viewport, and the composer is reachable. Session setup keeps its
+header and actions visible while only its content grid scrolls.
 
 Continue Session now restores the last compaction boundary and versioned shared
 memory from the event store; shared memory is included in the deterministic

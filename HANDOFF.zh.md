@@ -33,6 +33,12 @@
 - 创建期间 Start 会显示进度，并禁用重复提交、背景点击、Escape 与关闭按钮；超时后恢复为可编辑、可重试状态。创建成功会清理 Connection 区遗留的旧错误。
 - Session 设置与 API credential 弹窗现在会锁定 Tab/Shift+Tab 焦点，打开时把焦点移入弹窗，支持 Escape，关闭后恢复触发按钮，并让背景应用处于 inert/`aria-hidden` 状态。Mode 与权限按钮提供 `aria-pressed` 和具名 group 语义。Typecheck 与 Web production build 通过；响应式几何和浏览器键盘断言留到最终 UX 阶段。
 
+## 2026-07-16 Playwright UX 整改：响应式外壳与可达操作区
+
+- 1120 px 布局不再把右侧配置栏移到覆盖固定高度 Chat 的全宽第二行。平板宽度保留压缩后的左/中/右三栏，两个侧栏独立滚动，顶部操作区紧凑换行。
+- 900 px 及以下会解除 app shell、workspace 和侧栏的固定 `100vh` 裁切，页面可自然滚动。Session 侧栏限制为 42dvh，Chat transcript 保持 360-520 px 稳定视口，composer 与后续配置均可到达。
+- Session 设置改为 flex dialog，只有内容 grid 滚动，标题、错误和底部操作固定；手机上使用可用 `100dvh` 高度，因此 Start 始终留在首屏。Typecheck、Web production build 与 `git diff --check` 通过；下一步用 1440/1024/390 的真实浏览器截图验收。
+
 ## 2026-07-16 显式 workspace 边界整改
 
 - `create_session` 在省略 `workspacePath` 时不再回退到启动房间的 workspace。New Session 留空 workspace 现在在服务端和 UI 两端都保持中性；文件夹选择器也不再把当前房间路径当作隐式起点。
