@@ -19,6 +19,12 @@ Working handoff for an agent picking up **Quorum**. Current as of **2026-07-16**
 - Current local validation is green: `pnpm typecheck`; `pnpm test` with **150/150** tests across 24 files; Web production build; EventLog, shared-session, source-sidecar, Node fallback, and Bun compiled sidecar smokes; and `pnpm desktop:check` including Rust `cargo check`. Tauri reports the configured CSP. `git diff --check` passes.
 - Windows Packages run [29470431610](https://github.com/MattSureham/quorum/actions/runs/29470431610) completed successfully on this exact `fabc213` checkpoint in 8m26s. It covered all 150 tests, the compiled Windows sidecar's real PDF/DOCX smoke, Web/CSP build, unsigned NSIS, portable assembly/layout validation, and all four uploads. The sole annotation is GitHub's deprecation notice for the Node 20 runtime inside current action versions. Real Windows portable interaction and adversarial `.cmd` testing remain manual release boundaries.
 
+### 2026-07-16 Playwright UX remediation: Echo and sole-agent turns
+
+- Session setup no longer adds `permissionPolicy` to Echo's strict adapter config. Echo payloads now pass the same network schema used by the gateway; Codex, Claude Code, API models, and OpenClaw retain their adapter-specific permission mappings.
+- Bid-based open-discussion/raise-hand Sessions with one eligible agent now become idle after its first completed response. They no longer recollect the same sole bid until the six-turn safety ceiling or create a duplicate wrap-up response. Explicit round-robin remains the mechanism for intentional repeated single-agent passes.
+- Frontend adapter mapping, protocol payload, and core scheduler regressions pass 42 focused tests; typecheck passes. Responsive/modal/attachment Playwright findings are tracked in the following work, so this checkpoint is not yet the final UX acceptance.
+
 ### 2026-07-16 explicit workspace boundary remediation
 
 - `create_session` no longer falls back to the bootstrap room's workspace when `workspacePath` is omitted. A blank New Session workspace is now neutral on the server as well as in the UI; the folder picker also stops using the active room path as an implicit starting selection.

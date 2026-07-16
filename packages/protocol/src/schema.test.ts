@@ -35,6 +35,22 @@ describe("ClientMessageSchema adapter configuration", () => {
     expect(ClientMessageSchema.safeParse(createMessage({ sandbox: "read-only", arbitrary: "value" })).success).toBe(false);
   });
 
+  it("accepts the Echo participant payload produced by Session setup", () => {
+    expect(ClientMessageSchema.safeParse({
+      t: "create_session",
+      session: {
+        id: "echo-room",
+        title: "Echo room",
+        mode: "open-discussion",
+        targetDiscussionRounds: 2,
+        participants: [
+          { id: "human", kind: "human", display: "You", status: "idle" },
+          { id: "echo", kind: "agent", display: "Echo", adapter: "echo", status: "idle" },
+        ],
+      },
+    }).success).toBe(true);
+  });
+
   it("allows global credential commands without a session id", () => {
     expect(ClientMessageSchema.safeParse({ t: "get_credentials" }).success).toBe(true);
     expect(ClientMessageSchema.safeParse({

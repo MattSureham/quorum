@@ -222,6 +222,11 @@ target never aborts an active turn. Instead, the scheduler starts one ordered
 wrap-up pass in which every selected agent must state a concrete conclusion and
 preserve unresolved disagreement for Continue Session. `maxTurnsPerTopic`
 remains an internal hard safety ceiling rather than the user-facing round target.
+In bid-based modes, a Session with only one eligible agent completes after that
+agent's first response: there is no second participant to discuss or rebut, so
+Quorum does not spend the six-turn safety budget asking the same model to repeat
+itself. Explicit round-robin scheduling remains available for deliberate repeated
+passes.
 
 Continue Session now restores the last compaction boundary and versioned shared
 memory from the event store; shared memory is included in the deterministic

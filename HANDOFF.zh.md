@@ -15,6 +15,12 @@
 - 当前本地矩阵全绿：`pnpm typecheck`；24 个文件 **150/150** 项测试；Web production build；EventLog、shared-session、源码 sidecar、Node fallback 与 Bun compiled sidecar smoke；以及包含 Rust `cargo check` 的 `pnpm desktop:check`。Tauri 已识别配置后的 CSP，`git diff --check` 通过。
 - Windows Packages run [29470431610](https://github.com/MattSureham/quorum/actions/runs/29470431610) 已在这个精确的 `fabc213` 检查点上用时 8m26s 全绿：覆盖 150 项测试、compiled Windows sidecar 的真实 PDF/DOCX smoke、Web/CSP build、未签名 NSIS、portable 组装/布局校验和四类上传。唯一 annotation 是 GitHub 对现有 action 版本内部 Node 20 runtime 的弃用提醒。真实 Windows portable 交互与对抗性 `.cmd` 测试仍是人工发布边界。
 
+## 2026-07-16 Playwright UX 整改：Echo 与单 agent turn
+
+- Session setup 不再向 Echo 的严格 adapter config 注入 `permissionPolicy`。Echo payload 现在能通过 gateway 使用的同一网络 schema；Codex、Claude Code、API model 与 OpenClaw 仍保留各自的权限映射。
+- 基于 bid 的自由讨论/举手 Session 如果只有一个 eligible agent，会在其首个完成回复后回到 idle；不会再反复收集同一个 bid 直到六轮安全上限，也不会再追加重复 wrap-up。需要单 agent 多次执行时仍可显式使用 round-robin。
+- 前端 adapter 映射、协议 payload 与核心调度共 42 项定向回归通过，typecheck 通过。响应式、modal 与附件 Playwright 问题仍在后续阶段处理，因此本检查点不是最终 UX 验收。
+
 ## 2026-07-16 显式 workspace 边界整改
 
 - `create_session` 在省略 `workspacePath` 时不再回退到启动房间的 workspace。New Session 留空 workspace 现在在服务端和 UI 两端都保持中性；文件夹选择器也不再把当前房间路径当作隐式起点。

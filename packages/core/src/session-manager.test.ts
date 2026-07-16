@@ -248,6 +248,33 @@ describe("SessionManager", () => {
     }
   });
 
+  it("does not make a sole open-discussion agent answer the same prompt repeatedly", async () => {
+    const log = new EventLog("room", new InMemoryStore());
+    const session = new SessionManager({
+      sessionId: "room",
+      title: "Single agent",
+      log,
+      agents: [new StubSpeaker("echo", { confidence: 1, text: "once" })],
+      maxTurnsPerTopic: 6,
+      targetDiscussionRounds: 2,
+      schedulerMode: "bid",
+      settlingWindowMs: 5,
+    });
+
+    session.start();
+    try {
+      await session.submitUserPrompt("answer once");
+      await waitFor(() => session.snapshot().phase === "idle");
+      await sleep(30);
+      const events = log.replay(0);
+      expect(events.filter((event) => event.type === "turn_completed")).toHaveLength(1);
+      expect(events.filter((event) => event.type === "message" && event.author.id === "echo")).toHaveLength(1);
+      expect(events.some((event) => event.type === "phase_changed" && (event.body as any).reason === "single-agent response complete")).toBe(true);
+    } finally {
+      await session.stop();
+    }
+  });
+
   it("restores an unprocessed queued prompt after restart", async () => {
     const store = new InMemoryStore();
     const firstLog = new EventLog("room", store);

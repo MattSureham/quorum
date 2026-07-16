@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { canCreateCustomApiProfile, normalizeStoredCustomProfile } from "./profile-config.js";
 import { RichMessage } from "./rich-message.js";
 import { latestTurnLifecycleAfter } from "./run-status.js";
+import { withPermissionPolicy, type PermissionPolicy } from "./session-participant-config.js";
 import { shouldHandleSocketMessage } from "./socket-message-filter.js";
 import {
   Activity,
@@ -64,7 +65,6 @@ import "./styles.css";
 
 type ConnectionState = "idle" | "connecting" | "connected" | "offline" | "error";
 type SessionMode = "open-discussion" | "raise-hand" | "round-robin";
-type PermissionPolicy = "read-only" | "workspace-write" | "approval-required" | "full-auto";
 type Language = "en" | "zh";
 type Translate = (text: string) => string;
 
@@ -731,22 +731,6 @@ function buildSessionParticipants(draft: SessionDraft, currentRoom: Room, profil
     }
   }
   return participants;
-}
-
-function withPermissionPolicy(participant: ParticipantDescriptor, policy: PermissionPolicy): ParticipantDescriptor {
-  const adapterConfig: Record<string, unknown> = { ...(participant.adapterConfig ?? {}), permissionPolicy: policy };
-  if (participant.adapter === "codex") {
-    adapterConfig.sandbox = policy === "read-only" || policy === "approval-required"
-      ? "read-only"
-      : policy === "full-auto"
-        ? "danger-full-access"
-        : "workspace-write";
-  } else if (participant.adapter === "claude-code") {
-    adapterConfig.permissionMode = policy === "full-auto" ? "bypassPermissions" : policy === "workspace-write" ? "acceptEdits" : "default";
-  } else if (participant.adapter === "api-model") {
-    adapterConfig.permissionPolicy = "read-only";
-  }
-  return { ...participant, adapterConfig };
 }
 
 const PDF_MIME_TYPE = "application/pdf";

@@ -685,6 +685,11 @@ export class SessionManager {
         await this.transition("idle", { reason: "all candidate turns failed", turns: this.turnsThisTopic });
         return "none";
       }
+      if (!this.isRoundRobin() && this.orderedAgentIds().length <= 1) {
+        this.pendingBids.clear();
+        await this.transition("idle", { reason: "single-agent response complete", turns: this.turnsThisTopic });
+        return "none";
+      }
       if (softTargetTurns !== undefined && this.turnsThisTopic >= softTargetTurns) {
         await this.beginWrapUp("target discussion rounds reached");
         return "none";
