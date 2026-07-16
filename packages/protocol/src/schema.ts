@@ -4,6 +4,12 @@
 import { z } from "zod";
 
 const PermissionPolicySchema = z.enum(["read-only", "workspace-write", "approval-required", "full-auto"]);
+const SessionIdSchema = z.string()
+  .trim()
+  .min(1)
+  .max(128)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, "session id may contain only letters, numbers, dots, underscores, and hyphens")
+  .refine((value) => value !== "." && value !== "..", "session id cannot be a relative path segment");
 const CliBinarySchema = z.string().min(1).max(1_024).refine((value) => !/[&|<>^%!\r\n"]/u.test(value), "CLI binary path contains shell metacharacters");
 const AdapterConfigs = {
   echo: z.object({
@@ -153,11 +159,11 @@ export const ClientMessageSchema = z.discriminatedUnion("t", [
     t: z.literal("create_session"),
     roomId: z.string().optional(),
     session: z.object({
-      id: z.string(),
+      id: SessionIdSchema,
       title: z.string(),
       mode: z.enum(["open-discussion", "raise-hand", "round-robin"]),
       targetDiscussionRounds: z.number().int().min(1).max(12).optional(),
-      workspacePath: z.string().optional(),
+      workspacePath: z.string().trim().min(1).max(4_096).optional(),
       participants: z.array(ParticipantDescriptorSchema),
     }),
   }),

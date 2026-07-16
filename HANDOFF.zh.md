@@ -4,10 +4,16 @@
 
 ## 2026-07-16 同步检查点
 
-- 本次纯文档交接更新前，仓库工作树干净且已与 `origin/main` 同步。最新实现基线为 `0ba5255`；`d4100e5` 只记录已完成的 Windows 打包证据。PDF/DOCX 功能、Windows smoke 集成与跨平台 smoke harness 修复之后没有新的代码变更。
+- 交接检查点时，仓库工作树干净且已与 `origin/main` 同步。Windows 文档打包在实现基线 `0ba5255` 上完成验收；之后的评审整改记录在原功能历史上方的新日期章节中。
 - [Windows Packages run 29407135897](https://github.com/MattSureham/quorum/actions/runs/29407135897) 是当前打包验收基线：133 项测试全部通过，编译后的 Windows sidecar 实际解析了真实 PDF 与 DOCX，Web UI、未签名 NSIS、portable 布局校验和四类 artifact 上传均成功。测试者可直接下载 portable artifact，运行它不需要 clone 或 pull 仓库。
 - 文档支持的主要实现位于 `packages/protocol/src/schema.ts`、`packages/daemon/src/attachments/document-extractor.ts`、WebSocket gateway、`packages/core/src/session-manager.ts` 与 `packages/client-web/src/main.tsx`。`scripts/bun-sidecar-smoke.ts` 是打包回归路径，Windows workflow 中必须继续用真实 PDF/DOCX 执行它。
 - 剩余发布边界已明确：扫描 PDF 仍需 OCR，旧 `.doc` 不支持，本环境无法做浏览器点击/截图验收，真实 Windows 机器的 portable 交互仍属于人工验收。请勿将这些描述为已实现或已验证。本机也没有完整 Xcode，因此本功能未触发新的 macOS bundle 构建。
+
+## 2026-07-16 显式 workspace 边界整改
+
+- `create_session` 在省略 `workspacePath` 时不再回退到启动房间的 workspace。New Session 留空 workspace 现在在服务端和 UI 两端都保持中性；文件夹选择器也不再把当前房间路径当作隐式起点。
+- 中性 CLI 工作目录现使用有界可读 slug 加基于完整 Session id 的 SHA-256 指纹。`..` 无法落到临时根目录，`room/a` 与 `room?a` 等归一化后相同的 id 也不会共用目录。新的网络创建 Session id 最长 128 个路径安全字符，并拒绝相对路径片段。
+- 回归覆盖：已显式绑定仓库的启动房间不会将路径泄漏给新建中性 Session，并验证了路径逃逸/碰撞防护。定向 schema、CLI safety 与 shared-host 测试共 22 项全部通过。
 
 ## 2026-07-15 PDF 与 DOCX 聊天附件
 

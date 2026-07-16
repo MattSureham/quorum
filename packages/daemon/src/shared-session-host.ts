@@ -415,7 +415,9 @@ export async function startSharedSessionRoom(
         const nextRoom: Room = {
           id: input.id,
           title: input.title || input.id,
-          workspacePath: input.workspacePath?.trim() || room.workspacePath,
+          // Omitting a workspace is an explicit request for a neutral Session.
+          // Never inherit the daemon's bootstrap room or repository here.
+          workspacePath: input.workspacePath?.trim() || undefined,
           branch: room.branch,
           primary: input.participants.find((participant) => participant.kind === "agent")?.id,
           policy: policyWithDiscussionBudget(input.mode, room.policy, input.targetDiscussionRounds, input.participants),

@@ -264,6 +264,47 @@ describe("SharedSessionHost", () => {
     }
   });
 
+  it("does not inherit the bootstrap workspace when a new Session omits it", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "quorum-shared-neutral-session-"));
+    const bootstrapWorkspace = join(dir, "bootstrap-workspace");
+    const room: Room = {
+      id: "main-room",
+      title: "Main room",
+      workspacePath: bootstrapWorkspace,
+      branch: "main",
+      policy: { name: "free-for-all", maxTurnsPerTopic: 3, noConsecutive: true, turnDeadlineMs: 1_000 },
+      participants: [
+        { id: "human", kind: "human", display: "Human", status: "idle" },
+        { id: "echo", kind: "agent", display: "Echo", adapter: "echo", adapterConfig: { text: "main response" }, status: "idle" },
+      ],
+      createdAt: Date.now(),
+    };
+    const host = await startSharedSessionRoom(room, { dbPath: join(dir, "room.sqlite"), port: 0 });
+    const ws = await connect(host.gateway.url());
+
+    try {
+      ws.send(JSON.stringify({
+        t: "create_session",
+        roomId: "main-room",
+        session: {
+          id: "neutral-room",
+          title: "Neutral room",
+          mode: "open-discussion",
+          participants: [
+            { id: "human", kind: "human", display: "Human", status: "idle" },
+            { id: "echo2", kind: "agent", display: "Echo Two", adapter: "echo", adapterConfig: { text: "neutral response" }, status: "idle" },
+          ],
+        },
+      }));
+      const created = await nextMessage(ws);
+      expect(created.t).toBe("session_created");
+      expect(created.room.workspacePath).toBeUndefined();
+    } finally {
+      ws.close();
+      await host.stop();
+    }
+  });
+
   it("creates round-robin sessions with strict ordered speaking", async () => {
     const dir = await mkdtemp(join(tmpdir(), "quorum-shared-session-round-robin-"));
     const room: Room = {

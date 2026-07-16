@@ -64,6 +64,21 @@ describe("ClientMessageSchema adapter configuration", () => {
     }
   });
 
+  it("accepts only bounded non-path Session ids", () => {
+    for (const id of ["room", "room.v2", "room_v2", "room-v2"]) {
+      expect(ClientMessageSchema.safeParse({
+        ...createMessage({ sandbox: "read-only" }),
+        session: { ...createMessage({ sandbox: "read-only" }).session, id },
+      }).success).toBe(true);
+    }
+    for (const id of ["..", "room/a", "room?a", "a".repeat(129)]) {
+      expect(ClientMessageSchema.safeParse({
+        ...createMessage({ sandbox: "read-only" }),
+        session: { ...createMessage({ sandbox: "read-only" }).session, id },
+      }).success).toBe(false);
+    }
+  });
+
   it("accepts PDF and DOCX attachments but rejects unsupported document types", () => {
     const base = { t: "post_message", roomId: "room", text: "read this" };
     expect(ClientMessageSchema.safeParse({

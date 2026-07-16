@@ -2788,7 +2788,7 @@ function SessionSetupModal({
               <div className="path-picker-field">
                 <input
                   value={draft.workspacePath}
-                  placeholder={currentRoom.workspacePath ?? t("Optional absolute path for this session")}
+                  placeholder={t("Optional absolute path for this session")}
                   onChange={(input) => {
                     const value = input.currentTarget.value;
                     setWorkspacePickerStatus("");
@@ -2806,10 +2806,10 @@ function SessionSetupModal({
                     setWorkspacePickerStatus("");
                     try {
                       if (isTauriRuntime()) {
-                        const path = await pickWorkspaceDirectory(draft.workspacePath || currentRoom.workspacePath || "");
+                        const path = await pickWorkspaceDirectory(draft.workspacePath);
                         if (path) setDraft((current) => ({ ...current, workspacePath: path }));
                       } else {
-                        await loadDirectory(draft.workspacePath || currentRoom.workspacePath || undefined);
+                        await loadDirectory(draft.workspacePath || undefined);
                       }
                     } catch (err) {
                       setWorkspacePickerStatus(err instanceof Error ? err.message : String(err));

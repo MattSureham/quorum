@@ -8,10 +8,16 @@ Working handoff for an agent picking up **Quorum**. Current as of **2026-07-16**
 
 ### 2026-07-16 synchronization checkpoint
 
-- The repository was clean and synchronized with `origin/main` before this handoff-only update. The latest implementation baseline is `0ba5255`; `d4100e5` only records its completed Windows packaging evidence. No code changes followed the PDF/DOCX feature, Windows smoke integration, or cross-platform smoke-harness fix.
+- The repository was clean and synchronized with `origin/main` at the handoff checkpoint. Windows document packaging was accepted on implementation baseline `0ba5255`; later review remediation is recorded in newer dated sections above the original feature history.
 - [Windows Packages run 29407135897](https://github.com/MattSureham/quorum/actions/runs/29407135897) is the current packaged acceptance baseline. It passed all 133 tests, parsed a real PDF and DOCX through the compiled Windows sidecar, built the Web UI and unsigned NSIS installer, validated the portable layout, and uploaded all four artifact groups. A tester can download the portable artifact directly; cloning or pulling the repository is not required to run it.
 - Document support is implemented across `packages/protocol/src/schema.ts`, `packages/daemon/src/attachments/document-extractor.ts`, the WebSocket gateway, `packages/core/src/session-manager.ts`, and `packages/client-web/src/main.tsx`. `scripts/bun-sidecar-smoke.ts` is the packaging regression path and must continue exercising real PDF and DOCX files on Windows.
 - Remaining release boundaries are explicit: scanned PDFs need OCR, legacy `.doc` is unsupported, browser click/screenshot QA was unavailable in this environment, and real-machine portable interaction is still manual acceptance. Do not describe these as implemented or verified. Full Xcode is also unavailable locally, so this feature did not trigger a fresh macOS bundle build.
+
+### 2026-07-16 explicit workspace boundary remediation
+
+- `create_session` no longer falls back to the bootstrap room's workspace when `workspacePath` is omitted. A blank New Session workspace is now neutral on the server as well as in the UI; the folder picker also stops using the active room path as an implicit starting selection.
+- Neutral CLI working directories now use a bounded readable slug plus a SHA-256-derived Session-id fingerprint. `..` cannot resolve to the temporary root, and ids such as `room/a` and `room?a` cannot collide after slug normalization. New network-created Session ids are bounded to 128 path-safe characters and reject relative path segments.
+- Regression coverage verifies a bootstrap room with an explicit repository cannot leak it into a newly-created neutral Session, and verifies traversal/collision resistance. The targeted schema, CLI safety, and shared-host suites pass with 22 tests.
 
 ### 2026-07-15 PDF and DOCX chat attachments
 

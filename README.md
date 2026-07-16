@@ -261,7 +261,9 @@ hidden memory, avoid silently filling gaps, and surface uncertainty when restore
 context is incomplete. The bundle is deliberately topic-neutral: host branding,
 Session ids, participant ids, and workspace paths are marked as operational
 metadata and must not be treated as evidence that the user's subject is Quorum
-or the workspace project.
+or the workspace project. A newly-created Session inherits no workspace when the
+field is omitted; only an explicitly selected path enables repository context,
+file tools, and workspace editing.
 
 Packaging status: developer one-command launch exists, and a local sidecar entry
 now exists at `packages/daemon/src/sidecar.ts`. It binds a random loopback port,
@@ -519,7 +521,9 @@ configured Claude Code skills, MCP servers, hooks, and local auth remain
 available. Codex runs through `codex exec --json` and keeps its own native tool
 events/MCP output. If a Session has no workspace, both CLIs run in a neutral
 per-Session directory under the OS temporary directory instead of inheriting the
-daemon's source/installation directory.
+daemon's source/installation directory. That directory combines a readable slug
+with a hash of the full Session id, so path-like ids cannot escape the neutral
+root and ids that normalize to the same slug cannot share a directory.
 
 ```bash
 QUORUM_SESSION_KERNEL=shared pnpm dev

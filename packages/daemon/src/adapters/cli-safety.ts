@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -24,8 +25,12 @@ export function resolveCliWorkingDirectory(input: {
 }): string {
   if (input.workspacePath) return input.workspacePath;
   const rawId = input.sessionId ?? input.roomTitle ?? "session";
-  const safeId = rawId.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "session";
-  const cwd = join(tmpdir(), "agent-session-workspaces", safeId);
+  const slug = rawId
+    .replace(/[^A-Za-z0-9_-]+/g, "-")
+    .replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, "")
+    .slice(0, 48) || "session";
+  const fingerprint = createHash("sha256").update(rawId).digest("hex").slice(0, 16);
+  const cwd = join(tmpdir(), "agent-session-workspaces", `${slug}-${fingerprint}`);
   mkdirSync(cwd, { recursive: true });
   return cwd;
 }
