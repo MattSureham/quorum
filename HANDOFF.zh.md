@@ -5,14 +5,14 @@
 ## 2026-07-16 同步检查点
 
 - 交接检查点时，仓库工作树干净且已与 `origin/main` 同步。Windows 文档打包在实现基线 `0ba5255` 上完成验收；之后的评审整改记录在原功能历史上方的新日期章节中。
-- [Windows Packages run 29470431610](https://github.com/MattSureham/quorum/actions/runs/29470431610) 是 `fabc213` 上当前打包验收基线：150 项测试全部通过，编译后的 Windows sidecar 实际解析了真实 PDF 与 DOCX，Web UI、未签名 NSIS、portable 布局校验，以及 portable、sidecar、bundle-output、NSIS 四类 artifact 上传均成功。测试者可直接下载 portable artifact，运行它不需要 clone 或 pull 仓库。
+- [Windows Packages run 29482869976](https://github.com/MattSureham/quorum/actions/runs/29482869976) 是 `a91cfe7` 上当前打包验收基线：163 项测试全部通过，编译后的 Windows sidecar smoke 实际解析了真实 PDF 与 DOCX，Web UI、未签名 NSIS、portable 布局校验，以及 portable、sidecar、bundle-output、NSIS 四类 artifact 上传均成功。测试者可直接下载 portable artifact，运行它不需要 clone 或 pull 仓库。
 - 文档支持的主要实现位于 `packages/protocol/src/schema.ts`、`packages/daemon/src/attachments/document-extractor.ts`、WebSocket gateway、`packages/core/src/session-manager.ts` 与 `packages/client-web/src/main.tsx`。`scripts/bun-sidecar-smoke.ts` 是打包回归路径，Windows workflow 中必须继续用真实 PDF/DOCX 执行它。
 - 剩余发布边界已明确：扫描 PDF 仍需 OCR，旧 `.doc` 不支持，真实 Windows 机器的 portable 交互仍属于人工验收。内置浏览器没有可用实例，但下文记录的隔离 standalone Playwright 点击/截图验收已经完成。本机没有完整 Xcode，因此本功能未触发新的 macOS bundle 构建。
 
 ## 2026-07-16 评审整改本地验收
 
 - 2026-07-16 独立评审列出的 P1/P2/P3 项已通过 `e335e1f..7f548c9` 实现：显式中性 workspace、round-robin 恢复幂等、DOCX 实际展开量、Codex 进程树终止顺序、附件 payload 拆分、旧 socket 过滤、被动 Markdown/CSP、composer 并发上限、最新 turn 状态以及 Node fallback runtime 打包。
-- 当前本地矩阵全绿：`pnpm typecheck`；24 个文件 **150/150** 项测试；Web production build；EventLog、shared-session、源码 sidecar、Node fallback 与 Bun compiled sidecar smoke；以及包含 Rust `cargo check` 的 `pnpm desktop:check`。Tauri 已识别配置后的 CSP，`git diff --check` 通过。
+- 较早的 `fabc213` 整改检查点已全绿：`pnpm typecheck`；24 个文件 **150/150** 项测试；Web production build；EventLog、shared-session、源码 sidecar、Node fallback 与 Bun compiled sidecar smoke；以及包含 Rust `cargo check` 的 `pnpm desktop:check`。当前 163 项结果以下文最终浏览器验收为准。
 - Windows Packages run [29470431610](https://github.com/MattSureham/quorum/actions/runs/29470431610) 已在这个精确的 `fabc213` 检查点上用时 8m26s 全绿：覆盖 150 项测试、compiled Windows sidecar 的真实 PDF/DOCX smoke、Web/CSP build、未签名 NSIS、portable 组装/布局校验和四类上传。唯一 annotation 是 GitHub 对现有 action 版本内部 Node 20 runtime 的弃用提醒。真实 Windows portable 交互与对抗性 `.cmd` 测试仍是人工发布边界。
 
 ## 2026-07-16 Playwright UX 整改：Echo 与单 agent turn
@@ -45,7 +45,7 @@
 - 1440x1000、1121x768、1024x768、901x768 与 390x844 的自动化断言全部通过：无水平溢出；配置栏不覆盖 Chat；策略控件和 Interrupt 完整可见；composer/Send 可达；多 Session 名称与连接状态不会跑出平板侧栏；移动端 New session 可实际接收点击；Session 底部操作始终位于首个弹窗视口。901 px 下 Chat feed 约为 403 px，不再是报告中的 44 px。
 - 键盘与状态断言通过：Session 设置打开后焦点位于内部，Tab/Shift+Tab 不会逃逸，Escape 关闭并恢复触发按钮，背景为 inert/`aria-hidden`，mode/权限控件提供 `aria-pressed`。被拒绝的 `..` Session id 会保留全部草稿并显示本地化弹窗错误，随后使用合法 id 创建 Echo Session 成功，Connection 区没有遗留旧错误。延迟真实 `session_created` 并注入无关 WebSocket error 后，pending 表单保持冻结，只有匹配的成功响应能关闭并切换。
 - 运行断言通过：唯一 Echo 每条 prompt 只回复一次；`settling` 阶段提交的第二条 prompt 无需第三条唤醒即可按 FIFO 得到独立回复；人为延迟 FileReader 700 ms 时 Send 会禁用，文字不能与图片分开发送；B 读取期间删除 A 后最终只剩 B。浏览器 console/page error 列表均为空。
-- 最终本地验收通过 `pnpm typecheck`、Web production build、27 个文件 **163/163** 项测试、EventLog/shared/source-sidecar/Node/Bun smokes，以及包含 Rust `cargo check` 的 `pnpm desktop:check`；`git diff --check` 通过。Tauri 仍提示未安装完整 Xcode。这个晚于 `29470431610` 的 UX HEAD 仍需要新的 Windows Packages run。
+- 最终本地验收通过 `pnpm typecheck`、Web production build、27 个文件 **163/163** 项测试、EventLog/shared/source-sidecar/Node/Bun smokes，以及包含 Rust `cargo check` 的 `pnpm desktop:check`；`git diff --check` 通过。Tauri 仍提示未安装完整 Xcode。Windows Packages run [29482869976](https://github.com/MattSureham/quorum/actions/runs/29482869976) 已在精确的 `a91cfe7` 实现/文档检查点全绿：测试、compiled sidecar smoke、Web、未签名 NSIS、portable 组装与布局校验、四类 artifact 上传全部通过，用时 7m43s。
 
 ## 2026-07-16 settling 窗口 prompt 队列整改
 

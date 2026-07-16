@@ -482,6 +482,9 @@ smokes, and the desktop Rust check. Isolated Playwright acceptance also covers
 the exact 1121x768 and 901x768 responsive boundaries, a prompt submitted during
 `settling`, attachment deletion during a delayed read, and correlated/frozen
 Session creation.
+[Windows Packages run 29482869976](https://github.com/MattSureham/quorum/actions/runs/29482869976)
+passes the same 163 tests on Windows, builds and smokes the compiled sidecar,
+and uploads validated unsigned NSIS and portable artifacts.
 
 > Note: the dependency-free path (`demo`, `smoke`) runs straight from TypeScript
 > source via `tsx`. The real adapters/gateway/store need their deps installed,
