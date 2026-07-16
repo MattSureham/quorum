@@ -5,7 +5,7 @@
 ## 2026-07-16 同步检查点
 
 - 交接检查点时，仓库工作树干净且已与 `origin/main` 同步。Windows 文档打包在实现基线 `0ba5255` 上完成验收；之后的评审整改记录在原功能历史上方的新日期章节中。
-- [Windows Packages run 29407135897](https://github.com/MattSureham/quorum/actions/runs/29407135897) 是当前打包验收基线：133 项测试全部通过，编译后的 Windows sidecar 实际解析了真实 PDF 与 DOCX，Web UI、未签名 NSIS、portable 布局校验和四类 artifact 上传均成功。测试者可直接下载 portable artifact，运行它不需要 clone 或 pull 仓库。
+- [Windows Packages run 29470431610](https://github.com/MattSureham/quorum/actions/runs/29470431610) 是 `fabc213` 上当前打包验收基线：150 项测试全部通过，编译后的 Windows sidecar 实际解析了真实 PDF 与 DOCX，Web UI、未签名 NSIS、portable 布局校验，以及 portable、sidecar、bundle-output、NSIS 四类 artifact 上传均成功。测试者可直接下载 portable artifact，运行它不需要 clone 或 pull 仓库。
 - 文档支持的主要实现位于 `packages/protocol/src/schema.ts`、`packages/daemon/src/attachments/document-extractor.ts`、WebSocket gateway、`packages/core/src/session-manager.ts` 与 `packages/client-web/src/main.tsx`。`scripts/bun-sidecar-smoke.ts` 是打包回归路径，Windows workflow 中必须继续用真实 PDF/DOCX 执行它。
 - 剩余发布边界已明确：扫描 PDF 仍需 OCR，旧 `.doc` 不支持，本环境无法做浏览器点击/截图验收，真实 Windows 机器的 portable 交互仍属于人工验收。请勿将这些描述为已实现或已验证。本机也没有完整 Xcode，因此本功能未触发新的 macOS bundle 构建。
 
@@ -13,7 +13,7 @@
 
 - 2026-07-16 独立评审列出的 P1/P2/P3 项已通过 `e335e1f..7f548c9` 实现：显式中性 workspace、round-robin 恢复幂等、DOCX 实际展开量、Codex 进程树终止顺序、附件 payload 拆分、旧 socket 过滤、被动 Markdown/CSP、composer 并发上限、最新 turn 状态以及 Node fallback runtime 打包。
 - 当前本地矩阵全绿：`pnpm typecheck`；24 个文件 **150/150** 项测试；Web production build；EventLog、shared-session、源码 sidecar、Node fallback 与 Bun compiled sidecar smoke；以及包含 Rust `cargo check` 的 `pnpm desktop:check`。Tauri 已识别配置后的 CSP，`git diff --check` 通过。
-- 此精确检查点仍待新的 Windows Packages run。最近的打包基线仍是 `29407135897`；在更新 run 全绿前，不要声称新的 `taskkill`、CSP、附件 payload migration 或 Node dependency 变更已完成 Windows 打包验收。真实 Windows portable 交互与对抗性 `.cmd` 测试仍是人工发布边界。
+- Windows Packages run [29470431610](https://github.com/MattSureham/quorum/actions/runs/29470431610) 已在这个精确的 `fabc213` 检查点上用时 8m26s 全绿：覆盖 150 项测试、compiled Windows sidecar 的真实 PDF/DOCX smoke、Web/CSP build、未签名 NSIS、portable 组装/布局校验和四类上传。唯一 annotation 是 GitHub 对现有 action 版本内部 Node 20 runtime 的弃用提醒。真实 Windows portable 交互与对抗性 `.cmd` 测试仍是人工发布边界。
 
 ## 2026-07-16 显式 workspace 边界整改
 
@@ -37,14 +37,14 @@
 
 - Codex `turn.failed` 现在会先记住结构化失败并立即开始终止进程树，但只有观测到子进程 `close` 事件后才向调度器 yield 终态 adapter 事件。在失败 CLI 仍可能运行时，SessionManager 无法完成 turn、checkpoint 或释放共享 workspace lease。
 - Unix 类系统中 Codex 子进程使用独立进程组：终止先向整组发送 `SIGINT`，必要时升级为 `SIGKILL`，然后等待真实关闭。Windows 使用 `taskkill /PID ... /T`，必要时增加 `/F`，并同样等待。Abort、显式 interrupt、原生 resume 失败与 generator 提前返回共用同一个幂等终止 Promise。
-- 跨平台 fake CLI 会输出 `turn.failed`、等待，再尝试写入 survival marker。Adapter 会在有界时间内 yield 失败，且到预定写入时点后 marker 仍不存在，证明控制权返回前进程树已消失。本地 Codex adapter 9 项测试与 typecheck 已通过；`.cmd`/`taskkill` 分支仍需 Windows workflow 验证。
+- 跨平台 fake CLI 会输出 `turn.failed`、等待，再尝试写入 survival marker。Adapter 会在有界时间内 yield 失败，且到预定写入时点后 marker 仍不存在，证明控制权返回前进程树已消失。Codex adapter 9 项测试与 typecheck 已在本地及 Windows run `29470431610` 通过；真实机器的对抗性 `.cmd` 交互仍属于人工发布验收。
 
 ## 2026-07-16 有界附件回放
 
 - SQLite 消息事件现在只保留附件元数据与提取状态。原始 data URL 和文档提取正文会在同一事务中写入 Session 范围的 `attachment_payloads` 表；`replay(0)`、WebSocket subscribe snapshot、memory compaction 与 Context Bundle 扫描不再反复解析或发送全部历史 base64 payload。
 - 旧数据库会执行一次迁移：事件 JSON 中已有的附件 `dataUrl` 会拆入 payload 表，event id 与 seq 不变；删除 Session 时也会删除这些 payload。新增 `EventLog.readAttachment()` 与有界的 `get_attachment` WebSocket 命令，可按 room/event/attachment id 精确读取一个原件。Chat 对历史图片/文档显示加载按钮，新发送的实时附件仍会立即显示。
 - Composer 的文件读取现在按 ref 中的当前附件集合串行处理。两个同时发生的粘贴/上传批次不能再各自用过期数量通过校验，从而绕过最多 6 个文件/20 MB 总量限制；拒绝新批次时，已有 composer 内容保持不变。
-- 回归覆盖新事件拆分、旧库迁移、按需还原、Session 删除、gateway 成功/失败响应与协议长度限制。定向 persistence/gateway/schema 共 33 项，并已包含在上方 150 项全量测试中；此检查点仍待打包平台验证。
+- 回归覆盖新事件拆分、旧库迁移、按需还原、Session 删除、gateway 成功/失败响应与协议长度限制。定向 persistence/gateway/schema 共 33 项，并已包含在上方本地及 Windows run `29470431610` 的 150 项全量测试中。
 
 ## 2026-07-16 被动聊天渲染与旧 socket 隔离
 
