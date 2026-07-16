@@ -63,6 +63,11 @@ Working handoff for an agent picking up **Quorum**. Current as of **2026-07-16**
 - Historical Echo participants are no longer copied verbatim. The client rebuilds adapter config from strict `text` and `script` allowlists, including per-script-step field/type/size bounds, and drops legacy `permissionPolicy` or other unsupported fields.
 - Protocol, gateway, correlation, and Echo-config suites pass 30 focused tests; typecheck passes. Final browser acceptance still needs to exercise the frozen pending state with a delayed response.
 
+### 2026-07-16 attachment deletion during async reads
+
+- File validation still uses the current attachment snapshot at the start of its serialized read, but completion no longer writes that snapshot back. It lazily reads `composerAttachmentsRef.current` and appends only the newly loaded batch, preserving removals made while FileReader was pending.
+- A pure regression starts with `A.png`, captures a lazy current-list reader, removes A, and completes `B.png`; the result is only B. Composer-state has 3 passing tests and typecheck passes. The exact delayed FileReader browser scenario remains in final acceptance.
+
 ### 2026-07-16 explicit workspace boundary remediation
 
 - `create_session` no longer falls back to the bootstrap room's workspace when `workspacePath` is omitted. A blank New Session workspace is now neutral on the server as well as in the UI; the folder picker also stops using the active room path as an implicit starting selection.

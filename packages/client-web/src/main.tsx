@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { canSendComposer } from "./composer-state.js";
+import { appendToLatest, canSendComposer } from "./composer-state.js";
 import { canCreateCustomApiProfile, normalizeStoredCustomProfile } from "./profile-config.js";
 import { RichMessage } from "./rich-message.js";
 import { latestTurnLifecycleAfter } from "./run-status.js";
@@ -1974,7 +1974,10 @@ function App() {
           + supported.reduce((sum, item) => sum + item.file.size, 0);
         if (totalBytes > MAX_TOTAL_ATTACHMENT_BYTES) throw new Error(t("Attachments exceed the 20 MB total limit."));
         const loaded = await Promise.all(supported.map(({ file, mimeType }) => readMessageAttachment(file, mimeType)));
-        const nextAttachments = [...current, ...loaded];
+        // The user may remove an existing attachment while FileReader is
+        // working. Re-read the live ref so that deletion is not overwritten by
+        // the pre-read snapshot captured for validation.
+        const nextAttachments = appendToLatest(() => composerAttachmentsRef.current, loaded);
         composerAttachmentsRef.current = nextAttachments;
         setComposerAttachments(nextAttachments);
       } catch (attachmentError) {

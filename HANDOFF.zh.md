@@ -59,6 +59,11 @@
 - 历史 Echo participant 不再原样复制。客户端会按严格 `text`/`script` allowlist 重建 adapter config，并约束每个 script step 的字段、类型与大小，旧 `permissionPolicy` 及其他不支持字段会被丢弃。
 - Protocol、gateway、correlation 与 Echo config 共 30 项定向测试通过，typecheck 通过。最终浏览器验收仍需用延迟响应验证 pending 冻结状态。
 
+## 2026-07-16 异步读取期间的附件删除
+
+- 文件校验仍在串行读取开始时使用当前附件快照，但完成时不再把该快照整体写回。它会惰性读取 `composerAttachmentsRef.current`，只追加刚加载的批次，因此 FileReader pending 期间发生的删除会被保留。
+- 纯回归从 `A.png` 开始，捕获当前列表读取器后删除 A，再完成 `B.png`，结果必须只有 B。Composer-state 3 项测试与 typecheck 通过；精确的延迟 FileReader 浏览器场景留到最终验收。
+
 ## 2026-07-16 显式 workspace 边界整改
 
 - `create_session` 在省略 `workspacePath` 时不再回退到启动房间的 workspace。New Session 留空 workspace 现在在服务端和 UI 两端都保持中性；文件夹选择器也不再把当前房间路径当作隐式起点。

@@ -285,6 +285,9 @@ inspect image content and which receive image metadata only. Extracted PDF/DOCX
 text is available to every participant. API-model vision support is currently
 identified for MiniMax-style vision profiles; local CLI image file bridging is
 still future work.
+Async file completion appends to the composer's current ref-backed attachment
+list. Removing an already loaded file while another FileReader is pending is
+therefore durable; the deleted file cannot reappear when the later read resolves.
 
 The built-in Claude-family local agent is named **Claude Code** because it uses
 the `claude-code` adapter and local Claude Code auth/session. Anthropic API
