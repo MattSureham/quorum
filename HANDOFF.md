@@ -410,6 +410,26 @@ Historical external acceptance:
 
 ## Recent Activity
 
+### 2026-07-28 - Ignore the local generated introduction preview
+
+- **Role:** Codex repository maintainer
+- **Task:** Keep the local `docs/quorum-intro.html` preview out of Git without
+  hiding repository documentation.
+- **Context inspected:** current Git status, `.gitignore`, files under `docs/`, and
+  the tracked documentation list.
+- **Actions performed:** added one root-anchored ignore rule for
+  `docs/quorum-intro.html`; deliberately did not ignore the complete `docs/`
+  directory because `docs/architecture/` contains canonical tracked material.
+- **Files modified:** `.gitignore` and this Recent Activity entry in `HANDOFF.md`.
+- **Findings:** **Confirmed** that `docs/quorum-intro.html` was the only untracked
+  file and that the three files under `docs/architecture/` are tracked.
+- **Verification:** `git check-ignore`, tracked-file inspection, diff checks, and
+  final repository status were used to confirm the targeted rule and clean tracked
+  state.
+- **Issues created or updated:** none.
+- **Remaining uncertainty:** none for the ignore scope.
+- **Recommendation:** retain the existing QRM-SCHED-001 Next Action.
+
 ### 2026-07-28 - Evidence reconciliation and approved protocol evolution
 
 - **Role:** Codex review coordinator with independent protocol, repository-fact,
