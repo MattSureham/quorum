@@ -1,5 +1,7 @@
 # 交接文档（HANDOFF）
 
+> **历史参考，不是当前权威状态。** 多智能体协作协议、当前状态、未决问题和唯一下一步均以 [`HANDOFF.md`](./HANDOFF.md) 为准。请勿在本文件建立平行状态。
+
 给接手 **Quorum** 的下一个 agent 的工作交接。截至 **2026-07-16**，以 `main` 当前 HEAD 为准。English version: [`HANDOFF.md`](./HANDOFF.md)。
 
 ## 2026-07-16 同步检查点

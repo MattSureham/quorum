@@ -25,6 +25,14 @@ See **[SPEC.md](./SPEC.md)** for the full design (data model, Conductor state
 machine, adapter contracts with verified Claude Code / Codex invocations, WS
 protocol, milestones M0–M6, acceptance tests).
 
+## Collaboration protocol
+
+Before changing this repository, read the canonical [`HANDOFF.md`](./HANDOFF.md).
+It contains the current project state, active issues, the single next action, and
+the append-only participant activity record. [`BOOTSTRAP.md`](./BOOTSTRAP.md)
+defines the protocol and its controlled evolution. `HANDOFF.zh.md` is a
+historical translation, not a second source of project state.
+
 ## 2026-07 Architecture Update
 
 Quorum is being migrated to the newer shared-session architecture captured in
